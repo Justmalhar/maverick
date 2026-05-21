@@ -1,6 +1,7 @@
-// Theme picker, font size (UI + terminal), ligatures, animations.
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { SettingsGroup } from "../primitives/SettingsGroup";
+import { SettingsRow } from "../primitives/SettingsRow";
+import { SettingsToggle } from "../primitives/SettingsToggle";
+import { useSettings } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
 
 interface ThemePreview {
@@ -20,107 +21,106 @@ const THEMES: ThemePreview[] = [
 ];
 
 export default function AppearanceSettings() {
-  const [theme, setTheme] = useState("pure-black");
-  const [uiFontSize, setUiFontSize] = useState(12);
-  const [terminalFontSize, setTerminalFontSize] = useState(13);
-  const [ligatures, setLigatures] = useState(true);
-  const [animations, setAnimations] = useState(true);
+  const [theme, setTheme] = useSettings("appearance.theme", "pure-black");
+  const [uiFontSize, setUiFontSize] = useSettings("appearance.uiFontSize", 12);
+  const [terminalFontSize, setTerminalFontSize] = useSettings("appearance.terminalFontSize", 13);
+  const [ligatures, setLigatures] = useSettings("appearance.ligatures", true);
+  const [animations, setAnimations] = useSettings("appearance.animations", true);
 
   return (
-    <section data-testid="appearance-settings" className="space-y-3">
-      <h3 className="text-sm font-medium text-foreground">Appearance</h3>
-
-      <div>
-        <label className="block text-[10px] uppercase tracking-wide text-muted-foreground">
-          Theme
-        </label>
-        <div className="mt-1.5 grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTheme(t.id)}
-              data-testid={`theme-${t.id}`}
-              className={cn(
-                "flex flex-col gap-1 rounded-sm border p-2 text-left text-[11px] transition-colors",
-                theme === t.id ? "border-primary ring-1 ring-primary" : "border-border"
-              )}
-            >
-              <div
-                className="h-10 w-full rounded-sm border border-border"
-                style={{ background: t.background }}
-              >
-                <div className="flex h-full items-center justify-center gap-1">
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: t.foreground }}
-                  />
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: t.accent }}
-                  />
-                </div>
-              </div>
-              <span>{t.name}</span>
-            </button>
-          ))}
+    <div data-testid="appearance-settings" className="space-y-5">
+      <SettingsGroup title="Theme" description="Affects UI surfaces, terminal palette, and syntax colors.">
+        <div className="py-3">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {THEMES.map((t) => {
+              const selected = theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTheme(t.id)}
+                  data-testid={`theme-${t.id}`}
+                  aria-pressed={selected}
+                  className={cn(
+                    "flex flex-col gap-1 rounded-md border p-2 text-left text-[11px] transition-colors",
+                    selected
+                      ? "border-accent ring-1 ring-accent/60"
+                      : "border-border/60 hover:border-border",
+                  )}
+                >
+                  <div
+                    className="h-10 w-full rounded border border-border/60"
+                    style={{ background: t.background }}
+                  >
+                    <div className="flex h-full items-center justify-center gap-1">
+                      <span className="h-2 w-2 rounded-full" style={{ background: t.foreground }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: t.accent }} />
+                    </div>
+                  </div>
+                  <span>{t.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </SettingsGroup>
 
-      <Row label={`UI font size (${uiFontSize}px)`}>
-        <input
-          type="range"
-          min={10}
-          max={18}
-          value={uiFontSize}
-          data-testid="ui-font-size"
-          onChange={(e) => setUiFontSize(Number(e.target.value))}
-          className="w-full"
+      <SettingsGroup title="Typography">
+        <SettingsRow
+          title={`UI font size (${uiFontSize}px)`}
+          control={
+            <input
+              type="range"
+              min={10}
+              max={18}
+              value={uiFontSize}
+              data-testid="ui-font-size"
+              onChange={(e) => setUiFontSize(Number(e.target.value))}
+              className="w-full max-w-sm"
+            />
+          }
         />
-      </Row>
-
-      <Row label={`Terminal font size (${terminalFontSize}px)`}>
-        <input
-          type="range"
-          min={10}
-          max={20}
-          value={terminalFontSize}
-          data-testid="terminal-font-size"
-          onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-          className="w-full"
+        <SettingsRow
+          title={`Terminal font size (${terminalFontSize}px)`}
+          control={
+            <input
+              type="range"
+              min={10}
+              max={20}
+              value={terminalFontSize}
+              data-testid="terminal-font-size"
+              onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+              className="w-full max-w-sm"
+            />
+          }
         />
-      </Row>
+        <SettingsRow
+          title="Font ligatures"
+          control={
+            <SettingsToggle
+              label="Ligatures"
+              checked={ligatures}
+              onCheckedChange={setLigatures}
+              data-testid="ligatures-toggle"
+            />
+          }
+        />
+      </SettingsGroup>
 
-      <Row label="Font ligatures">
-        <Button
-          variant={ligatures ? "default" : "outline"}
-          size="sm"
-          onClick={() => setLigatures((s) => !s)}
-          data-testid="ligatures-toggle"
-        >
-          {ligatures ? "On" : "Off"}
-        </Button>
-      </Row>
-
-      <Row label="Animations">
-        <Button
-          variant={animations ? "default" : "outline"}
-          size="sm"
-          onClick={() => setAnimations((s) => !s)}
-          data-testid="animations-toggle"
-        >
-          {animations ? "On" : "Off"}
-        </Button>
-      </Row>
-    </section>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[200px_1fr] items-center gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
+      <SettingsGroup title="Motion">
+        <SettingsRow
+          title="Animations"
+          description="Honors system 'reduce motion' regardless of this setting."
+          control={
+            <SettingsToggle
+              label="Animations"
+              checked={animations}
+              onCheckedChange={setAnimations}
+              data-testid="animations-toggle"
+            />
+          }
+        />
+      </SettingsGroup>
     </div>
   );
 }
