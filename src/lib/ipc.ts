@@ -206,3 +206,44 @@ export type ActivityView =
   | "settings";
 
 export type AuxiliaryView = "files" | "diff" | "preview" | "none";
+
+// ---------- Settings ----------
+
+export type SettingsKey =
+  | "general.defaultBackend"
+  | "general.defaultBranch"
+  | "general.namingScheme"
+  | "general.restoreSession"
+  | "appearance.theme"
+  | "appearance.uiFontSize"
+  | "appearance.terminalFontSize"
+  | "appearance.ligatures"
+  | "appearance.animations"
+  | "notifications.agent.waiting"
+  | "notifications.agent.complete"
+  | "notifications.agent.error"
+  | "notifications.build.result"
+  | "notifications.quota.warning"
+  | "git.remote"
+  | "git.template"
+  | "git.autoFetchMinutes"
+  | "git.gpgSign"
+  | "advanced.largeTextThreshold"
+  | "advanced.lruLimit"
+  | "advanced.caffeinate"
+  | "advanced.telemetry"
+  | "account.licenseKey"
+  | "account.updateChannel";
+
+export type SettingsValue = string | number | boolean;
+
+export interface SettingsWriteRequest {
+  key: SettingsKey;
+  value: SettingsValue;
+}
+
+export type SettingsWriteResponse =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export type SettingsSnapshot = Partial<Record<SettingsKey, SettingsValue>>;
