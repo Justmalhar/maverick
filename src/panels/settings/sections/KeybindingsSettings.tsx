@@ -28,11 +28,6 @@ export default function KeybindingsSettings() {
 
   return (
     <section data-testid="keybindings-settings" className="space-y-3">
-      <div className="flex items-center justify-end">
-        <span className="text-[10px] text-muted-foreground">
-          v0.1 — rebinding coming soon
-        </span>
-      </div>
       <Input
         data-testid="keybindings-search"
         value={query}
@@ -41,8 +36,8 @@ export default function KeybindingsSettings() {
       />
       <div className="space-y-2">
         {byCategory.map(([cat, items]) => (
-          <div key={cat} className="rounded-sm border border-border">
-            <div className="border-b border-border bg-card/40 px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div key={cat} className="rounded-sm" style={{ border: "1px solid hsl(var(--border))" }}>
+            <div className="bg-card/40 px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
               {cat}
             </div>
             <table className="w-full text-xs">
@@ -51,7 +46,7 @@ export default function KeybindingsSettings() {
                   <tr
                     key={k.id}
                     data-testid={`keybinding-${k.id}`}
-                    className="border-t border-border/40"
+                    style={{ borderTop: "1px solid hsl(var(--border))" }}
                   >
                     <td className="w-[40%] truncate px-2 py-1 text-foreground">
                       {k.label}

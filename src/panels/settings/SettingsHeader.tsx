@@ -10,7 +10,7 @@ export function SettingsHeader({ title, description, badge }: Props) {
       <div className="flex items-center gap-2.5">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
         {badge ? (
-          <span className="rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground" style={{ border: "1px solid hsl(var(--border))" }}>
             {badge}
           </span>
         ) : null}

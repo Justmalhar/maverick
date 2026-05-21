@@ -1,15 +1,25 @@
-import { describe, it, expect } from "vitest";
-import { renderWithProviders, screen, fireEvent } from "@/test/utils";
+import { describe, it, expect, beforeEach } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders, screen } from "@/test/utils";
 import ModelsSettings from "./ModelsSettings";
+import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
 
 describe("ModelsSettings", () => {
-  it("renders rows and edits every numeric cell (covers all onChange closures)", () => {
+  beforeEach(() => _resetSettingsStoreForTests());
+
+  it("renders one default-model picker per provider", () => {
     renderWithProviders(<ModelsSettings />);
-    fireEvent.change(screen.getByTestId("model-claude"), { target: { value: "claude-x" } });
-    const numericInputs = document.querySelectorAll('input[type="number"]');
-    expect(numericInputs.length).toBeGreaterThan(2);
-    numericInputs.forEach((inp, i) => {
-      fireEvent.change(inp, { target: { value: String(100 + i) } });
-    });
+    expect(screen.getByTestId("model-claude")).toBeInTheDocument();
+    expect(screen.getByTestId("model-codex")).toBeInTheDocument();
+    expect(screen.getByTestId("model-gemini")).toBeInTheDocument();
+    expect(screen.getByTestId("model-pi")).toBeInTheDocument();
+  });
+
+  it("changes the Claude default model via select", async () => {
+    renderWithProviders(<ModelsSettings />);
+    const trigger = screen.getByTestId("model-claude");
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole("option", { name: /sonnet 4\.6/i }));
+    expect(trigger).toHaveTextContent(/Sonnet 4\.6/i);
   });
 });

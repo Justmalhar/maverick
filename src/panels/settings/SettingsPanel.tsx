@@ -12,12 +12,12 @@ import ProvidersSettings from "./sections/ProvidersSettings";
 import AppearanceSettings from "./sections/AppearanceSettings";
 import KeybindingsSettings from "./sections/KeybindingsSettings";
 import TerminalPresets from "./sections/TerminalPresets";
-import RepositorySettings from "./sections/RepositorySettings";
 import NotificationsSettings from "./sections/NotificationsSettings";
 import AdvancedSettings from "./sections/AdvancedSettings";
 import GitSettings from "./sections/GitSettings";
 import MCPsSettings from "./sections/MCPsSettings";
-import AccountSettings from "./sections/AccountSettings";
+import SkillsSettings from "./sections/SkillsSettings";
+import VersionSettings from "./sections/VersionSettings";
 
 interface SectionMeta {
   title: string;
@@ -31,11 +31,6 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
     title: "General",
     description: "Defaults for new workspaces, base branches, and startup behaviour.",
     Component: GeneralSettings,
-  },
-  repositories: {
-    title: "Repositories",
-    description: "Per-repository overrides for presets and ignored paths.",
-    Component: RepositorySettings,
   },
   git: {
     title: "Git",
@@ -56,6 +51,11 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
     title: "MCP Servers",
     description: "Globally enabled MCP servers and their environment.",
     Component: MCPsSettings,
+  },
+  skills: {
+    title: "Skills",
+    description: "Reusable prompt + tool bundles available across every workspace.",
+    Component: SkillsSettings,
   },
   appearance: {
     title: "Appearance",
@@ -82,11 +82,10 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
     description: "Performance limits, power management, telemetry.",
     Component: AdvancedSettings,
   },
-  account: {
-    title: "Account",
-    description: "License, plan, and update channel.",
-    badge: "Free",
-    Component: AccountSettings,
+  version: {
+    title: "Version",
+    description: "Build info and update channel.",
+    Component: VersionSettings,
   },
 };
 
@@ -135,11 +134,12 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         data-testid="settings-panel"
-        className="grid h-[min(680px,86vh)] w-[92vw] !max-w-[960px] grid-cols-[240px_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden border border-white/10 bg-popover/95 p-0 shadow-modal backdrop-blur-xl"
+        className="grid h-[min(680px,86vh)] w-[92vw] !max-w-[960px] grid-cols-[240px_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden bg-popover/95 p-0 shadow-modal backdrop-blur-xl"
+        style={{ border: "1px solid hsl(var(--border))" }}
       >
         <DialogTitle className="sr-only">{meta.title}</DialogTitle>
         <DialogDescription className="sr-only">{meta.description}</DialogDescription>
-        <div className="row-span-2 border-r border-border/30">
+        <div className="row-span-2" style={{ borderRight: "1px solid hsl(var(--border))" }}>
           <SettingsNavRail section={section} onSelect={setSection} />
         </div>
         <div className="overflow-y-auto px-8 py-6">

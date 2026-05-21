@@ -2,16 +2,16 @@ import { useMemo, useRef, useState, type ComponentType, type KeyboardEvent } fro
 import {
   Bell,
   Cpu,
-  FolderGit2,
   GitBranch,
+  Info,
   Keyboard,
   Palette,
   Plug,
   Server,
   Settings as SettingsIcon,
   SlidersHorizontal,
+  Sparkles,
   Terminal,
-  User,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -19,17 +19,17 @@ import { SettingsSearchInput } from "./primitives/SettingsSearchInput";
 
 export type SectionId =
   | "general"
-  | "repositories"
   | "git"
   | "models"
   | "providers"
   | "mcps"
+  | "skills"
   | "appearance"
   | "keybindings"
   | "terminal"
   | "notifications"
   | "advanced"
-  | "account";
+  | "version";
 
 interface NavItem {
   id: SectionId;
@@ -49,7 +49,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Workspace",
     items: [
       { id: "general", label: "General", icon: SettingsIcon },
-      { id: "repositories", label: "Repositories", icon: FolderGit2 },
       { id: "git", label: "Git", icon: GitBranch },
     ],
   },
@@ -60,6 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "models", label: "Models", icon: Cpu },
       { id: "providers", label: "Providers", icon: Plug },
       { id: "mcps", label: "MCPs", icon: Server },
+      { id: "skills", label: "Skills", icon: Sparkles },
     ],
   },
   {
@@ -77,7 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "notifications", label: "Notifications", icon: Bell },
       { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
-      { id: "account", label: "Account", icon: User },
+      { id: "version", label: "Version", icon: Info },
     ],
   },
 ];
@@ -143,7 +143,8 @@ export function SettingsNavRail({ section, onSelect }: Props) {
           handleSearchKey(e as unknown as KeyboardEvent<HTMLInputElement>);
         }
       }}
-      className="flex h-full w-full flex-col gap-2 border-r border-border/30 bg-card/40 px-2 py-3"
+      className="flex h-full w-full flex-col gap-2 bg-card/40 px-2 py-3"
+      style={{ borderRight: "1px solid hsl(var(--border))" }}
     >
       <div className="px-1">
         <SettingsSearchInput value={query} onChange={setQuery} placeholder="Search…" />

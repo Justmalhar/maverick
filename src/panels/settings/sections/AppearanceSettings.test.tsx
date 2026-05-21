@@ -7,10 +7,8 @@ import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
 describe("AppearanceSettings", () => {
   beforeEach(() => _resetSettingsStoreForTests());
 
-  it("selects a theme, adjusts font sizes, toggles ligatures and animations", async () => {
+  it("adjusts font sizes, toggles ligatures and animations, edits a custom color", async () => {
     renderWithProviders(<AppearanceSettings />);
-    await userEvent.click(screen.getByTestId("theme-rose-pine"));
-    expect(screen.getByTestId("theme-rose-pine")).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.change(screen.getByTestId("ui-font-size"), { target: { value: "14" } });
     expect(screen.getByText(/UI font size \(14px\)/i)).toBeInTheDocument();
@@ -26,5 +24,9 @@ describe("AppearanceSettings", () => {
     const animations = screen.getByRole("switch", { name: /animations/i });
     await userEvent.click(animations);
     expect(animations).not.toBeChecked();
+
+    const accentPicker = screen.getByTestId("color-appearance.customColors.accent");
+    fireEvent.change(accentPicker, { target: { value: "#7c3aed" } });
+    expect(accentPicker).toHaveValue("#7c3aed");
   });
 });

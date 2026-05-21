@@ -22,7 +22,8 @@ export const SettingsSearchInput = forwardRef<HTMLInputElement, Props>(
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="h-8 w-full rounded-md border border-border/50 bg-transparent pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="h-8 w-full rounded-md bg-transparent pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          style={{ border: "1px solid hsl(var(--border))" }}
         />
       </label>
     );

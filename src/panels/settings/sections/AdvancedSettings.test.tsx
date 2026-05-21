@@ -7,7 +7,7 @@ import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
 describe("AdvancedSettings", () => {
   beforeEach(() => _resetSettingsStoreForTests());
 
-  it("edits numeric fields and toggles caffeinate + telemetry", async () => {
+  it("edits numeric fields and toggles caffeinate", async () => {
     renderWithProviders(<AdvancedSettings />);
     fireEvent.change(screen.getByTestId("advanced-largetext"), { target: { value: "10000" } });
     expect(screen.getByTestId("advanced-largetext")).toHaveValue(10000);
@@ -20,9 +20,6 @@ describe("AdvancedSettings", () => {
     await userEvent.click(caf);
     expect(caf).not.toBeChecked();
 
-    const tel = screen.getByRole("switch", { name: /telemetry/i });
-    expect(tel).not.toBeChecked();
-    await userEvent.click(tel);
-    expect(tel).toBeChecked();
+    expect(screen.queryByRole("switch", { name: /telemetry/i })).toBeNull();
   });
 });

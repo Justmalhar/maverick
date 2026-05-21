@@ -26,7 +26,7 @@ const STATUS_VARIANT: Record<Status, StatusDotProps["variant"]> = {
 
 export function SettingsFooter({ status, errorMessage, onOpenFile }: Props) {
   return (
-    <footer className="flex h-11 items-center justify-between border-t border-border/40 bg-card/40 px-4">
+    <footer className="flex h-11 items-center justify-between bg-card/40 px-4" style={{ borderTop: "1px solid hsl(var(--border))" }}>
       <Button
         variant="ghost"
         size="sm"

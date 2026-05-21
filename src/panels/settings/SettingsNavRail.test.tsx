@@ -15,8 +15,8 @@ describe("SettingsNavRail", () => {
   });
 
   it("marks the selected item with aria-current", () => {
-    renderWithProviders(<SettingsNavRail section="account" onSelect={() => {}} />);
-    expect(screen.getByTestId("settings-nav-account")).toHaveAttribute("aria-current", "page");
+    renderWithProviders(<SettingsNavRail section="version" onSelect={() => {}} />);
+    expect(screen.getByTestId("settings-nav-version")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("settings-nav-general")).not.toHaveAttribute("aria-current", "page");
   });
 
@@ -35,7 +35,7 @@ describe("SettingsNavRail", () => {
   });
 
   it("keeps the selected group header visible even when its children filter out", async () => {
-    renderWithProviders(<SettingsNavRail section="account" onSelect={() => {}} />);
+    renderWithProviders(<SettingsNavRail section="version" onSelect={() => {}} />);
     await userEvent.type(screen.getByRole("searchbox"), "zzz");
     expect(screen.getByText("System")).toBeInTheDocument();
   });

@@ -1,23 +1,20 @@
-import { describe, it, expect } from "vitest";
-import userEvent from "@testing-library/user-event";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderWithProviders, screen, fireEvent } from "@/test/utils";
 import TerminalPresets from "./TerminalPresets";
+import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
 
 describe("TerminalPresets", () => {
-  it("adds + renames + edits + removes a custom preset", async () => {
-    renderWithProviders(<TerminalPresets />);
-    await userEvent.click(screen.getByTestId("terminal-add"));
-    const customBlock = screen.getByTestId("terminal-preset-custom-8");
-    const inputs = customBlock.querySelectorAll("input");
-    // Rename — covers the `(e) => update(p.id, { name: e.target.value })` closure on the name input
-    fireEvent.change(inputs[0], { target: { value: "my-shell" } });
-    fireEvent.change(inputs[1], { target: { value: "bash" } });
-    fireEvent.change(inputs[2], { target: { value: "-l" } });
-    await userEvent.click(customBlock.querySelector('[data-testid="terminal-remove"]')!);
-  });
+  beforeEach(() => _resetSettingsStoreForTests());
 
-  it("disables name edit on builtins", () => {
+  it("renders one command row per provider and edits the Claude command", () => {
     renderWithProviders(<TerminalPresets />);
-    expect(screen.getByTestId("terminal-preset-claude").querySelector("input")).toBeDisabled();
+    expect(screen.getByTestId("terminal-claude")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-codex")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-gemini")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-pi")).toBeInTheDocument();
+
+    const claude = screen.getByTestId("terminal-claude");
+    fireEvent.change(claude, { target: { value: "claude --resume" } });
+    expect(claude).toHaveValue("claude --resume");
   });
 });

@@ -27,9 +27,9 @@ describe("SettingsPanel", () => {
       ["settings-nav-git", "git-settings"],
       ["settings-nav-mcps", "mcps-settings"],
       ["settings-nav-advanced", "advanced-settings"],
-      ["settings-nav-account", "account-settings"],
+      ["settings-nav-skills", "skills-settings"],
+      ["settings-nav-version", "version-settings"],
       ["settings-nav-terminal", "terminal-presets"],
-      ["settings-nav-repositories", "repository-settings"],
       ["settings-nav-general", "general-settings"],
     ];
     for (const [nav, sec] of sections) {
@@ -40,8 +40,8 @@ describe("SettingsPanel", () => {
 
   it("persists section to ?settings= URL param", async () => {
     renderWithProviders(<SettingsPanel onClose={() => {}} />);
-    await userEvent.click(screen.getByTestId("settings-nav-account"));
-    expect(new URLSearchParams(window.location.search).get("settings")).toBe("account");
+    await userEvent.click(screen.getByTestId("settings-nav-version"));
+    expect(new URLSearchParams(window.location.search).get("settings")).toBe("version");
   });
 
   it("restores the section from ?settings= on mount", () => {

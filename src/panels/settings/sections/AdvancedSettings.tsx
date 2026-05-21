@@ -8,7 +8,6 @@ export default function AdvancedSettings() {
   const [largeText, setLargeText] = useSettings("advanced.largeTextThreshold", 5000);
   const [lruLimit, setLruLimit] = useSettings("advanced.lruLimit", 8);
   const [caffeinate, setCaffeinate] = useSettings("advanced.caffeinate", true);
-  const [telemetry, setTelemetry] = useSettings("advanced.telemetry", false);
 
   return (
     <div data-testid="advanced-settings" className="space-y-5">
@@ -23,7 +22,7 @@ export default function AdvancedSettings() {
               data-testid="advanced-largetext"
               value={largeText}
               onChange={(e) => setLargeText(Number(e.target.value))}
-              className="max-w-[140px]"
+              className="w-32"
             />
           }
         />
@@ -37,7 +36,7 @@ export default function AdvancedSettings() {
               data-testid="advanced-lru"
               value={lruLimit}
               onChange={(e) => setLruLimit(Number(e.target.value))}
-              className="max-w-[140px]"
+              className="w-32"
             />
           }
         />
@@ -53,18 +52,6 @@ export default function AdvancedSettings() {
               checked={caffeinate}
               onCheckedChange={setCaffeinate}
               data-testid="advanced-caffeinate"
-            />
-          }
-        />
-        <SettingsRow
-          title="Telemetry"
-          description="Anonymous usage metrics. Off by default."
-          control={
-            <SettingsToggle
-              label="Telemetry"
-              checked={telemetry}
-              onCheckedChange={setTelemetry}
-              data-testid="advanced-telemetry"
             />
           }
         />

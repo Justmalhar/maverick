@@ -33,7 +33,13 @@ export type EditorMode = "agent" | "terminal";
 export interface ThemeDefinition {
   name: string;
   type: "dark" | "light";
-  ui: Record<string, string>;
+  /** Legacy format — small set of opaque CSS vars */
+  ui?: Record<string, string>;
+  /** VSCode-compatible format — hex colors keyed by VSCode color ID */
+  colors?: Record<string, string>;
+  /** VSCode tokenColors (stored for future syntax highlighting use) */
+  tokenColors?: Array<{ scope: string | string[]; settings: Record<string, string> }>;
+  semanticHighlighting?: boolean;
   terminal: TerminalTheme;
   syntax: Record<string, string>;
 }
@@ -211,6 +217,7 @@ export type AuxiliaryView = "files" | "diff" | "preview" | "none";
 
 export type SettingsKey =
   | "general.defaultBackend"
+  | "general.defaultBackendBinPath"
   | "general.defaultBranch"
   | "general.namingScheme"
   | "general.restoreSession"
@@ -219,6 +226,14 @@ export type SettingsKey =
   | "appearance.terminalFontSize"
   | "appearance.ligatures"
   | "appearance.animations"
+  | "appearance.customColors.background"
+  | "appearance.customColors.foreground"
+  | "appearance.customColors.accent"
+  | "appearance.customColors.muted"
+  | "appearance.customColors.border"
+  | "appearance.customColors.card"
+  | "appearance.customColors.sidebar"
+  | "appearance.customColors.statusbar"
   | "notifications.agent.waiting"
   | "notifications.agent.complete"
   | "notifications.agent.error"
@@ -228,12 +243,18 @@ export type SettingsKey =
   | "git.template"
   | "git.autoFetchMinutes"
   | "git.gpgSign"
+  | "models.claude.id"
+  | "models.codex.id"
+  | "models.gemini.id"
+  | "models.pi.id"
+  | "terminal.claude.command"
+  | "terminal.codex.command"
+  | "terminal.gemini.command"
+  | "terminal.pi.command"
   | "advanced.largeTextThreshold"
   | "advanced.lruLimit"
   | "advanced.caffeinate"
-  | "advanced.telemetry"
-  | "account.licenseKey"
-  | "account.updateChannel";
+  | "version.updateChannel";
 
 export type SettingsValue = string | number | boolean;
 
