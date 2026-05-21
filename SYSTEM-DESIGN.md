@@ -639,6 +639,8 @@ src/
 ├── App.tsx                     # Root layout — ThemeProvider + KeyboardShortcutHandler + TitleBar + AppBody
 ├── context/
 │   └── WorkspaceContext.tsx    # Global state (Zustand store + React context)
+├── lib/stores/
+│   └── settings.ts             # useSettings(key, default) hook backed by a typed SettingsKey enum; 250 ms debounced persist via settings_write
 ├── components/
 │   ├── titlebar/
 │   │   ├── TitleBar.tsx
