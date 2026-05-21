@@ -1,61 +1,73 @@
-// Git settings: remote, commit template, auto-fetch, GPG signing.
-import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SettingsGroup } from "../primitives/SettingsGroup";
+import { SettingsRow } from "../primitives/SettingsRow";
+import { SettingsToggle } from "../primitives/SettingsToggle";
+import { useSettings } from "@/lib/stores/settings";
 
 export default function GitSettings() {
-  const [remote, setRemote] = useState("origin");
-  const [template, setTemplate] = useState("");
-  const [autoFetch, setAutoFetch] = useState(5);
-  const [gpg, setGpg] = useState(false);
+  const [remote, setRemote] = useSettings("git.remote", "origin");
+  const [template, setTemplate] = useSettings("git.template", "");
+  const [autoFetch, setAutoFetch] = useSettings("git.autoFetchMinutes", 5);
+  const [gpg, setGpg] = useSettings("git.gpgSign", false);
 
   return (
-    <section data-testid="git-settings" className="space-y-3">
-      <h3 className="text-sm font-medium text-foreground">Git</h3>
-      <Row label="Default remote">
-        <Input
-          data-testid="git-remote"
-          value={remote}
-          onChange={(e) => setRemote(e.target.value)}
+    <div data-testid="git-settings" className="space-y-5">
+      <SettingsGroup title="Remote">
+        <SettingsRow
+          title="Default remote"
+          description="Used by Push / Pull and 'Auto-fetch'."
+          control={
+            <Input
+              data-testid="git-remote"
+              value={remote}
+              onChange={(e) => setRemote(e.target.value)}
+              className="max-w-sm"
+            />
+          }
         />
-      </Row>
-      <Row label="Commit message template">
-        <textarea
-          data-testid="git-template"
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          rows={3}
-          className="w-full resize-none rounded-sm border border-border bg-input p-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        <SettingsRow
+          title="Auto-fetch interval"
+          description="Minutes between background `git fetch`. Set to 0 to disable."
+          control={
+            <Input
+              type="number"
+              min={0}
+              data-testid="git-autofetch"
+              value={autoFetch}
+              onChange={(e) => setAutoFetch(Number(e.target.value))}
+              className="max-w-[120px]"
+            />
+          }
         />
-      </Row>
-      <Row label="Auto-fetch interval (minutes)">
-        <Input
-          type="number"
-          min={0}
-          data-testid="git-autofetch"
-          value={autoFetch}
-          onChange={(e) => setAutoFetch(Number(e.target.value))}
-        />
-      </Row>
-      <Row label="GPG signing">
-        <Button
-          variant={gpg ? "default" : "outline"}
-          size="sm"
-          onClick={() => setGpg((s) => !s)}
-          data-testid="git-gpg"
-        >
-          {gpg ? "On" : "Off"}
-        </Button>
-      </Row>
-    </section>
-  );
-}
+      </SettingsGroup>
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[200px_1fr] items-center gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
+      <SettingsGroup title="Commits">
+        <SettingsRow
+          title="Commit message template"
+          description="Prefilled into the message buffer when staging a commit."
+          control={
+            <textarea
+              data-testid="git-template"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              rows={3}
+              className="w-full max-w-lg resize-none rounded-sm border border-border bg-input p-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          }
+        />
+        <SettingsRow
+          title="GPG signing"
+          description="Sign every commit with the configured GPG key."
+          control={
+            <SettingsToggle
+              label="GPG signing"
+              checked={gpg}
+              onCheckedChange={setGpg}
+              data-testid="git-gpg"
+            />
+          }
+        />
+      </SettingsGroup>
     </div>
   );
 }
