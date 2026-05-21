@@ -1,0 +1,46 @@
+{
+  "name": "Tokyo Night",
+  "type": "dark",
+  "ui": {
+    "bg-base": "#1a1b26",
+    "bg-panel": "rgba(26, 27, 38, 0.80)",
+    "bg-sidebar": "rgba(22, 22, 30, 0.85)",
+    "accent": "#7aa2f7",
+    "accent-muted": "rgba(122, 162, 247, 0.2)",
+    "text-primary": "#c0caf5",
+    "text-muted": "#565f89",
+    "border": "rgba(41, 46, 66, 0.6)",
+    "success": "#9ece6a",
+    "error": "#f7768e",
+    "warn": "#e0af68"
+  },
+  "terminal": {
+    "background": "#1a1b26",
+    "foreground": "#c0caf5",
+    "cursor": "#c0caf5",
+    "black": "#15161e",
+    "red": "#f7768e",
+    "green": "#9ece6a",
+    "yellow": "#e0af68",
+    "blue": "#7aa2f7",
+    "magenta": "#bb9af7",
+    "cyan": "#7dcfff",
+    "white": "#a9b1d6",
+    "brightBlack": "#414868",
+    "brightRed": "#f7768e",
+    "brightGreen": "#9ece6a",
+    "brightYellow": "#e0af68",
+    "brightBlue": "#7aa2f7",
+    "brightMagenta": "#bb9af7",
+    "brightCyan": "#7dcfff",
+    "brightWhite": "#c0caf5"
+  },
+  "syntax": {
+    "keyword": "#bb9af7",
+    "string": "#9ece6a",
+    "comment": "#565f89",
+    "number": "#ff9e64",
+    "function": "#7aa2f7",
+    "type": "#2ac3de"
+  }
+}

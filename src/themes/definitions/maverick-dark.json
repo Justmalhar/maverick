@@ -1,0 +1,46 @@
+{
+  "name": "Maverick Dark",
+  "type": "dark",
+  "ui": {
+    "bg-base": "#0f0f1a",
+    "bg-panel": "rgba(15, 15, 26, 0.75)",
+    "bg-sidebar": "rgba(10, 10, 20, 0.80)",
+    "accent": "#7c3aed",
+    "accent-muted": "rgba(124, 58, 237, 0.2)",
+    "text-primary": "#e2e8f0",
+    "text-muted": "#64748b",
+    "border": "rgba(45, 45, 74, 0.6)",
+    "success": "#4ade80",
+    "error": "#f87171",
+    "warn": "#fbbf24"
+  },
+  "terminal": {
+    "background": "#0f0f1a",
+    "foreground": "#e2e8f0",
+    "cursor": "#7c3aed",
+    "black": "#1e1e2e",
+    "red": "#f87171",
+    "green": "#4ade80",
+    "yellow": "#fbbf24",
+    "blue": "#60a5fa",
+    "magenta": "#c084fc",
+    "cyan": "#22d3ee",
+    "white": "#e2e8f0",
+    "brightBlack": "#374151",
+    "brightRed": "#fca5a5",
+    "brightGreen": "#86efac",
+    "brightYellow": "#fde68a",
+    "brightBlue": "#93c5fd",
+    "brightMagenta": "#d8b4fe",
+    "brightCyan": "#67e8f9",
+    "brightWhite": "#f8fafc"
+  },
+  "syntax": {
+    "keyword": "#c084fc",
+    "string": "#4ade80",
+    "comment": "#4b5563",
+    "number": "#fbbf24",
+    "function": "#60a5fa",
+    "type": "#22d3ee"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "Catppuccin Mocha",
+  "type": "dark",
+  "ui": {
+    "bg-base": "#1e1e2e",
+    "bg-panel": "rgba(30, 30, 46, 0.80)",
+    "bg-sidebar": "rgba(24, 24, 37, 0.85)",
+    "accent": "#cba6f7",
+    "accent-muted": "rgba(203, 166, 247, 0.2)",
+    "text-primary": "#cdd6f4",
+    "text-muted": "#6c7086",
+    "border": "rgba(49, 50, 68, 0.6)",
+    "success": "#a6e3a1",
+    "error": "#f38ba8",
+    "warn": "#f9e2af"
+  },
+  "terminal": {
+    "background": "#1e1e2e",
+    "foreground": "#cdd6f4",
+    "cursor": "#f5e0dc",
+    "black": "#45475a",
+    "red": "#f38ba8",
+    "green": "#a6e3a1",
+    "yellow": "#f9e2af",
+    "blue": "#89b4fa",
+    "magenta": "#f5c2e7",
+    "cyan": "#94e2d5",
+    "white": "#bac2de",
+    "brightBlack": "#585b70",
+    "brightRed": "#f38ba8",
+    "brightGreen": "#a6e3a1",
+    "brightYellow": "#f9e2af",
+    "brightBlue": "#89b4fa",
+    "brightMagenta": "#f5c2e7",
+    "brightCyan": "#94e2d5",
+    "brightWhite": "#a6adc8"
+  },
+  "syntax": {
+    "keyword": "#cba6f7",
+    "string": "#a6e3a1",
+    "comment": "#6c7086",
+    "number": "#fab387",
+    "function": "#89b4fa",
+    "type": "#94e2d5"
+  }
+}

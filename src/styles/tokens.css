@@ -1,0 +1,165 @@
+/* ============================================================
+   Design Tokens — Single Source of Truth
+   Default theme: pure black with white/silver accents.
+   Alt theme [data-theme="purple"]: unified purple hue.
+   ============================================================ */
+
+:root {
+  /* ── Black theme (default) ───────────────────────────────── */
+
+  --titlebar-bg: 0 0% 4%;
+
+  --activitybar-bg: 0 0% 4%;
+  --activitybar-fg: 0 0% 50%;
+  --activitybar-fg-active: 0 0% 100%;
+  --activitybar-active-border: 0 0% 80%;
+
+  /* Primary side bar */
+  --sidebar-bg: 0 0% 6%;
+  --sidebar-fg: 0 0% 78%;
+  --sidebar-section-header: 0 0% 46%;
+  --sidebar-hover: 0 0% 11%;
+  --sidebar-selected: 0 0% 16%;
+
+  /* Editor */
+  --background: 0 0% 0%;
+  --foreground: 0 0% 96%;
+  --editor-bg: 0 0% 0%;
+
+  /* Editor tab strip */
+  --tab-inactive-bg: 0 0% 5%;
+  --tab-active-bg: 0 0% 0%;
+  --tab-fg: 0 0% 46%;
+  --tab-fg-active: 0 0% 94%;
+  --tab-active-border: 0 0% 0%;
+
+  /* Status bar */
+  --statusbar-bg: 0 0% 0%;
+  --statusbar-fg: 0 0% 46%;
+  --statusbar-no-folder-bg: 0 0% 0%;
+  --statusbar-prominent-bg: 0 0% 4%;
+
+  /* shadcn primitives */
+  --card: 0 0% 8%;
+  --card-foreground: 0 0% 96%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 0 0% 90%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 52%;
+  --accent: 0 0% 90%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 84% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 71% 50%;
+  --warning: 38 92% 55%;
+  --info: 199 89% 55%;
+
+  /* Borders */
+  --border: 0 0% 18%;
+  --border-strong: 0 0% 26%;
+  --border-glass: 0 0% 100% / 0.07;
+  --border-glass-strong: 0 0% 100% / 0.13;
+
+  --input: 0 0% 14%;
+  --ring: 0 0% 80%;
+
+  /* Diff colors */
+  --diff-add: 142 71% 45%;
+  --diff-add-bg: 142 71% 8%;
+  --diff-delete: 0 84% 60%;
+  --diff-delete-bg: 0 84% 8%;
+  --diff-modify: 38 92% 50%;
+  --diff-modify-bg: 38 92% 8%;
+  --diff-rename: 199 89% 48%;
+  --diff-rename-bg: 199 89% 8%;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+
+  /* Fonts */
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
+  --font-mono:
+    "Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono",
+    "Roboto Mono", Consolas, "Liberation Mono", monospace;
+
+  /* Layout constants */
+  --titlebar-height: 32px;
+  --activitybar-width: 48px;
+  --statusbar-height: 22px;
+  --editor-tabs-height: 35px;
+  --panel-tabs-height: 30px;
+  --section-header-height: 22px;
+  --sidebar-min-width: 170px;
+  --sidebar-default-width: 240px;
+  --auxbar-default-width: 280px;
+  --panel-default-height: 220px;
+
+  /* Z-layers */
+  --z-base: 0;
+  --z-overlay: 50;
+  --z-modal: 100;
+  --z-toast: 200;
+  --z-titlebar: 300;
+}
+
+/* ── Purple theme (opt-in via data-theme="purple") ─────────── */
+[data-theme="purple"] {
+  --titlebar-bg: 258 22% 11%;
+  --activitybar-bg: 258 22% 11%;
+  --activitybar-fg: 258 10% 64%;
+  --activitybar-fg-active: 0 0% 100%;
+  --activitybar-active-border: 263 85% 72%;
+
+  --sidebar-bg: 258 22% 13%;
+  --sidebar-fg: 258 12% 86%;
+  --sidebar-section-header: 258 10% 60%;
+  --sidebar-hover: 258 22% 18%;
+  --sidebar-selected: 263 45% 26%;
+
+  --background: 258 22% 14%;
+  --foreground: 0 0% 98%;
+  --editor-bg: 258 22% 14%;
+
+  --tab-inactive-bg: 258 22% 13%;
+  --tab-active-bg: 258 22% 16%;
+  --tab-fg: 258 10% 64%;
+  --tab-fg-active: 0 0% 100%;
+  --tab-active-border: 263 85% 72%;
+
+  --statusbar-bg: 258 22% 9%;
+  --statusbar-fg: 258 10% 60%;
+  --statusbar-no-folder-bg: 258 22% 9%;
+  --statusbar-prominent-bg: 258 22% 14%;
+
+  --card: 258 22% 15%;
+  --card-foreground: 0 0% 98%;
+  --popover: 258 22% 16%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 263 85% 70%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 258 22% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 258 22% 18%;
+  --muted-foreground: 258 10% 64%;
+  --accent: 263 85% 70%;
+  --accent-foreground: 0 0% 100%;
+
+  --border: 258 22% 24%;
+  --border-strong: 258 22% 32%;
+  --border-glass: 0 0% 100% / 0.07;
+  --border-glass-strong: 0 0% 100% / 0.12;
+
+  --input: 258 22% 20%;
+  --ring: 263 85% 70%;
+}

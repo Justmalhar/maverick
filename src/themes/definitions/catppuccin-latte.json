@@ -1,0 +1,46 @@
+{
+  "name": "Catppuccin Latte",
+  "type": "light",
+  "ui": {
+    "bg-base": "#eff1f5",
+    "bg-panel": "rgba(239, 241, 245, 0.80)",
+    "bg-sidebar": "rgba(230, 233, 239, 0.85)",
+    "accent": "#8839ef",
+    "accent-muted": "rgba(136, 57, 239, 0.15)",
+    "text-primary": "#4c4f69",
+    "text-muted": "#8c8fa1",
+    "border": "rgba(188, 192, 204, 0.6)",
+    "success": "#40a02b",
+    "error": "#d20f39",
+    "warn": "#df8e1d"
+  },
+  "terminal": {
+    "background": "#eff1f5",
+    "foreground": "#4c4f69",
+    "cursor": "#dc8a78",
+    "black": "#5c5f77",
+    "red": "#d20f39",
+    "green": "#40a02b",
+    "yellow": "#df8e1d",
+    "blue": "#1e66f5",
+    "magenta": "#ea76cb",
+    "cyan": "#179299",
+    "white": "#acb0be",
+    "brightBlack": "#6c6f85",
+    "brightRed": "#d20f39",
+    "brightGreen": "#40a02b",
+    "brightYellow": "#df8e1d",
+    "brightBlue": "#1e66f5",
+    "brightMagenta": "#ea76cb",
+    "brightCyan": "#179299",
+    "brightWhite": "#bcc0cc"
+  },
+  "syntax": {
+    "keyword": "#8839ef",
+    "string": "#40a02b",
+    "comment": "#8c8fa1",
+    "number": "#fe640b",
+    "function": "#1e66f5",
+    "type": "#179299"
+  }
+}

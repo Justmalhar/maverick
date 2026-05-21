@@ -1,0 +1,80 @@
+import { describe, it, expectTypeOf } from "vitest";
+import type {
+  Project, Workspace, Backend, Skill, Message, KanbanTask, MCPServer,
+  WorkspacePreset, DiffResult, Commit, Stash, FileEntry, MaverickConfig,
+  SplitNode, ContextUsage, Automation, AutomationStep, ActivityView,
+  AuxiliaryView, ThemeDefinition, TerminalTheme, EditorMode, KeybindingMap,
+  PresetNode, DiffFile, DiffHunk,
+} from "./ipc";
+
+describe("ipc types", () => {
+  it("Project has the expected shape", () => {
+    const p: Project = { id: "1", name: "n", path: "/p", createdAt: 0 };
+    expectTypeOf(p.id).toBeString();
+    expectTypeOf(p.name).toBeString();
+    expectTypeOf(p.path).toBeString();
+    expectTypeOf(p.createdAt).toBeNumber();
+  });
+
+  it("Workspace status union compiles", () => {
+    const w: Workspace = {
+      id: "1", projectId: "p", branch: "main", agentBackend: "claude",
+      worktreePath: "/", status: "active", sessionId: "s", title: "t",
+    };
+    expectTypeOf(w.status).toEqualTypeOf<"active" | "idle" | "error">();
+  });
+
+  it("supports all type discriminants", () => {
+    const backend: Backend = { id: "1", name: "a", command: "x", args: [], env: {}, active: true };
+    const skill: Skill = { name: "s", description: "d", prompt: "p" };
+    const msg: Message = { id: "1", sessionId: "s", role: "user", content: "", createdAt: 0 };
+    const task: KanbanTask = {
+      id: "1", projectId: "p", title: "t", status: "backlog",
+      columnOrder: 0, labels: [], createdAt: 0,
+    };
+    const mcp: MCPServer = { name: "n", command: "c", args: [], status: "running" };
+    const preset: WorkspacePreset = {
+      name: "p", layout: { type: "terminal", agent: "a", cwd: "/", mode: "agent" },
+    };
+    const diff: DiffResult = { files: [] };
+    const commit: Commit = { sha: "s", message: "m", author: "a", timestamp: 0, fileCount: 0 };
+    const stash: Stash = { index: 0, message: "m", branch: "b", timestamp: 0 };
+    const file: FileEntry = { path: "p", name: "n", isDirectory: false };
+    const cfg: MaverickConfig = { version: 1, backends: { default: "x", available: [] } };
+    const node: SplitNode = { type: "terminal", id: "1", backend: "shell", ptyId: "" };
+    const ctx: ContextUsage = { workspaceId: "w", tokensUsed: 0, contextWindow: 0, sessionCostEstimate: 0 };
+    const auto: Automation = { name: "a", trigger: "manual", steps: [] };
+    const step: AutomationStep = { type: "shell" };
+    const av: ActivityView = "projects";
+    const auxView: AuxiliaryView = "files";
+    const mode: EditorMode = "agent";
+    const km: KeybindingMap = {};
+    const pn: PresetNode = { type: "browser", url: "x" };
+    const df: DiffFile = { path: "p", status: "M", additions: 0, deletions: 0, hunks: [] };
+    const dh: DiffHunk = { header: "@", lines: [], patch: "" };
+    const td: ThemeDefinition = { name: "n", type: "dark", ui: {}, terminal: {} as TerminalTheme, syntax: {} };
+    expectTypeOf(backend).toMatchTypeOf<Backend>();
+    expectTypeOf(skill).toMatchTypeOf<Skill>();
+    expectTypeOf(msg).toMatchTypeOf<Message>();
+    expectTypeOf(task).toMatchTypeOf<KanbanTask>();
+    expectTypeOf(mcp).toMatchTypeOf<MCPServer>();
+    expectTypeOf(preset).toMatchTypeOf<WorkspacePreset>();
+    expectTypeOf(diff).toMatchTypeOf<DiffResult>();
+    expectTypeOf(commit).toMatchTypeOf<Commit>();
+    expectTypeOf(stash).toMatchTypeOf<Stash>();
+    expectTypeOf(file).toMatchTypeOf<FileEntry>();
+    expectTypeOf(cfg).toMatchTypeOf<MaverickConfig>();
+    expectTypeOf(node).toMatchTypeOf<SplitNode>();
+    expectTypeOf(ctx).toMatchTypeOf<ContextUsage>();
+    expectTypeOf(auto).toMatchTypeOf<Automation>();
+    expectTypeOf(step).toMatchTypeOf<AutomationStep>();
+    expectTypeOf(av).toMatchTypeOf<ActivityView>();
+    expectTypeOf(auxView).toMatchTypeOf<AuxiliaryView>();
+    expectTypeOf(mode).toMatchTypeOf<EditorMode>();
+    expectTypeOf(km).toMatchTypeOf<KeybindingMap>();
+    expectTypeOf(pn).toMatchTypeOf<PresetNode>();
+    expectTypeOf(df).toMatchTypeOf<DiffFile>();
+    expectTypeOf(dh).toMatchTypeOf<DiffHunk>();
+    expectTypeOf(td).toMatchTypeOf<ThemeDefinition>();
+  });
+});

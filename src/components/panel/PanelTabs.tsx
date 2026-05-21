@@ -1,0 +1,67 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useWorkbench } from "@/state/store";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+export type BottomPanelTab = "setup" | "run";
+
+interface Props {
+  value: BottomPanelTab;
+  onChange: (v: BottomPanelTab) => void;
+}
+
+const TABS: Array<{ value: BottomPanelTab; label: string }> = [
+  { value: "setup", label: "Setup" },
+  { value: "run", label: "Run" },
+];
+
+export function PanelTabs({ value, onChange }: Props) {
+  const togglePanel = useWorkbench((s) => s.togglePanel);
+  const panelVisible = useWorkbench((s) => s.layout.panelVisible);
+
+  return (
+    <div
+      data-testid="panel-tabs"
+      className="mv-panel-tabs flex shrink-0 items-center bg-sidebar"
+      style={{ height: "var(--panel-tabs-height)" }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={togglePanel}
+            aria-label={panelVisible ? "Collapse panel" : "Expand panel"}
+            data-testid="panel-collapse"
+            className="mx-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+          >
+            {panelVisible ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronUp className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {panelVisible ? "Collapse panel" : "Expand panel"}
+        </TooltipContent>
+      </Tooltip>
+      <Tabs
+        value={value}
+        onValueChange={(v) => onChange(v as BottomPanelTab)}
+        className="h-full flex-1"
+      >
+        <TabsList className="h-full px-2">
+          {TABS.map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              data-testid={`panel-tab-${t.value}`}
+            >
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}

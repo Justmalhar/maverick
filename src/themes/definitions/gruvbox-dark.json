@@ -1,0 +1,46 @@
+{
+  "name": "Gruvbox Dark",
+  "type": "dark",
+  "ui": {
+    "bg-base": "#282828",
+    "bg-panel": "rgba(40, 40, 40, 0.80)",
+    "bg-sidebar": "rgba(29, 32, 33, 0.85)",
+    "accent": "#d79921",
+    "accent-muted": "rgba(215, 153, 33, 0.2)",
+    "text-primary": "#ebdbb2",
+    "text-muted": "#928374",
+    "border": "rgba(60, 56, 54, 0.6)",
+    "success": "#98971a",
+    "error": "#cc241d",
+    "warn": "#d79921"
+  },
+  "terminal": {
+    "background": "#282828",
+    "foreground": "#ebdbb2",
+    "cursor": "#ebdbb2",
+    "black": "#282828",
+    "red": "#cc241d",
+    "green": "#98971a",
+    "yellow": "#d79921",
+    "blue": "#458588",
+    "magenta": "#b16286",
+    "cyan": "#689d6a",
+    "white": "#a89984",
+    "brightBlack": "#928374",
+    "brightRed": "#fb4934",
+    "brightGreen": "#b8bb26",
+    "brightYellow": "#fabd2f",
+    "brightBlue": "#83a598",
+    "brightMagenta": "#d3869b",
+    "brightCyan": "#8ec07c",
+    "brightWhite": "#ebdbb2"
+  },
+  "syntax": {
+    "keyword": "#fb4934",
+    "string": "#b8bb26",
+    "comment": "#928374",
+    "number": "#d3869b",
+    "function": "#83a598",
+    "type": "#fabd2f"
+  }
+}

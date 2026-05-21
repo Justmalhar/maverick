@@ -1,0 +1,46 @@
+{
+  "name": "One Dark Pro",
+  "type": "dark",
+  "ui": {
+    "bg-base": "#282c34",
+    "bg-panel": "rgba(40, 44, 52, 0.80)",
+    "bg-sidebar": "rgba(33, 37, 43, 0.85)",
+    "accent": "#61afef",
+    "accent-muted": "rgba(97, 175, 239, 0.2)",
+    "text-primary": "#abb2bf",
+    "text-muted": "#5c6370",
+    "border": "rgba(60, 65, 80, 0.6)",
+    "success": "#98c379",
+    "error": "#e06c75",
+    "warn": "#e5c07b"
+  },
+  "terminal": {
+    "background": "#282c34",
+    "foreground": "#abb2bf",
+    "cursor": "#528bff",
+    "black": "#282c34",
+    "red": "#e06c75",
+    "green": "#98c379",
+    "yellow": "#e5c07b",
+    "blue": "#61afef",
+    "magenta": "#c678dd",
+    "cyan": "#56b6c2",
+    "white": "#abb2bf",
+    "brightBlack": "#5c6370",
+    "brightRed": "#e06c75",
+    "brightGreen": "#98c379",
+    "brightYellow": "#e5c07b",
+    "brightBlue": "#61afef",
+    "brightMagenta": "#c678dd",
+    "brightCyan": "#56b6c2",
+    "brightWhite": "#ffffff"
+  },
+  "syntax": {
+    "keyword": "#c678dd",
+    "string": "#98c379",
+    "comment": "#5c6370",
+    "number": "#d19a66",
+    "function": "#61afef",
+    "type": "#e5c07b"
+  }
+}
