@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { open as openInShell } from "@tauri-apps/plugin-shell";
 import { SettingsNavRail, NAV_GROUPS, type SectionId } from "./SettingsNavRail";
 import { SettingsHeader } from "./SettingsHeader";
 import { SettingsFooter } from "./SettingsFooter";
+import { SettingsJsonEditor } from "./SettingsJsonEditor";
 import GeneralSettings from "./sections/GeneralSettings";
 import ModelsSettings from "./sections/ModelsSettings";
 import ProvidersSettings from "./sections/ProvidersSettings";
@@ -105,6 +105,7 @@ interface Props {
 
 export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
   const [section, setSection] = useState<SectionId>(readSectionFromUrl());
+  const [jsonMode, setJsonMode] = useState(false);
   const status = useSettingsStore((s) => s.status);
   const lastError = useSettingsStore((s) => s.lastError);
   const isOpen = open ?? true;
@@ -124,10 +125,10 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
     if (!next) onClose?.();
   };
 
-  const handleOpenFile = () => {
-    void openInShell("file://~/.config/maverick/settings.json").catch(() => {
-      console.warn("Could not open settings file");
-    });
+  const handleOpenFile = () => setJsonMode(true);
+  const handleSelectSection = (id: SectionId) => {
+    setSection(id);
+    setJsonMode(false);
   };
 
   return (
@@ -140,20 +141,37 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
         <DialogTitle className="sr-only">{meta.title}</DialogTitle>
         <DialogDescription className="sr-only">{meta.description}</DialogDescription>
         <div className="row-span-2" style={{ borderRight: "1px solid hsl(var(--border))" }}>
-          <SettingsNavRail section={section} onSelect={setSection} onOpenFile={handleOpenFile} />
+          <SettingsNavRail
+            section={section}
+            onSelect={handleSelectSection}
+            onOpenFile={handleOpenFile}
+          />
         </div>
         <div className="overflow-y-auto px-8 py-6">
-          <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
           <AnimatePresence mode="wait">
-            <motion.div
-              key={section}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.15 }}
-            >
-              <ContentComponent />
-            </motion.div>
+            {jsonMode ? (
+              <motion.div
+                key="json"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+                className="flex h-full flex-col"
+              >
+                <SettingsJsonEditor onClose={() => setJsonMode(false)} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={section}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
+                <ContentComponent />
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
         <div className="col-start-2">
