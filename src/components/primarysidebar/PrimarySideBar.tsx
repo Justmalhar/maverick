@@ -35,7 +35,7 @@ function NavItem({
       className={cn(
         "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-100",
         active
-          ? "bg-sidebar-selected text-foreground"
+          ? "bg-sidebar-selected text-sidebar-selected-fg"
           : "text-sidebar-fg hover:bg-sidebar-hover hover:text-foreground"
       )}
     >
@@ -80,7 +80,7 @@ export function PrimarySideBar() {
         ))}
       </nav>
 
-      <div className="border-t border-border-glass" />
+      <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
 
       <div className="flex-1 overflow-hidden">
         <ProjectsView />

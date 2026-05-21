@@ -1,81 +1,82 @@
 /* ============================================================
    Design Tokens — Single Source of Truth
-   Default theme: pure black with white/silver accents.
-   Alt theme [data-theme="purple"]: unified purple hue.
+   Default theme: Maverick Dark (overridden at runtime by ThemeProvider).
+   Alt themes applied via JS setting CSS custom properties on :root.
    ============================================================ */
 
 :root {
-  /* ── Black theme (default) ───────────────────────────────── */
+  /* ── Maverick Dark (fallback — ThemeProvider overrides at runtime) ── */
 
-  --titlebar-bg: 0 0% 4%;
+  --titlebar-bg: 0 0% 2%;              /* #050505 */
 
-  --activitybar-bg: 0 0% 4%;
-  --activitybar-fg: 0 0% 50%;
-  --activitybar-fg-active: 0 0% 100%;
-  --activitybar-active-border: 0 0% 80%;
+  --activitybar-bg: 0 0% 2%;           /* #050505 */
+  --activitybar-fg: 240 5% 34%;        /* #52525b */
+  --activitybar-fg-active: 0 0% 98%;   /* #fafafa */
+  --activitybar-active-border: 0 0% 100%; /* #ffffff */
 
   /* Primary side bar */
-  --sidebar-bg: 0 0% 6%;
-  --sidebar-fg: 0 0% 78%;
-  --sidebar-section-header: 0 0% 46%;
-  --sidebar-hover: 0 0% 11%;
-  --sidebar-selected: 0 0% 16%;
+  --sidebar-bg: 0 0% 4%;               /* #0a0a0a */
+  --sidebar-fg: 240 5% 84%;            /* #d4d4d8 */
+  --sidebar-section-header: 240 4% 46%; /* #71717a */
+  --sidebar-hover: 240 6% 10%;         /* #18181b */
+  --sidebar-selected: 240 5% 16%;      /* #27272a */
+  --sidebar-selected-fg: 0 0% 100%;    /* derived at runtime; white default */
 
   /* Editor */
-  --background: 0 0% 0%;
-  --foreground: 0 0% 96%;
+  --background: 0 0% 0%;               /* #000000 */
+  --foreground: 240 5% 96%;            /* #f5f5f7 */
   --editor-bg: 0 0% 0%;
 
   /* Editor tab strip */
-  --tab-inactive-bg: 0 0% 6%;
-  --tab-active-bg: 0 0% 11%;
-  --tab-fg: 0 0% 44%;
-  --tab-fg-active: 0 0% 96%;
-  --tab-active-border: 0 0% 0%;
+  --tab-inactive-bg: 0 0% 2%;          /* #050505 */
+  --tab-active-bg: 0 0% 0%;            /* #000000 */
+  --tab-fg: 240 4% 46%;                /* #71717a */
+  --tab-fg-active: 0 0% 98%;           /* #fafafa */
+  --tab-active-border: 0 0% 100%;      /* #ffffff */
 
   /* Status bar */
-  --statusbar-bg: 0 0% 0%;
-  --statusbar-fg: 0 0% 46%;
-  --statusbar-no-folder-bg: 0 0% 0%;
-  --statusbar-prominent-bg: 0 0% 4%;
+  --statusbar-bg: 0 0% 2%;
+  --statusbar-fg: 240 5% 84%;
+  --statusbar-no-folder-bg: 0 0% 2%;
+  --statusbar-prominent-bg: 240 6% 10%;
 
   /* shadcn primitives */
-  --card: 0 0% 8%;
-  --card-foreground: 0 0% 96%;
-  --popover: 0 0% 9%;
-  --popover-foreground: 0 0% 96%;
-  --primary: 0 0% 90%;
-  --primary-foreground: 0 0% 4%;
-  --secondary: 0 0% 12%;
+  --card: 240 8% 5%;                   /* #0d0d10 */
+  --card-foreground: 240 5% 96%;
+  --popover: 240 8% 5%;
+  --popover-foreground: 240 5% 96%;
+  --primary: 0 0% 100%;                /* #ffffff */
+  --primary-foreground: 0 0% 0%;       /* derived: white primary → black fg */
+  --secondary: 240 6% 13%;             /* #1f1f23 */
   --secondary-foreground: 0 0% 96%;
-  --muted: 0 0% 10%;
-  --muted-foreground: 0 0% 52%;
-  --accent: 0 0% 90%;
-  --accent-foreground: 0 0% 4%;
-  --destructive: 0 84% 62%;
+  --muted: 240 6% 13%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 0 0% 100%;                 /* #ffffff */
+  --accent-foreground: 0 0% 0%;        /* derived: white accent → black fg */
+  --destructive: 0 91% 71%;            /* #f87171 */
   --destructive-foreground: 0 0% 100%;
-  --success: 142 71% 50%;
-  --warning: 38 92% 55%;
-  --info: 199 89% 55%;
+  --success: 142 71% 58%;              /* #4ade80 */
+  --warning: 41 96% 56%;               /* #fbbf24 */
+  --info: 213 94% 68%;                 /* #60a5fa */
 
   /* Borders */
-  --border: 0 0% 18%;
-  --border-strong: 0 0% 26%;
-  --border-glass: 0 0% 100% / 0.07;
-  --border-glass-strong: 0 0% 100% / 0.13;
+  --border: 240 6% 10%;                /* #18181b */
+  --border-strong: 240 5% 16%;         /* #27272a */
+  --border-glass: 240 6% 10%;
+  --border-glass-strong: 240 5% 16%;
 
-  --input: 0 0% 14%;
-  --ring: 0 0% 80%;
+  --input: 240 8% 5%;                  /* #0d0d10 */
+  --ring: 0 0% 100%;                   /* #ffffff */
 
   /* Diff colors */
-  --diff-add: 142 71% 45%;
-  --diff-add-bg: 142 71% 8%;
-  --diff-delete: 0 84% 60%;
-  --diff-delete-bg: 0 84% 8%;
-  --diff-modify: 38 92% 50%;
-  --diff-modify-bg: 38 92% 8%;
-  --diff-rename: 199 89% 48%;
-  --diff-rename-bg: 199 89% 8%;
+  --diff-add: 142 71% 58%;             /* #4ade80 */
+  --diff-add-bg: 142 71% 10%;
+  --diff-delete: 0 91% 71%;            /* #f87171 */
+  --diff-delete-bg: 0 91% 10%;
+  --diff-modify: 213 94% 68%;          /* #60a5fa */
+  --diff-modify-bg: 213 94% 12%;
+  --diff-rename: 240 4% 46%;           /* #71717a */
+  --diff-rename-bg: 240 4% 10%;
 
   /* Radius */
   --radius-sm: 4px;
@@ -98,7 +99,7 @@
   --activitybar-width: 48px;
   --statusbar-height: 22px;
   --editor-tabs-height: 35px;
-  --panel-tabs-height: 30px;
+  --panel-tabs-height: 35px;
   --section-header-height: 22px;
   --sidebar-min-width: 170px;
   --sidebar-default-width: 240px;
@@ -116,55 +117,16 @@
   --shadow-modal: 0 24px 64px -12px rgb(0 0 0 / 0.5);
   --settings-nav-width: 220px;
   --settings-modal-max-w: 960px;
+
+  /* macOS traffic-light dots (decorative, themable) */
+  --traffic-red: 3 100% 67%;     /* #ff5f57 */
+  --traffic-yellow: 41 99% 59%;  /* #febc2e */
+  --traffic-green: 129 67% 47%;  /* #28c840 */
+
+  /* Modal/dialog dim. Always a dark dim so it works for light AND dark themes
+     (white-on-white would lose the focus-attention dimming effect). */
+  --overlay: 0 0% 0%;
 }
 
-/* ── Purple theme (opt-in via data-theme="purple") ─────────── */
-[data-theme="purple"] {
-  --titlebar-bg: 258 22% 11%;
-  --activitybar-bg: 258 22% 11%;
-  --activitybar-fg: 258 10% 64%;
-  --activitybar-fg-active: 0 0% 100%;
-  --activitybar-active-border: 263 85% 72%;
-
-  --sidebar-bg: 258 22% 13%;
-  --sidebar-fg: 258 12% 86%;
-  --sidebar-section-header: 258 10% 60%;
-  --sidebar-hover: 258 22% 18%;
-  --sidebar-selected: 263 45% 26%;
-
-  --background: 258 22% 14%;
-  --foreground: 0 0% 98%;
-  --editor-bg: 258 22% 14%;
-
-  --tab-inactive-bg: 258 22% 13%;
-  --tab-active-bg: 258 22% 16%;
-  --tab-fg: 258 10% 64%;
-  --tab-fg-active: 0 0% 100%;
-  --tab-active-border: 263 85% 72%;
-
-  --statusbar-bg: 258 22% 9%;
-  --statusbar-fg: 258 10% 60%;
-  --statusbar-no-folder-bg: 258 22% 9%;
-  --statusbar-prominent-bg: 258 22% 14%;
-
-  --card: 258 22% 15%;
-  --card-foreground: 0 0% 98%;
-  --popover: 258 22% 16%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 263 85% 70%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 258 22% 20%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 258 22% 18%;
-  --muted-foreground: 258 10% 64%;
-  --accent: 263 85% 70%;
-  --accent-foreground: 0 0% 100%;
-
-  --border: 258 22% 24%;
-  --border-strong: 258 22% 32%;
-  --border-glass: 0 0% 100% / 0.07;
-  --border-glass-strong: 0 0% 100% / 0.12;
-
-  --input: 258 22% 20%;
-  --ring: 263 85% 70%;
-}
+/* Theme overrides are applied at runtime by ThemeProvider via JS (src/themes/theme-provider.tsx).
+   Add new themes as JSON files in src/themes/definitions/ — no CSS needed. */

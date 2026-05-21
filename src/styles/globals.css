@@ -41,6 +41,7 @@
   --color-sidebar-section: hsl(var(--sidebar-section-header));
   --color-sidebar-hover: hsl(var(--sidebar-hover));
   --color-sidebar-selected: hsl(var(--sidebar-selected));
+  --color-sidebar-selected-fg: hsl(var(--sidebar-selected-fg));
   --color-editor: hsl(var(--editor-bg));
   --color-tab-inactive: hsl(var(--tab-inactive-bg));
   --color-tab-active: hsl(var(--tab-active-bg));
@@ -51,6 +52,11 @@
   --color-statusbar-fg: hsl(var(--statusbar-fg));
   --color-statusbar-no-folder: hsl(var(--statusbar-no-folder-bg));
   --color-statusbar-prominent: hsl(var(--statusbar-prominent-bg));
+
+  --color-traffic-red: hsl(var(--traffic-red));
+  --color-traffic-yellow: hsl(var(--traffic-yellow));
+  --color-traffic-green: hsl(var(--traffic-green));
+  --color-overlay: hsl(var(--overlay));
 
   --color-diff-add: hsl(var(--diff-add));
   --color-diff-add-bg: hsl(var(--diff-add-bg));
