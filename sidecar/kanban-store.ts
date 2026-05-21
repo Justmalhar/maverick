@@ -1,5 +1,5 @@
 import { defaultIds } from "./deps";
-import type { IdProvider, KanbanTask } from "./types";
+import type { IdProvider, KanbanTask, Attachment } from "./types";
 import type { SQLiteStore } from "./sqlite-store";
 
 interface KanbanRow {
@@ -13,6 +13,9 @@ interface KanbanRow {
   labels_json: string;
   due_date: number | null;
   created_at: number;
+  agent_backend: string;
+  branch: string;
+  attachments: string;
 }
 
 export interface KanbanStoreOptions {
@@ -27,6 +30,14 @@ export class KanbanStore {
   }
 
   list(projectId: string): KanbanTask[] {
+    if (projectId === "") {
+      const rows = this.store.db
+        .query<KanbanRow, []>(
+          "SELECT * FROM kanban_tasks ORDER BY status ASC, column_order ASC"
+        )
+        .all();
+      return rows.map(KanbanStore.fromRow);
+    }
     const rows = this.store.db
       .query<KanbanRow, [string]>(
         "SELECT * FROM kanban_tasks WHERE project_id = ? ORDER BY status ASC, column_order ASC"
@@ -37,23 +48,32 @@ export class KanbanStore {
 
   upsert(task: Partial<KanbanTask> & { projectId: string; title: string }): KanbanTask {
     const id = task.id ?? this.ids.uuid("task");
-    const status = task.status ?? "backlog";
+    const status = task.status ?? "todo";
     const columnOrder = task.columnOrder ?? 0;
     const labels = JSON.stringify(task.labels ?? []);
+    const attachments = JSON.stringify(task.attachments ?? []);
     const createdAt = task.createdAt ?? Math.floor(this.ids.now() / 1000);
+    const agentBackend = task.agentBackend ?? "";
+    const branch = task.branch ?? "";
+
     this.store.db
       .query(
-        `INSERT INTO kanban_tasks (id, project_id, title, description, status, column_order, workspace_id, labels_json, due_date, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO kanban_tasks
+           (id, project_id, title, description, status, column_order, workspace_id,
+            labels_json, due_date, created_at, agent_backend, branch, attachments)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-           project_id = excluded.project_id,
-           title = excluded.title,
-           description = excluded.description,
-           status = excluded.status,
-           column_order = excluded.column_order,
-           workspace_id = excluded.workspace_id,
-           labels_json = excluded.labels_json,
-           due_date = excluded.due_date`
+           project_id    = excluded.project_id,
+           title         = excluded.title,
+           description   = excluded.description,
+           status        = excluded.status,
+           column_order  = excluded.column_order,
+           workspace_id  = excluded.workspace_id,
+           labels_json   = excluded.labels_json,
+           due_date      = excluded.due_date,
+           agent_backend = excluded.agent_backend,
+           branch        = excluded.branch,
+           attachments   = excluded.attachments`
       )
       .run(
         id,
@@ -65,19 +85,26 @@ export class KanbanStore {
         task.workspaceId ?? null,
         labels,
         task.dueDate ?? null,
-        createdAt
+        createdAt,
+        agentBackend,
+        branch,
+        attachments
       );
+
     return {
       id,
       projectId: task.projectId,
       title: task.title,
       description: task.description,
-      status,
+      status: status as KanbanTask["status"],
       columnOrder,
       workspaceId: task.workspaceId,
       labels: task.labels ?? [],
       dueDate: task.dueDate,
       createdAt,
+      agentBackend,
+      branch,
+      attachments: task.attachments ?? [],
     };
   }
 
@@ -98,6 +125,9 @@ export class KanbanStore {
       labels: JSON.parse(row.labels_json) as string[],
       dueDate: row.due_date ?? undefined,
       createdAt: row.created_at,
+      agentBackend: row.agent_backend,
+      branch: row.branch,
+      attachments: JSON.parse(row.attachments) as Attachment[],
     };
   }
 }
