@@ -1,24 +1,14 @@
-// ⌘, — full settings UI with sidebar nav + section router.
-import { useMemo, useState } from "react";
-import {
-  Settings as SettingsIcon,
-  Cpu,
-  Plug,
-  Palette,
-  Bell,
-  Keyboard,
-  GitBranch,
-  Server,
-  SlidersHorizontal,
-  User,
-  Terminal,
-  FolderGit2,
-} from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { open as openInShell } from "@tauri-apps/plugin-shell";
+import { SettingsNavRail, NAV_GROUPS, type SectionId } from "./SettingsNavRail";
+import { SettingsHeader } from "./SettingsHeader";
+import { SettingsFooter } from "./SettingsFooter";
 import GeneralSettings from "./sections/GeneralSettings";
 import ModelsSettings from "./sections/ModelsSettings";
+import ProvidersSettings from "./sections/ProvidersSettings";
 import AppearanceSettings from "./sections/AppearanceSettings";
 import KeybindingsSettings from "./sections/KeybindingsSettings";
 import TerminalPresets from "./sections/TerminalPresets";
@@ -29,135 +19,151 @@ import GitSettings from "./sections/GitSettings";
 import MCPsSettings from "./sections/MCPsSettings";
 import AccountSettings from "./sections/AccountSettings";
 
-type Section =
-  | "general"
-  | "models"
-  | "providers"
-  | "appearance"
-  | "notifications"
-  | "keybindings"
-  | "git"
-  | "mcps"
-  | "advanced"
-  | "account"
-  | "terminal"
-  | "repositories";
-
-interface NavItem {
-  id: Section;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
+interface SectionMeta {
+  title: string;
+  description: string;
+  badge?: string;
+  Component: React.ComponentType;
 }
 
-const NAV: NavItem[] = [
-  { id: "general", label: "General", icon: SettingsIcon },
-  { id: "models", label: "Models", icon: Cpu },
-  { id: "providers", label: "Providers", icon: Plug },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "keybindings", label: "Keybindings", icon: Keyboard },
-  { id: "git", label: "Git", icon: GitBranch },
-  { id: "mcps", label: "MCPs", icon: Server },
-  { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
-  { id: "account", label: "Account", icon: User },
-  { id: "terminal", label: "Terminal", icon: Terminal },
-  { id: "repositories", label: "Repositories", icon: FolderGit2 },
-];
+const SECTIONS: Record<SectionId, SectionMeta> = {
+  general: {
+    title: "General",
+    description: "Defaults for new workspaces, base branches, and startup behaviour.",
+    Component: GeneralSettings,
+  },
+  repositories: {
+    title: "Repositories",
+    description: "Per-repository overrides for presets and ignored paths.",
+    Component: RepositorySettings,
+  },
+  git: {
+    title: "Git",
+    description: "Remote, commit template, auto-fetch, and signing preferences.",
+    Component: GitSettings,
+  },
+  models: {
+    title: "Models",
+    description: "Model IDs, context windows, and per-token cost per backend.",
+    Component: ModelsSettings,
+  },
+  providers: {
+    title: "Providers",
+    description: "Backend credentials read from each CLI's own config.",
+    Component: ProvidersSettings,
+  },
+  mcps: {
+    title: "MCP Servers",
+    description: "Globally enabled MCP servers and their environment.",
+    Component: MCPsSettings,
+  },
+  appearance: {
+    title: "Appearance",
+    description: "Theme, font sizes, ligatures, and animations.",
+    Component: AppearanceSettings,
+  },
+  keybindings: {
+    title: "Keybindings",
+    description: "Every shortcut Maverick listens for. Rebinding lands in a later release.",
+    Component: KeybindingsSettings,
+  },
+  terminal: {
+    title: "Terminal Presets",
+    description: "Named PTY launchers usable from the preset launcher (⌘⇧Space).",
+    Component: TerminalPresets,
+  },
+  notifications: {
+    title: "Notifications",
+    description: "Per-event notification toggles.",
+    Component: NotificationsSettings,
+  },
+  advanced: {
+    title: "Advanced",
+    description: "Performance limits, power management, telemetry.",
+    Component: AdvancedSettings,
+  },
+  account: {
+    title: "Account",
+    description: "License, plan, and update channel.",
+    badge: "Free",
+    Component: AccountSettings,
+  },
+};
+
+const ALL_IDS: SectionId[] = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id));
+
+function readSectionFromUrl(): SectionId {
+  if (typeof window === "undefined") return "general";
+  const id = new URLSearchParams(window.location.search).get("settings");
+  return (ALL_IDS as string[]).includes(id ?? "") ? (id as SectionId) : "general";
+}
 
 interface Props {
-  /** Controlled open state. If omitted, the panel is treated as always open while mounted. */
   open?: boolean;
-  /** Called when the dialog state should change (overlay click, ESC, close button). */
   onOpenChange?: (open: boolean) => void;
-  /** Legacy callback — fires when the dialog is closed. */
   onClose?: () => void;
 }
 
 export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
-  const [section, setSection] = useState<Section>("general");
+  const [section, setSection] = useState<SectionId>(readSectionFromUrl());
+  const status = useSettingsStore((s) => s.status);
+  const lastError = useSettingsStore((s) => s.lastError);
   const isOpen = open ?? true;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("settings", section);
+    window.history.replaceState({}, "", url.toString());
+  }, [section]);
+
+  const meta = SECTIONS[section];
+  const ContentComponent = useMemo(() => meta.Component, [meta]);
+
   const handleOpenChange = (next: boolean) => {
     onOpenChange?.(next);
     if (!next) onClose?.();
   };
 
-  const Content = useMemo(() => {
-    switch (section) {
-      case "general":
-        return <GeneralSettings />;
-      case "models":
-        return <ModelsSettings />;
-      case "providers":
-        return <ProvidersSettings />;
-      case "appearance":
-        return <AppearanceSettings />;
-      case "notifications":
-        return <NotificationsSettings />;
-      case "keybindings":
-        return <KeybindingsSettings />;
-      case "git":
-        return <GitSettings />;
-      case "mcps":
-        return <MCPsSettings />;
-      case "advanced":
-        return <AdvancedSettings />;
-      case "account":
-        return <AccountSettings />;
-      case "terminal":
-        return <TerminalPresets />;
-      case "repositories":
-        return <RepositorySettings />;
-    }
-  }, [section]);
+  const handleOpenFile = () => {
+    void openInShell("file://~/.config/maverick/settings.json").catch(() => {
+      console.warn("Could not open settings file");
+    });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         data-testid="settings-panel"
-        className="grid h-[80vh] max-h-[80vh] w-[90vw] max-w-5xl grid-cols-[200px_1fr] gap-0 overflow-hidden p-0"
+        className="grid h-[min(680px,86vh)] w-[min(960px,92vw)] max-w-settings-modal grid-cols-[var(--settings-nav-width)_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden border border-border-glass-strong bg-popover/95 p-0 shadow-modal backdrop-blur-xl"
       >
-        <DialogTitle className="sr-only">Settings</DialogTitle>
-        <nav className="flex flex-col gap-0.5 border-r border-border bg-card/30 p-2">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSection(item.id)}
-                data-testid={`settings-nav-${item.id}`}
-                className={cn(
-                  "flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors",
-                  section === item.id
-                    ? "bg-accent/30 text-foreground"
-                    : "text-muted-foreground hover:bg-accent/10 hover:text-foreground"
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {item.label}
-              </button>
-            );
-          })}
-          <Separator className="my-1" />
-        </nav>
-        <div className="overflow-auto p-4">{Content}</div>
+        <DialogTitle className="sr-only">{meta.title}</DialogTitle>
+        <DialogDescription className="sr-only">{meta.description}</DialogDescription>
+        <div className="row-span-2 border-r border-border/30">
+          <SettingsNavRail section={section} onSelect={setSection} />
+        </div>
+        <div className="overflow-y-auto px-8 py-6">
+          <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={section}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+            >
+              <ContentComponent />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        <div className="col-start-2">
+          <SettingsFooter
+            status={status}
+            errorMessage={lastError ?? undefined}
+            onOpenFile={handleOpenFile}
+          />
+        </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ProvidersSettings() {
-  return (
-    <section data-testid="providers-settings" className="space-y-2">
-      <h3 className="text-sm font-medium text-foreground">Providers</h3>
-      <p className="text-xs text-muted-foreground">
-        Configure API keys for each backend. Keys are stored in your system keychain.
-      </p>
-      <div className="rounded-sm border border-border bg-card/30 p-3 text-[11px] text-muted-foreground">
-        Provider configuration is managed via the OS keychain. Use{" "}
-        <code className="rounded bg-muted/40 px-1">maverick keys set &lt;provider&gt;</code> from a
-        terminal or the workspace command palette.
-      </div>
-    </section>
   );
 }

@@ -77,13 +77,23 @@ export const useSettingsStore = create<State>((set, get) => ({
   },
 }));
 
+type Widen<V> = V extends string
+  ? string
+  : V extends number
+    ? number
+    : V extends boolean
+      ? boolean
+      : V;
+
 export function useSettings<V extends SettingsValue>(
   key: SettingsKey,
   defaultValue: V,
-): [V, (value: V) => void] {
-  const value = useSettingsStore((s) => (s.values[key] as V | undefined) ?? defaultValue);
+): [Widen<V>, (value: Widen<V>) => void] {
+  const value = useSettingsStore(
+    (s) => (s.values[key] as Widen<V> | undefined) ?? (defaultValue as unknown as Widen<V>),
+  );
   const set = useSettingsStore((s) => s.set);
-  return [value, (v: V) => set(key, v)];
+  return [value, (v: Widen<V>) => set(key, v)];
 }
 
 /** Test-only — clears the store and any pending debounced timers. */

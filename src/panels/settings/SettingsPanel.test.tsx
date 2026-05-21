@@ -6,13 +6,18 @@ import SettingsPanel from "./SettingsPanel";
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
+  window.history.replaceState({}, "", "/");
 });
 
 describe("SettingsPanel", () => {
-  it("renders nav, switches sections, fires close", async () => {
-    const onClose = vi.fn();
-    renderWithProviders(<SettingsPanel onClose={onClose} />);
+  it("renders the panel and starts on General", () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
     expect(screen.getByTestId("settings-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("general-settings")).toBeInTheDocument();
+  });
+
+  it("switches to each section via nav", async () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
     const sections: Array<[string, string]> = [
       ["settings-nav-models", "models-settings"],
       ["settings-nav-providers", "providers-settings"],
@@ -33,12 +38,24 @@ describe("SettingsPanel", () => {
     }
   });
 
+  it("persists section to ?settings= URL param", async () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    await userEvent.click(screen.getByTestId("settings-nav-account"));
+    expect(new URLSearchParams(window.location.search).get("settings")).toBe("account");
+  });
+
+  it("restores the section from ?settings= on mount", () => {
+    window.history.replaceState({}, "", "/?settings=appearance");
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    expect(screen.getByTestId("appearance-settings")).toBeInTheDocument();
+  });
+
   it("supports controlled open/onOpenChange", async () => {
     const onOpenChange = vi.fn();
     const onClose = vi.fn();
-    renderWithProviders(<SettingsPanel open onOpenChange={onOpenChange} onClose={onClose} />);
-    // We can't easily close shadcn Dialog overlay programmatically in jsdom,
-    // but we can call handleOpenChange via Escape:
+    renderWithProviders(
+      <SettingsPanel open onOpenChange={onOpenChange} onClose={onClose} />,
+    );
     await userEvent.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onClose).toHaveBeenCalled();
