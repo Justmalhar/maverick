@@ -2,25 +2,34 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { SETTINGS_DEFAULTS, SETTINGS_KEYS } from "@/lib/stores/settings-defaults";
 import type { SettingsKey, SettingsValue } from "@/lib/ipc";
 
 interface Props {
   onClose: () => void;
 }
 
-function formatStore(values: Record<string, SettingsValue | undefined>): string {
-  const sorted: Record<string, SettingsValue> = {};
-  for (const key of Object.keys(values).sort()) {
-    const v = values[key];
-    if (v !== undefined) sorted[key] = v;
+function buildSnapshot(values: Record<string, SettingsValue | undefined>): string {
+  // Include every known SettingsKey — fall back to the default when the user
+  // hasn't explicitly set a value. Unknown keys (e.g. forward-compat additions
+  // dropped in via the editor) are preserved at the end.
+  const merged: Record<string, SettingsValue> = {};
+  for (const key of SETTINGS_KEYS) {
+    merged[key] = values[key] ?? SETTINGS_DEFAULTS[key];
   }
-  return JSON.stringify(sorted, null, 2);
+  const knownKeys = new Set<string>(SETTINGS_KEYS as readonly string[]);
+  for (const key of Object.keys(values).sort()) {
+    if (!knownKeys.has(key) && values[key] !== undefined) {
+      merged[key] = values[key]!;
+    }
+  }
+  return JSON.stringify(merged, null, 2);
 }
 
 export function SettingsJsonEditor({ onClose }: Props) {
   const values = useSettingsStore((s) => s.values);
   const setValue = useSettingsStore((s) => s.set);
-  const initial = useMemo(() => formatStore(values), [values]);
+  const initial = useMemo(() => buildSnapshot(values), [values]);
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
