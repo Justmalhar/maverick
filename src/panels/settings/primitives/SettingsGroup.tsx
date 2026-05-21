@@ -8,20 +8,18 @@ interface Props {
 
 export function SettingsGroup({ title, description, children }: Props) {
   return (
-    <section className="rounded-lg border border-border/60 bg-card/40 px-5 py-2">
+    <section className="overflow-hidden rounded-xl border border-border/50 bg-card/30">
       {title || description ? (
-        <header className="border-b border-border/40 py-3">
+        <header className="border-b border-border/40 bg-muted/20 px-5 py-3">
           {title ? (
-            <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-              {title}
-            </h3>
+            <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
           ) : null}
           {description ? (
-            <p className="mt-1 max-w-prose text-xs text-muted-foreground">{description}</p>
+            <p className="mt-0.5 max-w-prose text-xs text-muted-foreground">{description}</p>
           ) : null}
         </header>
       ) : null}
-      <div className="divide-y divide-border/40">{children}</div>
+      <div className="divide-y divide-border/30 px-5">{children}</div>
     </section>
   );
 }

@@ -135,7 +135,7 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         data-testid="settings-panel"
-        className="grid h-[min(680px,86vh)] w-[min(960px,92vw)] max-w-settings-modal grid-cols-[var(--settings-nav-width)_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden border border-border-glass-strong bg-popover/95 p-0 shadow-modal backdrop-blur-xl"
+        className="grid h-[min(680px,86vh)] w-[92vw] !max-w-[960px] grid-cols-[240px_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden border border-white/10 bg-popover/95 p-0 shadow-modal backdrop-blur-xl"
       >
         <DialogTitle className="sr-only">{meta.title}</DialogTitle>
         <DialogDescription className="sr-only">{meta.description}</DialogDescription>

@@ -37,7 +37,7 @@ describe("SettingsNavRail", () => {
   it("keeps the selected group header visible even when its children filter out", async () => {
     renderWithProviders(<SettingsNavRail section="account" onSelect={() => {}} />);
     await userEvent.type(screen.getByRole("searchbox"), "zzz");
-    expect(screen.getByText("SYSTEM")).toBeInTheDocument();
+    expect(screen.getByText("System")).toBeInTheDocument();
   });
 
   it("moves selection on arrow keys and fires onSelect on Enter", async () => {
