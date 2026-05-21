@@ -44,6 +44,17 @@ if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
 }
 
+// jsdom doesn't implement pointer capture — Radix Select needs these.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {};
+}
+
 // Stable framer-motion mock — strips animation props and renders the element.
 vi.mock("framer-motion", () => {
   const stripMotionProps = (props: Record<string, unknown>) => {
