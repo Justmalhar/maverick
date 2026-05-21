@@ -1,25 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
-import userEvent from "@testing-library/user-event";
+import { describe, it, expect } from "vitest";
 import { renderWithProviders, screen } from "@/test/utils";
 import { SettingsFooter } from "./SettingsFooter";
 
 describe("SettingsFooter", () => {
-  it("invokes onOpenFile when Open settings file is clicked", async () => {
-    const onOpenFile = vi.fn();
-    renderWithProviders(<SettingsFooter status="idle" onOpenFile={onOpenFile} />);
-    await userEvent.click(screen.getByRole("button", { name: /open settings file/i }));
-    expect(onOpenFile).toHaveBeenCalled();
-  });
-
   it("renders status labels for each state", () => {
-    const onOpenFile = vi.fn();
-    const { rerender } = renderWithProviders(
-      <SettingsFooter status="saving" onOpenFile={onOpenFile} />,
-    );
+    const { rerender } = renderWithProviders(<SettingsFooter status="idle" />);
+    expect(screen.getByText(/all changes saved/i)).toBeInTheDocument();
+    rerender(<SettingsFooter status="saving" />);
     expect(screen.getByText(/saving/i)).toBeInTheDocument();
-    rerender(<SettingsFooter status="saved" onOpenFile={onOpenFile} />);
+    rerender(<SettingsFooter status="saved" />);
     expect(screen.getByText(/saved/i)).toBeInTheDocument();
-    rerender(<SettingsFooter status="error" onOpenFile={onOpenFile} errorMessage="boom" />);
+    rerender(<SettingsFooter status="error" errorMessage="boom" />);
     expect(screen.getByText(/save failed/i)).toBeInTheDocument();
   });
 });

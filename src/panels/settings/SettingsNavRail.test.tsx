@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "@/test/utils";
 import { SettingsNavRail, NAV_GROUPS } from "./SettingsNavRail";
 
+const noop = () => {};
+
 describe("SettingsNavRail", () => {
   it("renders all groups and items", () => {
     renderWithProviders(<SettingsNavRail section="general" onSelect={() => {}} />);
@@ -25,6 +27,20 @@ describe("SettingsNavRail", () => {
     renderWithProviders(<SettingsNavRail section="general" onSelect={onSelect} />);
     await userEvent.click(screen.getByTestId("settings-nav-models"));
     expect(onSelect).toHaveBeenCalledWith("models");
+  });
+
+  it("invokes onOpenFile when Open settings.json is clicked", async () => {
+    const onOpenFile = vi.fn();
+    renderWithProviders(
+      <SettingsNavRail section="general" onSelect={noop} onOpenFile={onOpenFile} />,
+    );
+    await userEvent.click(screen.getByTestId("settings-open-file"));
+    expect(onOpenFile).toHaveBeenCalled();
+  });
+
+  it("hides Open settings.json when onOpenFile is not provided", () => {
+    renderWithProviders(<SettingsNavRail section="general" onSelect={noop} />);
+    expect(screen.queryByTestId("settings-open-file")).toBeNull();
   });
 
   it("filters items by search query", async () => {

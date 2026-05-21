@@ -140,7 +140,7 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
         <DialogTitle className="sr-only">{meta.title}</DialogTitle>
         <DialogDescription className="sr-only">{meta.description}</DialogDescription>
         <div className="row-span-2" style={{ borderRight: "1px solid hsl(var(--border))" }}>
-          <SettingsNavRail section={section} onSelect={setSection} />
+          <SettingsNavRail section={section} onSelect={setSection} onOpenFile={handleOpenFile} />
         </div>
         <div className="overflow-y-auto px-8 py-6">
           <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
@@ -157,11 +157,7 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
           </AnimatePresence>
         </div>
         <div className="col-start-2">
-          <SettingsFooter
-            status={status}
-            errorMessage={lastError ?? undefined}
-            onOpenFile={handleOpenFile}
-          />
+          <SettingsFooter status={status} errorMessage={lastError ?? undefined} />
         </div>
       </DialogContent>
     </Dialog>
