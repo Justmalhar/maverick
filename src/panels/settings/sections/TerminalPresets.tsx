@@ -38,8 +38,7 @@ export default function TerminalPresets() {
 
   return (
     <section data-testid="terminal-presets" className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Terminal presets</h3>
+      <div className="flex items-center justify-end">
         <Button size="sm" variant="outline" onClick={add} data-testid="terminal-add">
           <Plus className="h-3 w-3" /> Custom
         </Button>

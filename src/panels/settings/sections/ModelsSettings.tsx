@@ -25,7 +25,6 @@ export default function ModelsSettings() {
 
   return (
     <section data-testid="models-settings" className="space-y-3">
-      <h3 className="text-sm font-medium text-foreground">Models</h3>
       <div className="overflow-x-auto rounded-sm border border-border">
         <table className="w-full text-xs">
           <thead className="bg-card/40 text-[10px] uppercase tracking-wide text-muted-foreground">

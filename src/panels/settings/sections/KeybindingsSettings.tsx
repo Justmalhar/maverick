@@ -28,8 +28,7 @@ export default function KeybindingsSettings() {
 
   return (
     <section data-testid="keybindings-settings" className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Keybindings</h3>
+      <div className="flex items-center justify-end">
         <span className="text-[10px] text-muted-foreground">
           v0.1 — rebinding coming soon
         </span>

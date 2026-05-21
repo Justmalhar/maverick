@@ -38,7 +38,9 @@ export const useSettingsStore = create<State>((set, get) => ({
     const timer = setTimeout(() => {
       pendingTimers.delete(key);
       set({ status: "saving", lastError: null });
-      void invoke<SettingsWriteResponse>("settings_write", { key, value: get().values[key] })
+      void Promise.resolve(
+        invoke<SettingsWriteResponse>("settings_write", { key, value: get().values[key] }),
+      )
         .then((res) => {
           if (res && res.ok === false) {
             set((s) => ({
