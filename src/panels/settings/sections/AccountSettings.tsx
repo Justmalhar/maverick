@@ -1,58 +1,61 @@
-// Account: license key, plan info, update channel.
-import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SettingsGroup } from "../primitives/SettingsGroup";
+import { SettingsRow } from "../primitives/SettingsRow";
+import { SettingsSelect } from "../primitives/SettingsSelect";
+import { useSettings } from "@/lib/stores/settings";
+
+const CHANNELS = [
+  { value: "stable", label: "Stable" },
+  { value: "beta", label: "Beta" },
+];
 
 export default function AccountSettings() {
-  const [license, setLicense] = useState("");
-  const [channel, setChannel] = useState<"stable" | "beta">("stable");
+  const [license, setLicense] = useSettings("account.licenseKey", "");
+  const [channel, setChannel] = useSettings("account.updateChannel", "stable");
+  const plan = license.length > 0 ? "Pro" : "Free";
 
   return (
-    <section data-testid="account-settings" className="space-y-3">
-      <h3 className="text-sm font-medium text-foreground">Account</h3>
-      <Row label="License key">
-        <Input
-          type="password"
-          value={license}
-          onChange={(e) => setLicense(e.target.value)}
-          placeholder="XXXX-XXXX-XXXX-XXXX"
-          data-testid="account-license"
+    <div data-testid="account-settings" className="space-y-5">
+      <SettingsGroup title="License">
+        <SettingsRow
+          title="License key"
+          description="Stored locally. Paste a key to upgrade to Pro."
+          control={
+            <Input
+              type="password"
+              value={license}
+              onChange={(e) => setLicense(e.target.value)}
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              data-testid="account-license"
+              className="max-w-sm"
+            />
+          }
         />
-      </Row>
-      <Row label="Plan">
-        <span className="text-xs text-foreground" data-testid="account-plan">
-          {license ? "Pro" : "Free"}
-        </span>
-      </Row>
-      <Row label="Update channel">
-        <div className="flex gap-1.5">
-          <Button
-            size="sm"
-            variant={channel === "stable" ? "default" : "outline"}
-            onClick={() => setChannel("stable")}
-            data-testid="channel-stable"
-          >
-            Stable
-          </Button>
-          <Button
-            size="sm"
-            variant={channel === "beta" ? "default" : "outline"}
-            onClick={() => setChannel("beta")}
-            data-testid="channel-beta"
-          >
-            Beta
-          </Button>
-        </div>
-      </Row>
-    </section>
-  );
-}
+        <SettingsRow
+          title="Plan"
+          control={
+            <span className="text-xs text-foreground" data-testid="account-plan">
+              {plan}
+            </span>
+          }
+        />
+      </SettingsGroup>
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[200px_1fr] items-center gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
+      <SettingsGroup title="Updates">
+        <SettingsRow
+          title="Update channel"
+          description="Beta gets new features first, but with rougher edges."
+          control={
+            <SettingsSelect
+              label="Update channel"
+              value={channel}
+              onValueChange={setChannel}
+              options={CHANNELS}
+              data-testid="account-channel"
+            />
+          }
+        />
+      </SettingsGroup>
     </div>
   );
 }

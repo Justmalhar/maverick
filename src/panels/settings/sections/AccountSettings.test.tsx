@@ -1,15 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, fireEvent } from "@/test/utils";
 import AccountSettings from "./AccountSettings";
+import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
 
 describe("AccountSettings", () => {
-  it("renders Free / Pro and switches channels", async () => {
+  beforeEach(() => _resetSettingsStoreForTests());
+
+  it("edits license, switches channel via select", async () => {
     renderWithProviders(<AccountSettings />);
-    expect(screen.getByTestId("account-plan")).toHaveTextContent("Free");
-    fireEvent.change(screen.getByTestId("account-license"), { target: { value: "XXXX" } });
-    expect(screen.getByTestId("account-plan")).toHaveTextContent("Pro");
-    await userEvent.click(screen.getByTestId("channel-beta"));
-    await userEvent.click(screen.getByTestId("channel-stable"));
+    fireEvent.change(screen.getByTestId("account-license"), { target: { value: "ABCD-EFGH-IJKL-MNOP" } });
+    expect(screen.getByTestId("account-license")).toHaveValue("ABCD-EFGH-IJKL-MNOP");
+    expect(screen.getByTestId("account-plan")).toHaveTextContent(/Pro/i);
+
+    await userEvent.click(screen.getByRole("combobox", { name: /update channel/i }));
+    await userEvent.click(await screen.findByRole("option", { name: "Beta" }));
+    expect(screen.getByRole("combobox", { name: /update channel/i })).toHaveTextContent("Beta");
   });
 });
