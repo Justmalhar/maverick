@@ -46,6 +46,7 @@
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.460.0",
     "pdfjs-dist": "^4.7.76",
+    "radix-ui": "^1.4.3",
     "react": "^19",
     "react-dom": "^19",
     "react-markdown": "^9.0.1",
