@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ArrowLeft, Check, Copy } from "lucide-react";
+import hljs from "highlight.js/lib/common";
+import "highlight.js/styles/github-dark.css";
 import { Button } from "@/components/ui/button";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { SETTINGS_DEFAULTS, SETTINGS_KEYS } from "@/lib/stores/settings-defaults";
@@ -10,9 +12,6 @@ interface Props {
 }
 
 function buildSnapshot(values: Record<string, SettingsValue | undefined>): string {
-  // Include every known SettingsKey — fall back to the default when the user
-  // hasn't explicitly set a value. Unknown keys (e.g. forward-compat additions
-  // dropped in via the editor) are preserved at the end.
   const merged: Record<string, SettingsValue> = {};
   for (const key of SETTINGS_KEYS) {
     merged[key] = values[key] ?? SETTINGS_DEFAULTS[key];
@@ -33,8 +32,24 @@ export function SettingsJsonEditor({ onClose }: Props) {
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const codeRef = useRef<HTMLElement>(null);
+  const preRef = useRef<HTMLPreElement>(null);
 
   const dirty = draft !== initial;
+
+  useEffect(() => {
+    if (!codeRef.current) return;
+    codeRef.current.removeAttribute("data-highlighted");
+    // Trailing newline keeps the highlight box flush with the textarea's last empty line.
+    codeRef.current.textContent = draft + "\n";
+    hljs.highlightElement(codeRef.current);
+  }, [draft]);
+
+  const syncScroll = (e: UIEvent<HTMLTextAreaElement>) => {
+    if (!preRef.current) return;
+    preRef.current.scrollTop = e.currentTarget.scrollTop;
+    preRef.current.scrollLeft = e.currentTarget.scrollLeft;
+  };
 
   const save = () => {
     let parsed: unknown;
@@ -55,8 +70,6 @@ export function SettingsJsonEditor({ onClose }: Props) {
         return;
       }
     }
-    // Apply each key. Unknown keys are accepted (forward compatibility);
-    // they round-trip through the store without breaking.
     for (const [k, v] of entries) {
       setValue(k as SettingsKey, v as SettingsValue);
     }
@@ -82,7 +95,7 @@ export function SettingsJsonEditor({ onClose }: Props) {
   return (
     <div data-testid="settings-json-editor" className="flex h-full flex-col">
       <div className="mb-4 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5 -ml-2">
+        <Button variant="ghost" size="sm" onClick={onClose} className="-ml-2 gap-1.5">
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to settings
         </Button>
@@ -104,20 +117,32 @@ export function SettingsJsonEditor({ onClose }: Props) {
         </p>
       </div>
 
-      <textarea
-        data-testid="settings-json-textarea"
-        value={draft}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          if (error) setError(null);
-        }}
-        spellCheck={false}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        className="min-h-0 flex-1 resize-none rounded-lg bg-card/40 p-4 font-mono text-xs leading-relaxed text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-card/40"
         style={{ border: "1px solid hsl(var(--border))" }}
-      />
+      >
+        <pre
+          ref={preRef}
+          aria-hidden="true"
+          className="pointer-events-none m-0 h-full w-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed"
+        >
+          <code ref={codeRef} className="language-json !bg-transparent !p-0" />
+        </pre>
+        <textarea
+          data-testid="settings-json-textarea"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (error) setError(null);
+          }}
+          onScroll={syncScroll}
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          className="absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent p-4 font-mono text-xs leading-relaxed text-transparent caret-foreground selection:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-inset"
+        />
+      </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1 text-xs">

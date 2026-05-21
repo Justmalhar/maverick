@@ -189,16 +189,17 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
         )}
       </div>
       {onOpenFile ? (
-        <button
-          type="button"
-          onClick={onOpenFile}
-          data-testid="settings-open-file"
-          className="mx-1 mt-1 flex h-8 w-auto items-center gap-2 rounded-md px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-          style={{ borderTop: "1px solid hsl(var(--border) / 0.4)" }}
-        >
-          <Code2 className="h-4 w-4" />
-          <span>Open settings.json</span>
-        </button>
+        <div className="pt-2" style={{ borderTop: "1px solid hsl(var(--border) / 0.4)" }}>
+          <button
+            type="button"
+            onClick={onOpenFile}
+            data-testid="settings-open-file"
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            <Code2 className="h-4 w-4" />
+            <span>Open settings.json</span>
+          </button>
+        </div>
       ) : null}
     </nav>
   );
