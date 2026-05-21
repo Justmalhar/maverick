@@ -211,3 +211,110 @@ describe("GitModule methods", () => {
     expect(new GitModule()).toBeInstanceOf(GitModule);
   });
 });
+
+describe("GitModule.parseWorktreePaths", () => {
+  test("extracts worktree paths, skips non-worktree lines", () => {
+    const output = [
+      "worktree /home/user/project",
+      "HEAD abc123",
+      "branch refs/heads/main",
+      "",
+      "worktree /home/user/project/.maverick/worktrees/ws-1",
+      "HEAD def456",
+      "branch refs/heads/feat/foo",
+    ].join("\n");
+    expect(GitModule.parseWorktreePaths(output)).toEqual([
+      "/home/user/project",
+      "/home/user/project/.maverick/worktrees/ws-1",
+    ]);
+  });
+
+  test("returns empty array for empty output", () => {
+    expect(GitModule.parseWorktreePaths("")).toEqual([]);
+  });
+});
+
+describe("GitModule.parseDiffStat", () => {
+  test("parses insertions and deletions", () => {
+    expect(
+      GitModule.parseDiffStat(" 3 files changed, 10 insertions(+), 4 deletions(-)")
+    ).toEqual({ added: 10, removed: 4 });
+  });
+
+  test("returns zeros when no changes", () => {
+    expect(GitModule.parseDiffStat("")).toEqual({ added: 0, removed: 0 });
+  });
+
+  test("handles insertions-only", () => {
+    expect(GitModule.parseDiffStat(" 1 file changed, 5 insertions(+)")).toEqual({
+      added: 5,
+      removed: 0,
+    });
+  });
+});
+
+describe("GitModule.branches", () => {
+  test("returns local branches + worktree entries, skips main worktree", async () => {
+    const { shell } = transcript([
+      { stdout: "main\nfeat/foo\n" },
+      {
+        stdout: [
+          "worktree /home/user/project",
+          "",
+          "worktree /home/user/project/.maverick/worktrees/ws-1",
+          "",
+        ].join("\n"),
+      },
+    ]);
+    const git = new GitModule({ shell });
+    const result = await git.branches({ projectPath: "/home/user/project" });
+    expect(result).toEqual([
+      "main",
+      "feat/foo",
+      "worktree//home/user/project/.maverick/worktrees/ws-1",
+    ]);
+  });
+
+  test("returns only local branches when worktree list fails", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text(cmd) {
+        calls.push(cmd);
+        if (cmd.includes("worktree")) throw new Error("no worktrees");
+        return "main\n";
+      },
+      async run(cmd) {
+        calls.push(cmd);
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+    };
+    const git = new GitModule({ shell });
+    const result = await git.branches({ projectPath: "/p" });
+    expect(result).toEqual(["main"]);
+  });
+});
+
+describe("GitModule.diffStat", () => {
+  test("returns parsed diff stat", async () => {
+    const { shell } = transcript([
+      { stdout: " 2 files changed, 7 insertions(+), 1 deletion(-)" },
+    ]);
+    const git = new GitModule({ shell });
+    const stat = await git.diffStat({ worktreePath: "/wt" });
+    expect(stat).toEqual({ added: 7, removed: 1 });
+  });
+
+  test("returns zeros on shell error", async () => {
+    const shell: Shell = {
+      async text() {
+        throw new Error("not a git repo");
+      },
+      async run() {
+        return { stdout: "", stderr: "", exitCode: 1 };
+      },
+    };
+    const git = new GitModule({ shell });
+    const stat = await git.diffStat({ worktreePath: "/bad" });
+    expect(stat).toEqual({ added: 0, removed: 0 });
+  });
+});

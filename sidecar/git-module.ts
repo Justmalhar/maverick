@@ -1,5 +1,5 @@
 import { defaultShell } from "./deps";
-import type { Commit, Shell, Stash } from "./types";
+import type { Commit, DiffStat, Shell, Stash } from "./types";
 
 interface LogParams {
   worktreePath: string;
@@ -196,5 +196,56 @@ export class GitModule {
           timestamp: parseInt(ts ?? "0", 10),
         };
       });
+  }
+
+  async branches(params: { projectPath: string }): Promise<string[]> {
+    const localOut = await this.shell.text(
+      ["git", "-C", params.projectPath, "branch", "--list", "--format=%(refname:short)"],
+      undefined
+    );
+    const local = localOut.split("\n").map((l) => l.trim()).filter(Boolean);
+
+    let worktrees: string[] = [];
+    try {
+      const wtOut = await this.shell.text(
+        ["git", "-C", params.projectPath, "worktree", "list", "--porcelain"],
+        undefined
+      );
+      worktrees = GitModule.parseWorktreePaths(wtOut)
+        .slice(1)
+        .map((p) => `worktree/${p}`);
+    } catch {
+      // worktrees are optional
+    }
+
+    return [...local, ...worktrees];
+  }
+
+  async diffStat(params: { worktreePath: string }): Promise<DiffStat> {
+    try {
+      const output = await this.shell.text(
+        ["git", "-C", params.worktreePath, "diff", "--shortstat", "HEAD"],
+        undefined
+      );
+      return GitModule.parseDiffStat(output);
+    } catch {
+      return { added: 0, removed: 0 };
+    }
+  }
+
+  static parseWorktreePaths(output: string): string[] {
+    const paths: string[] = [];
+    for (const line of output.split("\n")) {
+      if (line.startsWith("worktree ")) {
+        paths.push(line.slice("worktree ".length).trim());
+      }
+    }
+    return paths;
+  }
+
+  static parseDiffStat(output: string): DiffStat {
+    const added = parseInt(output.match(/(\d+) insertion/)?.[1] ?? "0", 10);
+    const removed = parseInt(output.match(/(\d+) deletion/)?.[1] ?? "0", 10);
+    return { added, removed };
   }
 }
