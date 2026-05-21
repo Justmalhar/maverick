@@ -67,6 +67,8 @@ const Schemas = {
     message: z.string(),
     files: z.array(z.string()).optional(),
   }),
+  gitBranches: z.object({ projectPath: z.string() }),
+  gitDiffStat: z.object({ worktreePath: z.string() }),
   fileTree: z.object({ worktreePath: z.string(), maxDepth: z.number().optional() }),
   kanbanList: z.object({ projectId: z.string() }),
   kanbanUpsert: StringParam,
@@ -247,6 +249,14 @@ export class RpcHandlers {
       case "git.commit": {
         const p = Schemas.gitCommit.parse(params);
         return this.git.commit(p);
+      }
+      case "git.branches": {
+        const p = Schemas.gitBranches.parse(params);
+        return this.git.branches({ projectPath: p.projectPath });
+      }
+      case "git.diffStat": {
+        const p = Schemas.gitDiffStat.parse(params);
+        return this.git.diffStat({ worktreePath: p.worktreePath });
       }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);

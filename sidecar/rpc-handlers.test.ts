@@ -15,7 +15,7 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
-import type { Shell } from "./types";
+import type { KanbanTask, Shell } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
 function fakeShell(steps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []): {
@@ -179,6 +179,26 @@ describe("RpcHandlers", () => {
     await h.dispatch("git.log", { worktreePath: "/wt" });
     await h.dispatch("git.stash_list", { worktreePath: "/wt" });
     await h.dispatch("git.commit", { worktreePath: "/wt", message: "m" });
+  });
+
+  test("git.branches dispatches to git module", async () => {
+    const result = await h.dispatch("git.branches", { projectPath: "/tmp/b" });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  test("git.diffStat dispatches to git module", async () => {
+    const result = await h.dispatch("git.diffStat", { worktreePath: "/wt" }) as { added: number; removed: number };
+    expect(result).toHaveProperty("added");
+    expect(result).toHaveProperty("removed");
+  });
+
+  test("kanban.list with empty projectId returns all tasks", async () => {
+    const p1 = (await h.dispatch("project.add", { path: "/tmp/p1" })) as { id: string };
+    const p2 = (await h.dispatch("project.add", { path: "/tmp/p2" })) as { id: string };
+    await h.dispatch("kanban.upsert", { task: { projectId: p1.id, title: "t1" } });
+    await h.dispatch("kanban.upsert", { task: { projectId: p2.id, title: "t2" } });
+    const all = (await h.dispatch("kanban.list", { projectId: "" })) as KanbanTask[];
+    expect(all.length).toBe(2);
   });
 
   test("file.tree", async () => {
