@@ -27,10 +27,10 @@
   --editor-bg: 0 0% 0%;
 
   /* Editor tab strip */
-  --tab-inactive-bg: 0 0% 5%;
-  --tab-active-bg: 0 0% 0%;
-  --tab-fg: 0 0% 46%;
-  --tab-fg-active: 0 0% 94%;
+  --tab-inactive-bg: 0 0% 6%;
+  --tab-active-bg: 0 0% 11%;
+  --tab-fg: 0 0% 44%;
+  --tab-fg-active: 0 0% 96%;
   --tab-active-border: 0 0% 0%;
 
   /* Status bar */
@@ -111,6 +111,11 @@
   --z-modal: 100;
   --z-toast: 200;
   --z-titlebar: 300;
+
+  /* Settings modal */
+  --shadow-modal: 0 24px 64px -12px rgb(0 0 0 / 0.5);
+  --settings-nav-width: 220px;
+  --settings-modal-max-w: 960px;
 }
 
 /* ── Purple theme (opt-in via data-theme="purple") ─────────── */

@@ -76,6 +76,10 @@
   --z-modal: var(--z-modal);
   --z-toast: var(--z-toast);
   --z-titlebar: var(--z-titlebar);
+
+  --shadow-modal: var(--shadow-modal);
+  --width-settings-nav: var(--settings-nav-width);
+  --max-w-settings-modal: var(--settings-modal-max-w);
 }
 
 @layer base {
