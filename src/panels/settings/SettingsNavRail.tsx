@@ -14,7 +14,6 @@ import {
   Sparkles,
   Terminal,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { SettingsSearchInput } from "./primitives/SettingsSearchInput";
 
@@ -180,12 +179,6 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
                         : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                     )}
                   >
-                    {selected ? (
-                      <motion.span
-                        layoutId="settings-nav-indicator"
-                        className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-accent"
-                      />
-                    ) : null}
                     <Icon className="h-4 w-4" />
                     <span>{item.label}</span>
                   </button>
