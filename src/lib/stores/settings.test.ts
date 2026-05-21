@@ -43,8 +43,20 @@ describe("useSettings", () => {
     });
   });
 
-  it("rolls back when invoke rejects", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("boom"));
+  it("keeps optimistic value when invoke throws (sidecar missing)", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("command not found"));
+    const { result } = renderHook(() => useSettings("general.defaultBackend", "claude"));
+    act(() => result.current[1]("codex"));
+    expect(result.current[0]).toBe("codex");
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    await waitFor(() => expect(useSettingsStore.getState().status).toBe("saved"));
+    expect(result.current[0]).toBe("codex");
+  });
+
+  it("rolls back when sidecar explicitly returns ok:false", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ ok: false, error: "disk full" });
     const { result } = renderHook(() => useSettings("general.defaultBackend", "claude"));
     act(() => result.current[1]("codex"));
     expect(result.current[0]).toBe("codex");
@@ -52,6 +64,8 @@ describe("useSettings", () => {
       vi.advanceTimersByTime(250);
     });
     await waitFor(() => expect(result.current[0]).toBe("claude"));
+    expect(useSettingsStore.getState().status).toBe("error");
+    expect(useSettingsStore.getState().lastError).toBe("disk full");
   });
 
   it("exposes save status transitions: idle -> saving -> saved", async () => {

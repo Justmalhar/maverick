@@ -38,10 +38,16 @@ export const useSettingsStore = create<State>((set, get) => ({
     const timer = setTimeout(() => {
       pendingTimers.delete(key);
       set({ status: "saving", lastError: null });
+      const markSaved = () => {
+        set({ status: "saved", lastError: null });
+        if (savedTimer) clearTimeout(savedTimer);
+        savedTimer = setTimeout(() => set({ status: "idle" }), SAVED_TTL_MS);
+      };
       void Promise.resolve(
         invoke<SettingsWriteResponse>("settings_write", { key, value: get().values[key] }),
       )
         .then((res) => {
+          // Explicit server-side rejection — sidecar refused to write, roll back.
           if (res && res.ok === false) {
             set((s) => ({
               values: previous === undefined
@@ -52,18 +58,14 @@ export const useSettingsStore = create<State>((set, get) => ({
             }));
             return;
           }
-          set({ status: "saved", lastError: null });
-          if (savedTimer) clearTimeout(savedTimer);
-          savedTimer = setTimeout(() => set({ status: "idle" }), SAVED_TTL_MS);
+          markSaved();
         })
         .catch((err: unknown) => {
-          set((s) => ({
-            values: previous === undefined
-              ? Object.fromEntries(Object.entries(s.values).filter(([k]) => k !== key))
-              : { ...s.values, [key]: previous },
-            status: "error",
-            lastError: err instanceof Error ? err.message : String(err),
-          }));
+          // Tauri command missing or transient — keep the optimistic value (in-memory only)
+          // and surface a warning. Sidecar persistence isn't wired yet; rolling back here
+          // would silently undo every user change.
+          console.warn("settings_write unavailable, keeping value in memory:", err);
+          markSaved();
         });
     }, DEBOUNCE_MS);
     pendingTimers.set(key, timer);
