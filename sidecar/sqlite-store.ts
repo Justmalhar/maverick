@@ -130,6 +130,13 @@ export class SQLiteStore {
     return rows.map((r) => ({ id: r.id, name: r.name, path: r.path, createdAt: r.created_at }));
   }
 
+  projectGet(id: string): Project | null {
+    const row = this.db
+      .query<ProjectRow, [string]>("SELECT id, name, path, created_at FROM projects WHERE id = ?")
+      .get(id);
+    return row ? { id: row.id, name: row.name, path: row.path, createdAt: row.created_at } : null;
+  }
+
   workspaceCreate(input: {
     id?: string;
     projectId: string;

@@ -14,12 +14,19 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
+import { ProjectSettingsStore } from "./project-settings-store";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
 const StringParam = z.object({}).passthrough();
 
 const Schemas = {
   projectAdd: z.object({ path: z.string(), name: z.string().optional() }),
+  projectSettingsGet: z.object({ projectId: z.string() }),
+  projectSettingsUpdate: z.object({
+    projectId: z.string(),
+    patch: z.record(z.string(), z.unknown()),
+  }),
+  projectSettingsOpenFile: z.object({ projectId: z.string() }),
   workspaceCreate: z.object({
     projectId: z.string(),
     projectPath: z.string(),
@@ -117,6 +124,7 @@ export interface RpcHandlersOptions {
   context?: ContextTracker;
   attachments?: AttachmentStore;
   fileTree?: FileTree;
+  projectSettings?: ProjectSettingsStore;
 }
 
 export class RpcHandlers {
@@ -135,6 +143,7 @@ export class RpcHandlers {
   readonly context: ContextTracker;
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
+  readonly projectSettings: ProjectSettingsStore;
 
   constructor(opts: RpcHandlersOptions = {}) {
     this.store = opts.store ?? new SQLiteStore();
@@ -154,6 +163,7 @@ export class RpcHandlers {
     this.context = opts.context ?? new ContextTracker(this.store);
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
+    this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
   }
 
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
@@ -164,6 +174,24 @@ export class RpcHandlers {
       }
       case "project.list":
         return this.store.projectList();
+      case "project.settings.get": {
+        const p = Schemas.projectSettingsGet.parse(params);
+        const project = this.store.projectGet(p.projectId);
+        if (!project) throw new Error(`project ${p.projectId} not found`);
+        return this.projectSettings.read(project.path);
+      }
+      case "project.settings.update": {
+        const p = Schemas.projectSettingsUpdate.parse(params);
+        const project = this.store.projectGet(p.projectId);
+        if (!project) throw new Error(`project ${p.projectId} not found`);
+        return this.projectSettings.write(project.path, p.patch as never);
+      }
+      case "project.settings.openFile": {
+        const p = Schemas.projectSettingsOpenFile.parse(params);
+        const project = this.store.projectGet(p.projectId);
+        if (!project) throw new Error(`project ${p.projectId} not found`);
+        return { path: `${project.path}/maverick.json` };
+      }
       case "workspace.create": {
         const p = Schemas.workspaceCreate.parse(params);
         const { workspaceId, worktreePath } = await this.worktree.create({

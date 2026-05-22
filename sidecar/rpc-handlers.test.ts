@@ -1,4 +1,7 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, it, expect, beforeEach } from "bun:test";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { RpcHandlers } from "./rpc-handlers";
 import { SQLiteStore, defaultMigrationsDir } from "./sqlite-store";
 import { ProcessManager } from "./process-manager";
@@ -97,6 +100,14 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
     store, process: proc, worktree, config, skills, diff, git,
     presets, kanban, automations, mcp, notifications, context, attachments, fileTree,
   });
+}
+
+function makeWithTempProject() {
+  const dir = mkdtempSync(join(tmpdir(), "mvk-rpc-"));
+  const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+  const project = store.projectAdd({ path: dir, name: "tmp" });
+  const handlers = new RpcHandlers({ store });
+  return { handlers, dir, projectId: project.id, store };
 }
 
 describe("RpcHandlers", () => {
@@ -288,5 +299,29 @@ describe("RpcHandlers", () => {
 
   test("default constructor builds without injected deps", () => {
     expect(new RpcHandlers()).toBeInstanceOf(RpcHandlers);
+  });
+
+  it("project.settings.get returns defaults for a path without maverick.json", async () => {
+    const { handlers, projectId } = makeWithTempProject();
+    const result = (await handlers.dispatch("project.settings.get", { projectId })) as { name: string; scripts: { setup: string } };
+    expect(result.scripts.setup).toBe("");
+  });
+
+  it("project.settings.update writes patch and returns saved value", async () => {
+    const { handlers, projectId } = makeWithTempProject();
+    const saved = (await handlers.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "bun install", run: "", archive: "" } },
+    })) as { scripts: { setup: string } };
+    expect(saved.scripts.setup).toBe("bun install");
+
+    const reread = (await handlers.dispatch("project.settings.get", { projectId })) as { scripts: { setup: string } };
+    expect(reread.scripts.setup).toBe("bun install");
+  });
+
+  it("project.settings.openFile returns the absolute path", async () => {
+    const { handlers, dir, projectId } = makeWithTempProject();
+    const res = (await handlers.dispatch("project.settings.openFile", { projectId })) as { path: string };
+    expect(res.path).toBe(`${dir}/maverick.json`);
   });
 });
