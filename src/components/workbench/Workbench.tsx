@@ -15,6 +15,7 @@ import { CommandPalette } from "@/components/quickopen/CommandPalette";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
 const SettingsPanel = lazy(() => import("@/panels/settings/SettingsPanel"));
+const ProjectSettingsPanel = lazy(() => import("@/panels/project-settings/ProjectSettingsPanel"));
 
 function OverlayFallback() {
   return null;
@@ -28,6 +29,8 @@ export function Workbench() {
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const settingsOpen = useWorkbench((s) => s.settingsOpen);
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
+  const projectSettingsState = useWorkbench((s) => s.projectSettings);
+  const closeProjectSettings = useWorkbench((s) => s.closeProjectSettings);
   const { refreshProjects, refreshWorkspaces } = useWorkspace();
 
   useEffect(() => {
@@ -94,6 +97,17 @@ export function Workbench() {
       {settingsOpen && (
         <Suspense fallback={<OverlayFallback />}>
           <SettingsPanel onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
+
+      {projectSettingsState.open && (
+        <Suspense fallback={<OverlayFallback />}>
+          <ProjectSettingsPanel
+            open
+            projectId={projectSettingsState.projectId}
+            initialSection={projectSettingsState.initialSection}
+            onOpenChange={(o) => !o && closeProjectSettings()}
+          />
         </Suspense>
       )}
     </div>

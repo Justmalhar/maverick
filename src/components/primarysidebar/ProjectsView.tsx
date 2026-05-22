@@ -8,6 +8,7 @@ import { pickProjectFolder } from "@/lib/dialog";
 
 export function ProjectsView() {
   const projects = useWorkbench((s) => s.projects);
+  const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
   const { addProjectFromPath, create } = useWorkspace();
 
   async function onAddProject() {
@@ -63,6 +64,7 @@ export function ProjectsView() {
               key={p.id}
               project={p}
               onAddWorkspace={onAddWorkspace}
+              onSettings={(projectId) => openProjectSettings({ projectId })}
             />
           ))}
         </div>
