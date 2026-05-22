@@ -11,6 +11,7 @@ pub mod messages;
 pub mod notify;
 pub mod preset;
 pub mod project;
+pub mod project_settings;
 pub mod pty;
 pub mod skills;
 pub mod workspace;
@@ -28,6 +29,9 @@ pub use messages::{message_append, messages_list};
 pub use notify::notify_send;
 pub use preset::{preset_launch, preset_list, preset_save_current};
 pub use project::{project_add, project_list};
+pub use project_settings::{
+    project_settings_get, project_settings_open_file, project_settings_update,
+};
 pub use pty::{pty_kill, pty_resize, pty_spawn, pty_write};
 pub use skills::{skills_list, skills_run};
 pub use workspace::{workspace_create, workspace_destroy, workspace_list};

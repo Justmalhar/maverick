@@ -102,6 +102,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             project_add,
             project_list,
+            project_settings_get,
+            project_settings_update,
+            project_settings_open_file,
             workspace_list,
             workspace_create,
             workspace_destroy,
