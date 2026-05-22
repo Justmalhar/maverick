@@ -112,6 +112,7 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            default_shell,
             config_load,
             messages_list,
             message_append,

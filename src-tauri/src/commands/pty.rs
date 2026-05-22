@@ -9,6 +9,7 @@ pub async fn pty_spawn(
     workspace_id: String,
     command: String,
     args: Vec<String>,
+    cwd: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -18,6 +19,7 @@ pub async fn pty_spawn(
                 "workspaceId": workspace_id,
                 "command": command,
                 "args": args,
+                "cwd": cwd,
             }),
         )
         .await
