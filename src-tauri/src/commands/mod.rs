@@ -21,7 +21,7 @@ pub use config::config_load;
 pub use context::context_usage;
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
 pub use file_tree::file_tree;
-pub use git::{git_commit, git_log, git_stash_list};
+pub use git::{git_branches, git_commit, git_diff_stat, git_log, git_stash_list};
 pub use kanban::{kanban_list, kanban_upsert};
 pub use mcp::{mcp_list, mcp_start, mcp_stop};
 pub use messages::{message_append, messages_list};

@@ -1,5 +1,6 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -27,6 +28,12 @@ export function Workbench() {
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const settingsOpen = useWorkbench((s) => s.settingsOpen);
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
+  const { refreshProjects, refreshWorkspaces } = useWorkspace();
+
+  useEffect(() => {
+    refreshProjects().catch((e) => console.error("refreshProjects failed", e));
+    refreshWorkspaces().catch((e) => console.error("refreshWorkspaces failed", e));
+  }, [refreshProjects, refreshWorkspaces]);
 
   return (
     <div
@@ -35,36 +42,37 @@ export function Workbench() {
     >
       <TitleBar />
 
-      <div className="flex flex-1 overflow-hidden border-t border-border-glass">
+      <div className="flex flex-1 overflow-hidden" style={{ borderTop: "1px solid hsl(var(--border))" }}>
         <ResizablePanelGroup direction="horizontal" className="h-full flex-1">
           {layout.primarySideBarVisible && (
             <>
               <ResizablePanel
-                defaultSize={20}
-                minSize={14}
-                maxSize={36}
+                defaultSize={15}
+                minSize={11}
+                maxSize={30}
                 data-testid="primarysidebar-panel"
                 className="bg-sidebar"
               >
                 <PrimarySideBar />
               </ResizablePanel>
-              <ResizableHandle className="!w-px !bg-border-glass" />
+              <ResizableHandle />
             </>
           )}
 
-          <ResizablePanel defaultSize={layout.auxiliaryBarVisible ? 58 : 82} className="bg-editor">
+          <ResizablePanel defaultSize={layout.auxiliaryBarVisible ? 63 : 85} className="bg-editor" style={{ borderLeft: "1px solid hsl(var(--border))" }}>
             <EditorArea />
           </ResizablePanel>
 
           {layout.auxiliaryBarVisible && (
             <>
-              <ResizableHandle className="!w-px !bg-border-glass" />
+              <ResizableHandle />
               <ResizablePanel
                 defaultSize={22}
                 minSize={14}
                 maxSize={36}
                 data-testid="auxiliarybar-panel"
                 className="bg-sidebar"
+                style={{ borderLeft: "1px solid hsl(var(--border))" }}
               >
                 <AuxiliaryBar />
               </ResizablePanel>

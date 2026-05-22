@@ -7,7 +7,7 @@ export default function VideoPreview({ filePath }: Props) {
   return (
     <div
       data-testid="video-preview"
-      className="flex h-full w-full items-center justify-center bg-black"
+      className="flex h-full w-full items-center justify-center bg-background"
     >
       <video
         src={filePath}

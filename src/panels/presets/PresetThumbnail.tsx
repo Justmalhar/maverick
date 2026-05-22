@@ -20,7 +20,7 @@ function collectRects(node: PresetNode, x: number, y: number, w: number, h: numb
     return [{ x, y, w, h, fill: "currentColor" }];
   }
   if (node.type === "browser") {
-    return [{ x, y, w, h, fill: "rgba(255,255,255,0.4)" }];
+    return [{ x, y, w, h, fill: "hsl(var(--foreground) / 0.4)" }];
   }
   // split
   const ratio = Math.min(Math.max(node.ratio, 0.1), 0.9);

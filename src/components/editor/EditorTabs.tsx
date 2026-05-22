@@ -49,7 +49,7 @@ export function EditorTabs() {
     <div
       data-testid="editor-tabs"
       className="mv-editor-tabs flex w-full shrink-0 items-stretch bg-tab-inactive"
-      style={{ height: "var(--editor-tabs-height)" }}
+      style={{ height: "var(--editor-tabs-height)", borderBottom: "1px solid hsl(var(--border))" }}
     >
       <div className="flex h-full flex-1 items-stretch overflow-x-auto">
         {systemTabs.map((id) => {
@@ -63,10 +63,10 @@ export function EditorTabs() {
               onClick={() => setActiveSystemTab(id)}
               data-testid={`editor-tab-system-${id}`}
               className={cn(
-                "group flex h-full min-w-[120px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
+                "group relative flex min-w-[110px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
                 active
                   ? "bg-tab-active text-tab-fg-active"
-                  : "bg-tab-inactive text-tab-fg hover:text-foreground"
+                  : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
               )}
             >
               <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />

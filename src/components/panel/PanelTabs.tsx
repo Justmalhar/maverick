@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Play } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -23,7 +23,7 @@ export function PanelTabs({ value, onChange }: Props) {
     <div
       data-testid="panel-tabs"
       className="mv-panel-tabs flex shrink-0 items-center bg-sidebar"
-      style={{ height: "var(--panel-tabs-height)" }}
+      style={{ height: "var(--panel-tabs-height)", borderTop: "1px solid hsl(var(--border))" }}
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -45,12 +45,13 @@ export function PanelTabs({ value, onChange }: Props) {
           {panelVisible ? "Collapse panel" : "Expand panel"}
         </TooltipContent>
       </Tooltip>
+
       <Tabs
         value={value}
         onValueChange={(v) => onChange(v as BottomPanelTab)}
         className="h-full flex-1"
       >
-        <TabsList className="h-full px-2">
+        <TabsList className="h-full">
           {TABS.map((t) => (
             <TabsTrigger
               key={t.value}
@@ -62,6 +63,17 @@ export function PanelTabs({ value, onChange }: Props) {
           ))}
         </TabsList>
       </Tabs>
+
+      <div className="flex items-center gap-1 pr-2">
+        <button
+          type="button"
+          aria-label="Run"
+          className="flex h-6 items-center gap-1.5 rounded-md bg-sidebar-hover px-2.5 text-[11px] font-medium text-foreground transition-colors duration-100 hover:bg-muted"
+        >
+          <Play className="h-3 w-3" />
+          Run
+        </button>
+      </div>
     </div>
   );
 }

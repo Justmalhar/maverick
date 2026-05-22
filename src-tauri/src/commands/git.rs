@@ -51,3 +51,27 @@ pub async fn git_commit(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn git_branches(
+    state: State<'_, AppState>,
+    project_path: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("git.branches", json!({ "projectPath": project_path }))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn git_diff_stat(
+    state: State<'_, AppState>,
+    worktree_path: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("git.diffStat", json!({ "worktreePath": worktree_path }))
+        .await
+        .map_err(|e| e.to_string())
+}

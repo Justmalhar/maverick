@@ -87,7 +87,7 @@ export default function BrowserPanel() {
           src={committedUrl}
           title="browser"
           data-testid="browser-iframe"
-          className="h-full w-full border-0 bg-white"
+          className="h-full w-full border-0 bg-background"
           sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
         />
         {inspecting && <ElementInspector iframeRef={iframeRef} />}

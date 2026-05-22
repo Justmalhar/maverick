@@ -120,6 +120,8 @@ pub fn run() {
             git_log,
             git_stash_list,
             git_commit,
+            git_branches,
+            git_diff_stat,
             file_tree,
             kanban_list,
             kanban_upsert,

@@ -8,6 +8,7 @@ import type {
   Commit,
   Stash,
   KanbanTask,
+  DiffStat,
   WorkspacePreset,
   Workspace,
   Project,
@@ -189,6 +190,14 @@ export async function notifySend(
   workspaceId?: string
 ): Promise<void> {
   return invoke("notify_send", { title, body, workspaceId });
+}
+
+export async function gitBranches(projectPath: string): Promise<string[]> {
+  return invoke("git_branches", { projectPath });
+}
+
+export async function gitDiffStat(worktreePath: string): Promise<DiffStat> {
+  return invoke("git_diff_stat", { worktreePath });
 }
 
 // Event subscriptions

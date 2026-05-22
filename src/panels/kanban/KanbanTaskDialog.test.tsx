@@ -8,7 +8,7 @@ describe("KanbanTaskDialog", () => {
   it("creates a new task with title + labels + status + due date", async () => {
     const onSubmit = vi.fn();
     renderWithProviders(
-      <KanbanTaskDialog open onOpenChange={() => {}} task={{ status: "backlog", labels: [] }} onSubmit={onSubmit} />
+      <KanbanTaskDialog open onOpenChange={() => {}} task={{ status: "todo", labels: [] }} onSubmit={onSubmit} />
     );
     await userEvent.type(screen.getByTestId("kanban-title"), "Build feature");
     await userEvent.type(screen.getByTestId("kanban-description"), "details");

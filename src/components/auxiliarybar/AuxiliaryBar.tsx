@@ -34,8 +34,8 @@ export function AuxiliaryBar() {
             className="flex h-full flex-col"
           >
             <TabsList
-              className="shrink-0 border-b border-border-glass"
-              style={{ height: "var(--panel-tabs-height)" }}
+              className="shrink-0 px-2"
+              style={{ height: "var(--panel-tabs-height)", borderBottom: "1px solid hsl(var(--border))" }}
             >
               {TABS.map((t) => (
                 <TabsTrigger key={t.value} value={t.value} data-testid={`aux-tab-${t.value}`}>
@@ -62,7 +62,7 @@ export function AuxiliaryBar() {
 
         {panelVisible && (
           <>
-            <ResizableHandle className="!h-px !bg-border-glass" />
+            <ResizableHandle />
             <ResizablePanel defaultSize={40} minSize={15} maxSize={75} data-testid="aux-panel-section">
               <Panel />
             </ResizablePanel>

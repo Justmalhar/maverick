@@ -30,11 +30,11 @@ export function EditorTab({ workspace, active, onSelect, onClose }: Props) {
         }
       }}
       className={cn(
-        "mv-editor-tab group flex h-full shrink-0 cursor-pointer select-none items-center gap-1.5 pl-3 pr-2 text-[12px]",
+        "mv-editor-tab group flex shrink-0 cursor-pointer select-none items-center gap-1.5 pl-3 pr-2 text-[12px]",
         "transition-colors duration-100",
         active
           ? "bg-tab-active text-tab-fg-active"
-          : "bg-tab-inactive text-tab-fg hover:text-foreground"
+          : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
       )}
     >
       <ModeIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TerminalRegistry } from "@/lib/terminal-provider";
-import { useTheme } from "@/hooks/useTheme";
+import { useThemeContext } from "@/themes/theme-provider";
 import { usePty } from "@/hooks/usePty";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,7 @@ interface Props {
 export function TerminalPane({ ptyId, paneId, isFocused, onFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
-  const { theme } = useTheme();
+  const { theme } = useThemeContext();
   const { attach, resize } = usePty(ptyId);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function TerminalPane({ ptyId, paneId, isFocused, onFocus }: Props) {
       data-testid={`terminal-pane-${paneId}`}
       onMouseDown={() => onFocus(paneId)}
       className={cn(
-        "mv-terminal-pane relative h-full w-full overflow-hidden rounded-sm bg-black",
+        "mv-terminal-pane relative h-full w-full overflow-hidden rounded-sm bg-background",
         isFocused
           ? "ring-1 ring-primary"
           : "ring-1 ring-transparent"

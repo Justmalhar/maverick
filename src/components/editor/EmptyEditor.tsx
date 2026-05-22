@@ -43,9 +43,6 @@ export function EmptyEditor() {
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
               Maverick
             </h1>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">
-              The OS layer above your AI coding CLIs.
-            </p>
           </div>
         </div>
 

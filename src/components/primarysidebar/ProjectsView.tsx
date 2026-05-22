@@ -1,7 +1,6 @@
 import { FolderPlus } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectItem } from "./ProjectItem";
@@ -58,31 +57,15 @@ export function ProjectsView() {
       </header>
 
       <ScrollArea className="flex-1">
-        {projects.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
-            <p className="text-xs leading-snug text-muted-foreground">
-              No projects yet. Open a folder to get started.
-            </p>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={onAddProject}
-              className="w-full justify-center"
-            >
-              Open folder
-            </Button>
-          </div>
-        ) : (
-          <div className="py-1">
-            {projects.map((p) => (
-              <ProjectItem
-                key={p.id}
-                project={p}
-                onAddWorkspace={onAddWorkspace}
-              />
-            ))}
-          </div>
-        )}
+        <div className="py-1">
+          {projects.map((p) => (
+            <ProjectItem
+              key={p.id}
+              project={p}
+              onAddWorkspace={onAddWorkspace}
+            />
+          ))}
+        </div>
       </ScrollArea>
 
     </div>

@@ -5,6 +5,7 @@ import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanCard from "./KanbanCard";
 import { useWorkbench } from "@/state/store";
 import { makeBackend, makeKanbanTask } from "@/test/fixtures";
+import type { DiffStat } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
 
@@ -14,13 +15,13 @@ beforeEach(() => {
 });
 
 describe("KanbanCard", () => {
-  it("renders title, labels, due date, and triggers edit", async () => {
+  it("renders title, labels, and triggers edit", async () => {
     const onEdit = vi.fn();
     renderWithProviders(
       <KanbanCard
         task={makeKanbanTask({
           id: "t1", title: "Hello", description: "**bold**",
-          labels: ["a", "b"], dueDate: 1700000000, workspaceId: "w-ref",
+          labels: ["a", "b"], workspaceId: "w-ref",
         })}
         index={0}
         onEdit={onEdit}
@@ -52,5 +53,83 @@ describe("KanbanCard", () => {
     await userEvent.click(screen.getByTestId("kanban-start"));
     await waitFor(() => expect(errSpy).toHaveBeenCalled());
     errSpy.mockRestore();
+  });
+
+  it("shows branch and diff stats when workspaceId and diffStat provided", () => {
+    const diffStat: DiffStat = { added: 42, removed: 7 };
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ branch: "feat/foo", workspaceId: "ws-1" })}
+        index={0}
+        diffStat={diffStat}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.getByText("feat/foo")).toBeInTheDocument();
+    expect(screen.getByText("+42")).toBeInTheDocument();
+    expect(screen.getByText("-7")).toBeInTheDocument();
+  });
+
+  it("hides diff stats row when no branch set", () => {
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ branch: "" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId("agent-dot")).not.toBeInTheDocument();
+  });
+
+  it("renders green agent dot for in_progress", () => {
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "in_progress", branch: "main" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-amber-400");
+  });
+
+  it("renders amber dot for review", () => {
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "review", branch: "main" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-emerald-400");
+  });
+
+  it("shows Start button for todo status", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ status: "todo" })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.getByTestId("kanban-start")).toBeInTheDocument();
+  });
+
+  it("shows View button for in_progress status", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ status: "in_progress" })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.getByTestId("kanban-view")).toBeInTheDocument();
+  });
+
+  it("shows Create PR button for review status", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ status: "review" })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.getByTestId("kanban-create-pr")).toBeInTheDocument();
+  });
+
+  it("shows no action button for done status", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ status: "done" })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.queryByTestId("kanban-start")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-view")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-create-pr")).not.toBeInTheDocument();
   });
 });

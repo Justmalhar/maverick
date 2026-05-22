@@ -76,12 +76,40 @@ export class SQLiteStore {
 
   private runMigrations(dir: string): void {
     if (!existsSync(dir)) return;
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)"
+    );
     const files = readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
       .sort();
+
+    const appliedCount = (this.db
+      .query("SELECT COUNT(*) AS n FROM schema_migrations")
+      .get() as { n: number }).n;
+    const projectsExists =
+      this.db
+        .query("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
+        .get() !== null;
+    if (appliedCount === 0 && projectsExists) {
+      const now = Math.floor(Date.now() / 1000);
+      const insert = this.db.query(
+        "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)"
+      );
+      for (const file of files) insert.run(file, now);
+      return;
+    }
+
+    const isApplied = this.db.query(
+      "SELECT 1 FROM schema_migrations WHERE name = ?"
+    );
+    const recordApplied = this.db.query(
+      "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)"
+    );
     for (const file of files) {
+      if (isApplied.get(file) !== null) continue;
       const sql = readFileSync(join(dir, file), "utf8");
       this.db.exec(sql);
+      recordApplied.run(file, Math.floor(Date.now() / 1000));
     }
   }
 

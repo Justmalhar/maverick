@@ -24,7 +24,7 @@ const STATUS_VARIANT: Record<Status, StatusDotProps["variant"]> = {
 export function SettingsFooter({ status, errorMessage }: Props) {
   return (
     <footer
-      className="flex h-9 items-center justify-end bg-card/40 px-4"
+      className="flex h-9 items-center justify-end bg-muted/50 px-4"
       style={{ borderTop: "1px solid hsl(var(--border))" }}
     >
       <div

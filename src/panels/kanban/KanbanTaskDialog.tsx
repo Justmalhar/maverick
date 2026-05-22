@@ -19,24 +19,32 @@ interface Props {
   onSubmit: (task: Partial<KanbanTask>) => void;
 }
 
-const STATUSES: KanbanTask["status"][] = ["backlog", "in_progress", "review", "done"];
+const STATUSES: KanbanTask["status"][] = ["todo", "in_progress", "review", "done"];
 
 export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<KanbanTask["status"]>("backlog");
+  const [status, setStatus] = useState<KanbanTask["status"]>("todo");
   const [labelInput, setLabelInput] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState("");
+  const [agentBackend, setAgentBackend] = useState("");
+  const [branch, setBranch] = useState("");
 
   useEffect(() => {
     if (open) {
       setTitle(task?.title ?? "");
       setDescription(task?.description ?? "");
-      setStatus(task?.status ?? "backlog");
+      setStatus(task?.status ?? "todo");
       setLabels(task?.labels ?? []);
       setLabelInput("");
-      setDueDate(task?.dueDate ? new Date(task.dueDate * 1000).toISOString().slice(0, 10) : "");
+      setDueDate(
+        task?.dueDate
+          ? new Date(task.dueDate * 1000).toISOString().slice(0, 10)
+          : ""
+      );
+      setAgentBackend(task?.agentBackend ?? "");
+      setBranch(task?.branch ?? "");
     }
   }, [open, task]);
 
@@ -55,6 +63,9 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
       description,
       status,
       labels,
+      agentBackend,
+      branch,
+      attachments: task?.attachments ?? [],
       ...(dueDate ? { dueDate: Math.floor(new Date(dueDate).getTime() / 1000) } : {}),
       ...(task?.projectId ? { projectId: task.projectId } : {}),
       ...(task?.columnOrder !== undefined ? { columnOrder: task.columnOrder } : {}),
@@ -95,7 +106,7 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
           <label className="block text-[10px] uppercase tracking-wide text-muted-foreground">
             Status
           </label>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {STATUSES.map((s) => (
               <Button
                 key={s}
@@ -147,6 +158,16 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
             data-testid="kanban-due"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
+          />
+
+          <label className="block text-[10px] uppercase tracking-wide text-muted-foreground">
+            Branch
+          </label>
+          <Input
+            data-testid="kanban-branch"
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            placeholder="main"
           />
         </div>
 

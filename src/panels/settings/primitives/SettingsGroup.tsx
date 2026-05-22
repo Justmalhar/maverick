@@ -8,9 +8,9 @@ interface Props {
 
 export function SettingsGroup({ title, description, children }: Props) {
   return (
-    <section className="overflow-hidden rounded-xl bg-card/30" style={{ border: "1px solid hsl(var(--border))" }}>
+    <section className="overflow-hidden rounded-xl bg-card" style={{ border: "1px solid hsl(var(--border))" }}>
       {title || description ? (
-        <header className="bg-muted/20 px-5 py-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+        <header className="bg-muted/50 px-5 py-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
           {title ? (
             <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
           ) : null}

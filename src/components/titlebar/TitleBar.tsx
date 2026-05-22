@@ -76,7 +76,8 @@ export function TitleBar() {
               type="button"
               onClick={() => setQuickOpenOpen(true)}
               data-testid="titlebar-quickopen"
-              className="no-drag flex h-7 w-[460px] max-w-[60vw] items-center gap-2 rounded-md border border-border-glass bg-activitybar/70 px-3 text-xs text-muted-foreground backdrop-blur-md transition-colors duration-100 hover:border-border-glass-strong hover:bg-sidebar-hover/80 hover:text-foreground"
+              className="no-drag flex h-7 w-[460px] max-w-[60vw] items-center gap-2 rounded-md bg-activitybar/70 px-3 text-xs text-muted-foreground backdrop-blur-md transition-colors duration-100 hover:bg-sidebar-hover/80 hover:text-foreground"
+              style={{ border: "1px solid hsl(var(--border))" }}
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1 text-left">Search files, commands, projects…</span>

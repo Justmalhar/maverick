@@ -94,17 +94,32 @@ export interface Message {
   createdAt: number;
 }
 
+export interface Attachment {
+  name: string;
+  content: string;
+  encoding: "utf8" | "base64";
+  size: number;
+}
+
+export interface DiffStat {
+  added: number;
+  removed: number;
+}
+
 export interface KanbanTask {
   id: string;
   projectId: string;
   title: string;
   description?: string;
-  status: "backlog" | "in_progress" | "review" | "done";
+  status: "todo" | "in_progress" | "review" | "done";
   columnOrder: number;
   workspaceId?: string;
   labels: string[];
   dueDate?: number;
   createdAt: number;
+  agentBackend: string;
+  branch: string;
+  attachments: Attachment[];
 }
 
 export interface Automation {

@@ -1,47 +1,75 @@
-// ⌘⇧K — per-project Kanban board, drag-drop, "Start in Maverick".
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { motion, useReducedMotion } from "framer-motion";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useWorkbench } from "@/state/store";
-import { kanbanList, kanbanUpsert } from "@/lib/tauri";
-import type { KanbanTask } from "@/lib/ipc";
+import {
+  gitDiffStat,
+  kanbanList,
+  kanbanUpsert,
+  workspaceCreate,
+} from "@/lib/tauri";
+import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
 import KanbanTaskDialog from "./KanbanTaskDialog";
+import TaskComposer, { type ComposerPayload } from "./TaskComposer";
+import ProjectFilterTabs from "./ProjectFilterTabs";
 
 const DEFAULT_COLUMNS: KanbanTask["status"][] = [
-  "backlog",
+  "todo",
   "in_progress",
   "review",
   "done",
 ];
 
 export default function KanbanBoard() {
-  const activeWorkspace = useWorkbench((s) =>
-    s.workspaces.find((w) => w.id === s.activeWorkspaceId)
-  );
-  const projectId = useMemo(() => activeWorkspace?.projectId ?? "", [activeWorkspace?.projectId]);
+  const workspaces = useWorkbench((s) => s.workspaces);
+  const addWorkspace = useWorkbench((s) => s.addWorkspace);
+  const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
 
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [dialogTask, setDialogTask] = useState<Partial<KanbanTask> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
+  const [diffStatCache, setDiffStatCache] = useState<Map<string, DiffStat>>(new Map());
   const reduce = useReducedMotion();
 
   const refresh = useCallback(async () => {
-    if (!projectId) return;
     try {
-      const list = await kanbanList(projectId);
+      const list = await kanbanList("");
       setTasks(list);
       setError(null);
     } catch (e) {
       setError(String(e));
     }
-  }, [projectId]);
+  }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    tasks
+      .filter((t) => t.workspaceId && !diffStatCache.has(t.workspaceId))
+      .forEach((task) => {
+        const ws = workspaces.find((w) => w.id === task.workspaceId);
+        if (!ws) return;
+        gitDiffStat(ws.worktreePath)
+          .then((stat) => {
+            setDiffStatCache((prev) => new Map(prev).set(task.workspaceId!, stat));
+          })
+          .catch(() => {
+            /* silently ignore */
+          });
+      });
+  }, [tasks, workspaces, diffStatCache]);
+
+  const filteredTasks = useMemo(
+    () =>
+      filterProjectId
+        ? tasks.filter((t) => t.projectId === filterProjectId)
+        : tasks,
+    [tasks, filterProjectId]
+  );
 
   const onDragEnd = useCallback(
     async (result: DropResult) => {
@@ -52,7 +80,6 @@ export default function KanbanBoard() {
       if (!moved) return;
 
       const newOrder = [...tasks];
-      // Strip moved from old column array, insert at new index in target column
       const srcCol = newOrder.filter((t) => t.status === fromCol && t.id !== moved.id);
       const destCol = newOrder.filter((t) => t.status === toCol && t.id !== moved.id);
       destCol.splice(result.destination.index, 0, { ...moved, status: toCol });
@@ -62,28 +89,16 @@ export default function KanbanBoard() {
       const updatedSrc = recompute(srcCol);
       const updatedDest = recompute(destCol);
 
-      const updated: KanbanTask[] = newOrder.map((t) => {
-        if (t.id === moved.id) {
-          const idx = updatedDest.findIndex((d) => d.id === moved.id);
-          return updatedDest[idx];
-        }
-        if (t.status === fromCol) {
-          const r = updatedSrc.find((s) => s.id === t.id);
-          return r ?? t;
-        }
-        if (t.status === toCol) {
-          const r = updatedDest.find((s) => s.id === t.id);
-          return r ?? t;
-        }
+      const updated = newOrder.map((t) => {
+        if (t.id === moved.id) return updatedDest.find((d) => d.id === moved.id)!;
+        if (t.status === fromCol) return updatedSrc.find((s) => s.id === t.id) ?? t;
+        if (t.status === toCol) return updatedDest.find((s) => s.id === t.id) ?? t;
         return t;
       });
 
       setTasks(updated);
-
       try {
-        // Persist the moved + neighbours' new columnOrder.
-        const touched = [...updatedSrc, ...updatedDest];
-        await Promise.all(touched.map((t) => kanbanUpsert(t)));
+        await Promise.all([...updatedSrc, ...updatedDest].map((t) => kanbanUpsert(t)));
       } catch (e) {
         setError(String(e));
         await refresh();
@@ -95,26 +110,60 @@ export default function KanbanBoard() {
   const upsert = useCallback(
     async (task: Partial<KanbanTask>) => {
       try {
-        await kanbanUpsert({ ...task, projectId });
+        await kanbanUpsert(task);
         setDialogTask(null);
         await refresh();
       } catch (e) {
         setError(String(e));
       }
     },
-    [projectId, refresh]
+    [refresh]
   );
 
-  if (!projectId) {
-    return (
-      <div
-        data-testid="kanban-empty"
-        className="flex h-full w-full items-center justify-center text-xs text-muted-foreground"
-      >
-        Open a project to use the Kanban board
-      </div>
-    );
-  }
+  const onSend = useCallback(
+    async (payload: ComposerPayload) => {
+      const maxOrder = tasks
+        .filter((t) => t.status === "todo")
+        .reduce((max, t) => Math.max(max, t.columnOrder), -1);
+
+      const task = await kanbanUpsert({
+        status: "todo",
+        title: payload.prompt.split("\n")[0].slice(0, 80),
+        description: payload.prompt,
+        agentBackend: payload.agentBackend,
+        branch: payload.branch,
+        attachments: payload.attachments,
+        projectId: payload.projectId,
+        columnOrder: maxOrder + 1,
+        labels: [],
+        createdAt: Math.floor(Date.now() / 1000),
+      });
+
+      const ws = await workspaceCreate(
+        payload.projectId,
+        payload.branch,
+        payload.agentBackend
+      );
+
+      await kanbanUpsert({
+        id: task.id,
+        projectId: task.projectId,
+        title: task.title,
+        labels: task.labels,
+        columnOrder: task.columnOrder,
+        attachments: task.attachments,
+        agentBackend: task.agentBackend,
+        branch: task.branch,
+        status: "in_progress",
+        workspaceId: ws.id,
+      });
+
+      addWorkspace(ws);
+      setActiveWorkspace(ws.id);
+      await refresh();
+    },
+    [tasks, addWorkspace, setActiveWorkspace, refresh]
+  );
 
   return (
     <motion.div
@@ -124,20 +173,11 @@ export default function KanbanBoard() {
       transition={{ type: "spring", stiffness: 240, damping: 28 }}
       className="flex h-full w-full flex-col bg-background"
     >
-      <div className="flex items-center justify-between border-b border-border px-2 py-1.5">
-        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          Kanban
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setDialogTask({ status: "backlog", labels: [] })}
-          data-testid="kanban-add"
-        >
-          <Plus className="h-3 w-3" />
-          New task
-        </Button>
-      </div>
+      <TaskComposer onSend={onSend} />
+      <ProjectFilterTabs
+        filterProjectId={filterProjectId}
+        onFilterChange={setFilterProjectId}
+      />
       {error && (
         <div className="px-3 py-1.5 text-[11px] text-destructive">{error}</div>
       )}
@@ -147,9 +187,10 @@ export default function KanbanBoard() {
             <KanbanColumn
               key={col}
               status={col}
-              tasks={tasks
+              tasks={filteredTasks
                 .filter((t) => t.status === col)
                 .sort((a, b) => a.columnOrder - b.columnOrder)}
+              diffStatCache={diffStatCache}
               onEdit={(task) => setDialogTask(task)}
             />
           ))}

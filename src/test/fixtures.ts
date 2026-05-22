@@ -69,10 +69,13 @@ export function makeKanbanTask(overrides: Partial<KanbanTask> = {}): KanbanTask 
     projectId: "proj-1",
     title: "Do the thing",
     description: "details",
-    status: "backlog",
+    status: "todo",
     columnOrder: 0,
     labels: [],
     createdAt: 1700000000,
+    agentBackend: "claude",
+    branch: "main",
+    attachments: [],
     ...overrides,
   };
 }

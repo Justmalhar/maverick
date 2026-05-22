@@ -104,7 +104,7 @@ export const useWorkbench = create<WorkbenchState>()(
     layout: {
       activitybarCollapsed: false,
       primarySideBarVisible: true,
-      primarySideBarWidth: 240,
+      primarySideBarWidth: 200,
       auxiliaryBarVisible: true,
       auxiliaryBarWidth: 280,
       panelVisible: true,

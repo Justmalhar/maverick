@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitCompare, GitCommitVertical } from "lucide-react";
+import { GitCompare, GitCommitVertical, GitPullRequest, Bot } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { diffGet } from "@/lib/tauri";
 import type { DiffResult } from "@/lib/ipc";
@@ -75,28 +75,48 @@ export function DiffView() {
   }
 
   return (
-    <ScrollArea className="h-full" data-testid="diff-view">
-      <ul className="py-1">
-        {files.map((f) => (
-          <li
-            key={f.path}
-            className="group/row flex items-center gap-2 px-3 text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
-            style={{ height: "22px" }}
-          >
-            <span
-              className={cn(
-                "w-3 shrink-0 text-center text-[10px] font-semibold",
-                STATUS_TONE[f.status]
-              )}
+    <div className="flex h-full flex-col" data-testid="diff-view">
+      {/* Action buttons */}
+      <div className="flex shrink-0 gap-2 border-b border-border px-3 py-2">
+        <button
+          type="button"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          AI Code Review
+        </button>
+        <button
+          type="button"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted"
+        >
+          <GitPullRequest className="h-3.5 w-3.5" />
+          Create PR
+        </button>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <ul className="py-1">
+          {files.map((f) => (
+            <li
+              key={f.path}
+              className="group/row flex items-center gap-2 px-3 text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              style={{ height: "22px" }}
             >
-              {f.status}
-            </span>
-            <span className="truncate flex-1">{f.path}</span>
-            <span className="text-[10px] text-success">+{f.additions}</span>
-            <span className="text-[10px] text-destructive">−{f.deletions}</span>
-          </li>
-        ))}
-      </ul>
-    </ScrollArea>
+              <span
+                className={cn(
+                  "w-3 shrink-0 text-center text-[10px] font-semibold",
+                  STATUS_TONE[f.status]
+                )}
+              >
+                {f.status}
+              </span>
+              <span className="flex-1 truncate">{f.path}</span>
+              <span className="text-[10px] text-success">+{f.additions}</span>
+              <span className="text-[10px] text-destructive">−{f.deletions}</span>
+            </li>
+          ))}
+        </ul>
+      </ScrollArea>
+    </div>
   );
 }

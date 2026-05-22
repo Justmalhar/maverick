@@ -114,7 +114,8 @@ export default function UsagePanel() {
             Backends
           </h2>
           <div
-            className="flex flex-col divide-y divide-border-glass rounded-lg border border-border-glass bg-card"
+            className="flex flex-col divide-y divide-border-glass rounded-lg bg-card"
+            style={{ border: "1px solid hsl(var(--border))" }}
             data-testid="usage-backends"
           >
             {rows.map((row) => (
@@ -162,7 +163,8 @@ function StatCard({
 }) {
   return (
     <div
-      className="flex flex-col gap-2 rounded-lg border border-border-glass bg-card px-4 py-3.5"
+      className="flex flex-col gap-2 rounded-lg bg-card px-4 py-3.5"
+      style={{ border: "1px solid hsl(var(--border))" }}
       data-testid={`usage-stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <div className="flex items-center justify-between">

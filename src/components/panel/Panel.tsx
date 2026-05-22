@@ -28,9 +28,10 @@ export function Panel({ collapsed = false }: { collapsed?: boolean }) {
     <section
       data-testid="bottom-panel"
       className={cn(
-        "mv-panel flex w-full flex-col border-t border-border bg-sidebar",
+        "mv-panel flex w-full flex-col bg-sidebar",
         collapsed ? "shrink-0" : "h-full"
       )}
+      style={{ borderTop: "1px solid hsl(var(--border))" }}
     >
       <PanelTabs value={tab} onChange={setTab} />
       {!collapsed && (

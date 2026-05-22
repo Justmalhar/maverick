@@ -29,8 +29,9 @@ describe("ipc types", () => {
     const skill: Skill = { name: "s", description: "d", prompt: "p" };
     const msg: Message = { id: "1", sessionId: "s", role: "user", content: "", createdAt: 0 };
     const task: KanbanTask = {
-      id: "1", projectId: "p", title: "t", status: "backlog",
+      id: "1", projectId: "p", title: "t", status: "todo",
       columnOrder: 0, labels: [], createdAt: 0,
+      agentBackend: "claude", branch: "main", attachments: [],
     };
     const mcp: MCPServer = { name: "n", command: "c", args: [], status: "running" };
     const preset: WorkspacePreset = {

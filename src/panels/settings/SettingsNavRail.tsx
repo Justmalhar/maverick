@@ -144,7 +144,7 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
           handleSearchKey(e as unknown as KeyboardEvent<HTMLInputElement>);
         }
       }}
-      className="flex h-full w-full flex-col gap-2 bg-card/40 px-2 py-3"
+      className="flex h-full w-full flex-col gap-2 bg-sidebar px-2 py-3"
       style={{ borderRight: "1px solid hsl(var(--border))" }}
     >
       <div className="px-1">
@@ -154,7 +154,7 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
         {groupsToRender.map((group) =>
           group.renderHeader ? (
             <div key={group.id} className="mb-3">
-              <div className="px-2 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground/70">
+              <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {group.label}
               </div>
               {group.items.map((item) => {
