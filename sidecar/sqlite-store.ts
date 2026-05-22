@@ -137,6 +137,22 @@ export class SQLiteStore {
     return row ? { id: row.id, name: row.name, path: row.path, createdAt: row.created_at } : null;
   }
 
+  workspaceGet(id: string): Workspace | null {
+    const row = this.db
+      .query<WorkspaceRow, [string]>("SELECT * FROM workspaces WHERE id = ?")
+      .get(id);
+    if (!row) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      branch: row.branch,
+      agentBackend: row.agent_backend,
+      worktreePath: row.worktree_path,
+      status: row.status as Workspace["status"],
+      sessionId: "",
+    };
+  }
+
   workspaceCreate(input: {
     id?: string;
     projectId: string;

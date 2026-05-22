@@ -224,6 +224,29 @@ export class RpcHandlers {
       }
       case "workspace.destroy": {
         const p = Schemas.workspaceDestroy.parse(params);
+        const ws = this.store.workspaceGet(p.workspaceId);
+        if (ws) {
+          const project = this.store.projectGet(ws.projectId);
+          if (project) {
+            const settings = this.projectSettings.read(project.path);
+            if (settings.scripts.archive.trim() !== "") {
+              const archive = this.process
+                .spawnOnce({
+                  cwd: ws.worktreePath,
+                  command: "/bin/sh",
+                  args: ["-c", settings.scripts.archive],
+                })
+                .catch((err) => {
+                  console.error(`[workspace.destroy] archive failed:`, err);
+                  return { code: -1 };
+                });
+              const timeout = new Promise<{ code: number }>((resolve) =>
+                setTimeout(() => resolve({ code: -2 }), 30_000)
+              );
+              await Promise.race([archive, timeout]);
+            }
+          }
+        }
         const { worktreePath } = this.store.workspaceDestroy(p.workspaceId);
         await this.worktree.destroy({ worktreePath });
         return { ok: true };

@@ -384,4 +384,57 @@ describe("RpcHandlers", () => {
     });
     expect(existsSync(`${wtPath}/.setup-marker`)).toBe(false);
   });
+
+  it("workspace.destroy runs scripts.archive before deleting worktree", async () => {
+    const { mkdirSync, writeFileSync, existsSync, readFileSync, unlinkSync } = await import("fs");
+    const { handlers, dir, projectId, store } = makeWithTempProject();
+
+    const wtPath = `${dir}/wt-archive`;
+    mkdirSync(wtPath, { recursive: true });
+    const markerPath = `${dir}/.archive-marker`;
+    if (existsSync(markerPath)) unlinkSync(markerPath);
+
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_arch", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "", run: "", archive: `echo archived > ${markerPath}` } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/archive", backend: "claude",
+    })) as { id: string };
+
+    await h.dispatch("workspace.destroy", { workspaceId: ws.id });
+
+    expect(existsSync(markerPath)).toBe(true);
+    expect(readFileSync(markerPath, "utf8").trim()).toBe("archived");
+  });
+
+  it("workspace.destroy skips archive when scripts.archive is empty", async () => {
+    const { mkdirSync, existsSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-no-archive`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_no_arch", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/no-archive", backend: "claude",
+    })) as { id: string };
+    const result = (await h.dispatch("workspace.destroy", { workspaceId: ws.id })) as { ok: boolean };
+    expect(result.ok).toBe(true);
+    expect(existsSync(wtPath)).toBe(true);
+  });
 });
