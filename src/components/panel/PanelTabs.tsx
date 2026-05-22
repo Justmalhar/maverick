@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, Play } from "lucide-react";
-import { useWorkbench } from "@/state/store";
+import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -14,6 +15,26 @@ const TABS: Array<{ value: BottomPanelTab; label: string }> = [
   { value: "setup", label: "Setup" },
   { value: "run", label: "Run" },
 ];
+
+function PreviewButton() {
+  const ws = useWorkbench(selectActiveWorkspace);
+  const previewUrl = useProjectSettingsStore((s) => s.data?.previewUrl ?? "");
+  if (!ws || !previewUrl) return null;
+  const url = previewUrl
+    .replace("${WORKSPACE_NAME}", ws.branch)
+    .replace("${WORKSPACE_PATH}", ws.worktreePath)
+    .replace("${WORKSPACE_PORT}", "3000");
+  return (
+    <button
+      type="button"
+      aria-label="Open preview"
+      onClick={() => { void import("@tauri-apps/plugin-shell").then((m) => m.open(url)); }}
+      className="flex h-6 items-center gap-1.5 rounded-md bg-sidebar-hover px-2.5 text-[11px] font-medium text-foreground hover:bg-muted"
+    >
+      Open preview ↗
+    </button>
+  );
+}
 
 export function PanelTabs({ value, onChange }: Props) {
   const togglePanel = useWorkbench((s) => s.togglePanel);
@@ -65,6 +86,7 @@ export function PanelTabs({ value, onChange }: Props) {
       </Tabs>
 
       <div className="flex items-center gap-1 pr-2">
+        <PreviewButton />
         <button
           type="button"
           aria-label="Run"
