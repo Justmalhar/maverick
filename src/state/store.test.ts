@@ -185,6 +185,12 @@ describe("workbench store", () => {
     useWorkbench.getState().openSystemTab("browser");
     expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
 
+    // setActiveSystemTab with a non-null id nulls activeTerminalTabId and activeWorkspaceId
+    useWorkbench.setState({ activeWorkspaceId: "w1", activeTerminalTabId: "t1" });
+    useWorkbench.getState().setActiveSystemTab("browser");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+
     // removeTerminalTab clears active when removing the active tab
     useWorkbench.getState().setActiveTerminalTab("t1");
     useWorkbench.getState().removeTerminalTab("t1");

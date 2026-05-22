@@ -56,8 +56,12 @@ export function EditorTabs() {
   const { open: openTerminal, close: closeTerminal } = useTerminalTab();
 
   async function onNewTerminal() {
-    const cwd = await defaultTerminalCwd();
-    await openTerminal(cwd);
+    try {
+      const cwd = await defaultTerminalCwd();
+      await openTerminal(cwd);
+    } catch (err) {
+      console.error("Failed to open terminal tab", err);
+    }
   }
 
   return (

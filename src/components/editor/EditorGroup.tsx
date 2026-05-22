@@ -72,7 +72,7 @@ export function EditorGroup() {
               <TerminalPane
                 ptyId={tab.ptyId}
                 paneId={tab.id}
-                isFocused
+                isFocused={active}
                 onFocus={() => {}}
               />
             </div>
