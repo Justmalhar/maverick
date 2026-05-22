@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { onProjectSettingsChanged } from "@/lib/tauri";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -49,6 +50,19 @@ export function Workbench() {
       void loadProjectSettings(activeWsProjectId);
     }
   }, [activeWsProjectId, loadProjectSettings]);
+
+  useEffect(() => {
+    const offPromise = onProjectSettingsChanged(({ projectId, settings }) => {
+      const cur = useProjectSettingsStore.getState();
+      if (cur.projectId !== projectId) return;
+      if (Object.keys(cur.dirty).length > 0) {
+        console.warn("project settings changed on disk while editing — keep editing wins on next save");
+        return;
+      }
+      useProjectSettingsStore.setState({ data: settings });
+    });
+    return () => { void offPromise.then((fn) => fn()); };
+  }, []);
 
   return (
     <div
