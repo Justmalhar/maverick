@@ -1,4 +1,10 @@
-import { describe, it, expectTypeOf } from "vitest";
+import { describe, it, expect, expectTypeOf, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  projectSettingsGet,
+  projectSettingsUpdate,
+  projectSettingsOpenFile,
+} from "./tauri";
 import type {
   Project, Workspace, Backend, Skill, Message, KanbanTask, MCPServer,
   WorkspacePreset, DiffResult, Commit, Stash, FileEntry, MaverickConfig,
@@ -77,5 +83,23 @@ describe("ipc types", () => {
     expectTypeOf(df).toMatchTypeOf<DiffFile>();
     expectTypeOf(dh).toMatchTypeOf<DiffHunk>();
     expectTypeOf(td).toMatchTypeOf<ThemeDefinition>();
+  });
+
+  it("projectSettings IPC wrappers call invoke with correct args", async () => {
+    const stub = {
+      name: "demo", rootPath: "/p", workspaces: { branchFrom: "origin/main", filesToCopy: [] },
+      remote: "origin", previewUrl: "", scripts: { setup: "", run: "", archive: "" }, preferences: {},
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(stub as never);
+    await projectSettingsGet("p1");
+    expect(invoke).toHaveBeenCalledWith("project_settings_get", { projectId: "p1" });
+
+    vi.mocked(invoke).mockResolvedValueOnce(stub as never);
+    await projectSettingsUpdate("p1", { remote: "upstream" });
+    expect(invoke).toHaveBeenCalledWith("project_settings_update", { projectId: "p1", patch: { remote: "upstream" } });
+
+    vi.mocked(invoke).mockResolvedValueOnce({ path: "/p/maverick.json" } as never);
+    await projectSettingsOpenFile("p1");
+    expect(invoke).toHaveBeenCalledWith("project_settings_open_file", { projectId: "p1" });
   });
 });

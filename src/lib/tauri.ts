@@ -16,6 +16,7 @@ import type {
   FileEntry,
   ContextUsage,
   MCPServer,
+  ProjectSettings,
 } from "./ipc";
 
 export async function projectAdd(path: string): Promise<Project> {
@@ -139,6 +140,21 @@ export async function presetList(projectPath?: string): Promise<WorkspacePreset[
   return invoke("preset_list", { projectPath });
 }
 
+export async function projectSettingsGet(projectId: string): Promise<ProjectSettings> {
+  return invoke("project_settings_get", { projectId });
+}
+
+export async function projectSettingsUpdate(
+  projectId: string,
+  patch: Partial<ProjectSettings>
+): Promise<ProjectSettings> {
+  return invoke("project_settings_update", { projectId, patch });
+}
+
+export async function projectSettingsOpenFile(projectId: string): Promise<{ path: string }> {
+  return invoke("project_settings_open_file", { projectId });
+}
+
 export async function presetLaunch(
   preset: WorkspacePreset,
   projectId: string,
@@ -219,5 +235,14 @@ export function onWorkspaceStatus(
 ): Promise<UnlistenFn> {
   return listen<{ workspaceId: string; status: string }>("workspace:status", (e) =>
     callback(e.payload)
+  );
+}
+
+export function onProjectSettingsChanged(
+  callback: (payload: { projectId: string; settings: ProjectSettings }) => void
+): Promise<UnlistenFn> {
+  return listen<{ projectId: string; settings: ProjectSettings }>(
+    "project:settings:changed",
+    (e) => callback(e.payload)
   );
 }

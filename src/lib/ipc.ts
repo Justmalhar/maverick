@@ -283,3 +283,17 @@ export type SettingsWriteResponse =
   | { ok: false; error: string };
 
 export type SettingsSnapshot = Partial<Record<SettingsKey, SettingsValue>>;
+
+export interface ProjectSettings {
+  name: string;
+  rootPath: string;
+  workspaces: {
+    basePath?: string;
+    branchFrom: string;
+    filesToCopy: string[];
+  };
+  remote: string;
+  previewUrl: string;
+  scripts: { setup: string; run: string; archive: string };
+  preferences: Record<string, string>;
+}
