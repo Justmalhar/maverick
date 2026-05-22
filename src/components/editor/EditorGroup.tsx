@@ -3,6 +3,8 @@ import { useWorkbench, type SystemTabId } from "@/state/store";
 import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
+import { TerminalPane } from "./terminal/TerminalPane";
+import { cn } from "@/lib/utils";
 
 const UsagePanel = lazy(() => import("@/panels/usage/UsagePanel"));
 const BrowserPanel = lazy(() => import("@/panels/browser/BrowserPanel"));
@@ -30,10 +32,13 @@ export function EditorGroup() {
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const systemTabs = useWorkbench((s) => s.systemTabs);
   const activeSystemTab = useWorkbench((s) => s.activeSystemTab);
+  const terminalTabs = useWorkbench((s) => s.terminalTabs);
+  const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
 
-  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0;
+  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0;
   const showEmpty = !hasAnyTabs;
   const showSystemTab = activeSystemTab && systemTabs.includes(activeSystemTab);
+  const showTerminalTab = !!activeTerminalTabId && terminalTabs.some((t) => t.id === activeTerminalTabId);
 
   return (
     <div
@@ -44,16 +49,36 @@ export function EditorGroup() {
       <div className="relative flex-1 overflow-hidden">
         {showEmpty && <EmptyEditor />}
 
-        {/* Workspaces: keep-alive mounted, hidden when not active */}
         {workspaces.map((ws) => (
           <WorkspaceEditor
             key={ws.id}
             workspace={ws}
-            active={!showSystemTab && ws.id === activeId}
+            active={!showSystemTab && !showTerminalTab && ws.id === activeId}
           />
         ))}
 
-        {/* System tabs: lazy-loaded, mounted only when active */}
+        {terminalTabs.map((tab) => {
+          const active = showTerminalTab && tab.id === activeTerminalTabId;
+          return (
+            <div
+              key={tab.id}
+              data-testid={`terminal-tab-content-${tab.id}`}
+              aria-hidden={!active}
+              className={cn(
+                "absolute inset-0 bg-background",
+                !active && "keep-alive-hidden content-visibility-auto"
+              )}
+            >
+              <TerminalPane
+                ptyId={tab.ptyId}
+                paneId={tab.id}
+                isFocused
+                onFocus={() => {}}
+              />
+            </div>
+          );
+        })}
+
         {showSystemTab && (
           <Suspense
             fallback={
