@@ -164,7 +164,7 @@ export const useWorkbench = create<WorkbenchState>()(
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
       })),
     setActiveWorkspace: (id) =>
-      set({ activeWorkspaceId: id, activeTerminalTabId: null }),
+      set({ activeWorkspaceId: id, activeTerminalTabId: null, activeSystemTab: null }),
     setEditorMode: (workspaceId, mode) =>
       set((s) => ({ editorModes: { ...s.editorModes, [workspaceId]: mode } })),
     toggleEditorMode: (workspaceId) =>

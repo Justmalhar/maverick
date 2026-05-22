@@ -163,6 +163,10 @@ describe("workbench store", () => {
     useWorkbench.getState().addTerminalTab(tab2);
     expect(useWorkbench.getState().terminalTabs.map((t) => t.id)).toEqual(["t1", "t2"]);
 
+    // duplicate add is a no-op
+    useWorkbench.getState().addTerminalTab(tab1);
+    expect(useWorkbench.getState().terminalTabs).toHaveLength(2);
+
     // setActiveTerminalTab nulls workspace and system tab actives
     useWorkbench.setState({ activeWorkspaceId: "w1", activeSystemTab: "browser" });
     useWorkbench.getState().setActiveTerminalTab("t2");
@@ -170,9 +174,11 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
     expect(useWorkbench.getState().activeSystemTab).toBeNull();
 
-    // setActiveWorkspace nulls activeTerminalTabId
+    // setActiveWorkspace nulls activeTerminalTabId AND activeSystemTab
+    useWorkbench.setState({ activeSystemTab: "browser", activeTerminalTabId: "t1" });
     useWorkbench.getState().setActiveWorkspace("w1");
     expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
 
     // openSystemTab nulls activeTerminalTabId
     useWorkbench.getState().setActiveTerminalTab("t1");
