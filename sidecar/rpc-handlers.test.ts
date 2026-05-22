@@ -324,4 +324,64 @@ describe("RpcHandlers", () => {
     const res = (await handlers.dispatch("project.settings.openFile", { projectId })) as { path: string };
     expect(res.path).toBe(`${dir}/maverick.json`);
   });
+
+  it("workspace.create runs scripts.setup when configured", async () => {
+    const { mkdirSync, existsSync, readFileSync } = await import("fs");
+    const { handlers, dir, projectId, store } = makeWithTempProject();
+
+    await handlers.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "echo setup-ran > .setup-marker", run: "", archive: "" } },
+    });
+
+    const baseDir = `${dir}/.worktrees`;
+    mkdirSync(baseDir, { recursive: true });
+
+    const wtPath = `${dir}/wt-setup`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_setup", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h2 = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    await h2.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "echo setup-ran > .setup-marker", run: "", archive: "" } },
+    });
+    const ws = (await h2.dispatch("workspace.create", {
+      projectId,
+      projectPath: dir,
+      branch: "feat/setup",
+      backend: "claude",
+    })) as { id: string; worktreePath: string };
+
+    expect(ws.worktreePath).toBe(wtPath);
+    expect(existsSync(`${wtPath}/.setup-marker`)).toBe(true);
+    expect(readFileSync(`${wtPath}/.setup-marker`, "utf8").trim()).toBe("setup-ran");
+  });
+
+  it("workspace.create skips setup when scripts.setup is empty", async () => {
+    const { mkdirSync, existsSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-no-setup`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_no_setup", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    await h.dispatch("workspace.create", {
+      projectId,
+      projectPath: dir,
+      branch: "feat/no-setup",
+      backend: "claude",
+    });
+    expect(existsSync(`${wtPath}/.setup-marker`)).toBe(false);
+  });
 });

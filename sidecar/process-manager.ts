@@ -88,6 +88,12 @@ export class ProcessManager {
     return { ok: true };
   }
 
+  async spawnOnce(opts: { cwd: string; command: string; args: string[]; env?: Record<string, string> }): Promise<{ code: number }> {
+    const proc = this.spawner([opts.command, ...opts.args], { cwd: opts.cwd, env: opts.env });
+    const code = await proc.exited;
+    return { code };
+  }
+
   has(ptyId: string): boolean {
     return this.ptys.has(ptyId);
   }

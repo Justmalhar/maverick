@@ -194,10 +194,13 @@ export class RpcHandlers {
       }
       case "workspace.create": {
         const p = Schemas.workspaceCreate.parse(params);
+        const project = this.store.projectGet(p.projectId);
+        const settings = project ? this.projectSettings.read(project.path) : null;
         const { workspaceId, worktreePath } = await this.worktree.create({
           projectPath: p.projectPath,
           branch: p.branch,
           baseBranch: p.baseBranch,
+          filesToCopy: settings?.workspaces.filesToCopy,
         });
         const ws = this.store.workspaceCreate({
           id: workspaceId,
@@ -206,6 +209,17 @@ export class RpcHandlers {
           agentBackend: p.backend,
           worktreePath,
         });
+        if (settings && settings.scripts.setup.trim() !== "") {
+          try {
+            await this.process.spawnOnce({
+              cwd: worktreePath,
+              command: "/bin/sh",
+              args: ["-c", settings.scripts.setup],
+            });
+          } catch (err) {
+            console.error(`[workspace.create] scripts.setup failed:`, err);
+          }
+        }
         return ws;
       }
       case "workspace.destroy": {
