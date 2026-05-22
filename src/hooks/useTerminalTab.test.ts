@@ -86,4 +86,12 @@ describe("useTerminalTab", () => {
     });
     expect(useWorkbench.getState().terminalTabs[0].title).toBe("Desktop");
   });
+
+  it("title falls back to cwd when basename yields an empty string (root path)", async () => {
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("/");
+    });
+    expect(useWorkbench.getState().terminalTabs[0].title).toBe("/");
+  });
 });
