@@ -9,13 +9,14 @@ interface Props {
   nav: ReactNode;
   footer: ReactNode;
   children: ReactNode;
+  testId?: string;
 }
 
-export function SettingsShell({ open, onOpenChange, title, description, nav, footer, children }: Props) {
+export function SettingsShell({ open, onOpenChange, title, description, nav, footer, children, testId = "settings-shell" }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        data-testid="settings-shell"
+        data-testid={testId}
         className="grid h-[min(680px,86vh)] w-[92vw] !max-w-[960px] grid-cols-[240px_1fr] grid-rows-[auto_1fr_auto] gap-0 overflow-hidden bg-popover p-0 shadow-modal"
         style={{ border: "1px solid hsl(var(--border))" }}
       >

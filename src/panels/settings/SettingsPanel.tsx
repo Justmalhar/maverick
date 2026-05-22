@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { SettingsShell } from "@/components/settings-shell";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { SettingsNavRail, NAV_GROUPS, type SectionId } from "./SettingsNavRail";
 import { SettingsHeader } from "./SettingsHeader";
@@ -132,52 +132,46 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent
-        data-testid="settings-panel"
-        className="grid h-[min(680px,86vh)] w-[92vw] !max-w-[960px] grid-cols-[240px_1fr] grid-rows-[1fr_auto] gap-0 overflow-hidden bg-popover p-0 shadow-modal"
-        style={{ border: "1px solid hsl(var(--border))" }}
-      >
-        <DialogTitle className="sr-only">{meta.title}</DialogTitle>
-        <DialogDescription className="sr-only">{meta.description}</DialogDescription>
-        <div className="row-span-2" style={{ borderRight: "1px solid hsl(var(--border))" }}>
-          <SettingsNavRail
-            section={section}
-            onSelect={handleSelectSection}
-            onOpenFile={handleOpenFile}
-          />
-        </div>
-        <div className="overflow-y-auto px-8 py-6">
-          <AnimatePresence mode="wait">
-            {jsonMode ? (
-              <motion.div
-                key="json"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-                className="flex h-full flex-col"
-              >
-                <SettingsJsonEditor onClose={() => setJsonMode(false)} />
-              </motion.div>
-            ) : (
-              <motion.div
-                key={section}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
-                <ContentComponent />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        <div className="col-start-2">
-          <SettingsFooter status={status} errorMessage={lastError ?? undefined} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <SettingsShell
+      open={isOpen}
+      onOpenChange={handleOpenChange}
+      testId="settings-panel"
+      title="Settings"
+      description={meta.description}
+      nav={
+        <SettingsNavRail
+          section={section}
+          onSelect={handleSelectSection}
+          onOpenFile={handleOpenFile}
+        />
+      }
+      footer={<SettingsFooter status={status} errorMessage={lastError ?? undefined} />}
+    >
+      <AnimatePresence mode="wait">
+        {jsonMode ? (
+          <motion.div
+            key="json"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="flex h-full flex-col"
+          >
+            <SettingsJsonEditor onClose={() => setJsonMode(false)} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key={section}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+          >
+            <SettingsHeader title={meta.title} description={meta.description} badge={meta.badge} />
+            <ContentComponent />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </SettingsShell>
   );
 }
