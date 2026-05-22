@@ -1,6 +1,28 @@
 import { describe, test, expect } from "bun:test";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { WorktreeManager } from "./worktree-manager";
 import type { Shell } from "./types";
+
+function fakeShellThatCreatesWorktreeDir(): { shell: Shell; calls: string[][] } {
+  const calls: string[][] = [];
+  const shell: Shell = {
+    async text(cmd) {
+      calls.push(cmd);
+      return "";
+    },
+    async run(cmd) {
+      calls.push(cmd);
+      if (cmd[0] === "git" && cmd[1] === "worktree" && cmd[2] === "add") {
+        const path = cmd[cmd.length - 2];
+        mkdirSync(path, { recursive: true });
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    },
+  };
+  return { shell, calls };
+}
 
 function fakeShell(transcript: Array<{ stdout?: string; exitCode?: number }> = []): {
   shell: Shell;
@@ -91,5 +113,42 @@ describe("WorktreeManager", () => {
 
   test("default constructor builds without DI", () => {
     expect(new WorktreeManager()).toBeInstanceOf(WorktreeManager);
+  });
+
+  test("copies filesToCopy from project root into the new worktree", async () => {
+    const srcProject = mkdtempSync(join(tmpdir(), "mvk-src-"));
+    const base = mkdtempSync(join(tmpdir(), "mvk-base-"));
+    writeFileSync(join(srcProject, ".env"), "TOKEN=hi");
+    const { shell } = fakeShellThatCreatesWorktreeDir();
+    const mgr = new WorktreeManager({
+      shell,
+      ids: { uuid: () => "ws_copy", now: () => 0 },
+      base,
+    });
+    const { worktreePath } = await mgr.create({
+      projectPath: srcProject,
+      branch: "feat/copy",
+      filesToCopy: [".env"],
+    });
+    expect(existsSync(join(worktreePath, ".env"))).toBe(true);
+    expect(readFileSync(join(worktreePath, ".env"), "utf8")).toBe("TOKEN=hi");
+  });
+
+  test("skip-if-source-missing for filesToCopy", async () => {
+    const srcProject = mkdtempSync(join(tmpdir(), "mvk-src-"));
+    const base = mkdtempSync(join(tmpdir(), "mvk-base-"));
+    const { shell } = fakeShellThatCreatesWorktreeDir();
+    const mgr = new WorktreeManager({
+      shell,
+      ids: { uuid: () => "ws_miss", now: () => 0 },
+      base,
+    });
+    const { worktreePath } = await mgr.create({
+      projectPath: srcProject,
+      branch: "feat/missing",
+      filesToCopy: [".does-not-exist"],
+    });
+    expect(existsSync(worktreePath)).toBe(true);
+    expect(existsSync(join(worktreePath, ".does-not-exist"))).toBe(false);
   });
 });

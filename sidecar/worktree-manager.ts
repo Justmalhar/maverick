@@ -1,3 +1,5 @@
+import { existsSync, statSync, mkdirSync, copyFileSync } from "fs";
+import { join, dirname } from "path";
 import { defaultIds, defaultShell } from "./deps";
 import type { IdProvider, Shell } from "./types";
 
@@ -5,6 +7,7 @@ interface CreateParams {
   projectPath: string;
   branch: string;
   baseBranch?: string;
+  filesToCopy?: string[];
 }
 
 interface DestroyParams {
@@ -46,6 +49,21 @@ export class WorktreeManager {
       ["git", "worktree", "add", "-b", params.branch, worktreePath, baseBranch],
       params.projectPath
     );
+    if (params.filesToCopy && params.filesToCopy.length > 0) {
+      for (const rel of params.filesToCopy) {
+        const src = join(params.projectPath, rel);
+        const dst = join(worktreePath, rel);
+        try {
+          if (!existsSync(src)) continue;
+          const stat = statSync(src);
+          if (!stat.isFile()) continue;
+          mkdirSync(dirname(dst), { recursive: true });
+          copyFileSync(src, dst);
+        } catch (err) {
+          console.error(`[worktree] failed to copy ${rel}:`, err);
+        }
+      }
+    }
     return { workspaceId, worktreePath };
   }
 
