@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { watch } from "fs";
+import { join } from "path";
 import { ProcessManager } from "./process-manager";
 import { WorktreeManager } from "./worktree-manager";
 import { SQLiteStore } from "./sqlite-store";
@@ -15,6 +17,8 @@ import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { ProjectSettingsStore } from "./project-settings-store";
+import { stdoutNotifier } from "./deps";
+import type { Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
 const StringParam = z.object({}).passthrough();
@@ -125,6 +129,7 @@ export interface RpcHandlersOptions {
   attachments?: AttachmentStore;
   fileTree?: FileTree;
   projectSettings?: ProjectSettingsStore;
+  notifier?: Notifier;
 }
 
 export class RpcHandlers {
@@ -144,6 +149,9 @@ export class RpcHandlers {
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
   readonly projectSettings: ProjectSettingsStore;
+  readonly notifier: Notifier;
+
+  private watchedProjects = new Set<string>();
 
   constructor(opts: RpcHandlersOptions = {}) {
     this.store = opts.store ?? new SQLiteStore();
@@ -164,6 +172,42 @@ export class RpcHandlers {
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
     this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
+    this.notifier = opts.notifier ?? stdoutNotifier;
+  }
+
+  private emitProjectSettingsChanged(projectId: string, settings: unknown): void {
+    this.notifier.write(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "project.settings.changed",
+        params: { projectId, settings },
+      })
+    );
+  }
+
+  private ensureSettingsWatch(projectId: string, projectPath: string): void {
+    if (this.watchedProjects.has(projectId)) return;
+    this.watchedProjects.add(projectId);
+    const filePath = join(projectPath, "maverick.json");
+    const emit = (): void => {
+      try {
+        const settings = this.projectSettings.read(projectPath);
+        this.emitProjectSettingsChanged(projectId, settings);
+      } catch {
+        /* file may be mid-write */
+      }
+    };
+    try {
+      watch(filePath, { persistent: false }, emit);
+    } catch {
+      try {
+        watch(projectPath, { persistent: false }, (_event, name) => {
+          if (name === "maverick.json") emit();
+        });
+      } catch {
+        this.watchedProjects.delete(projectId);
+      }
+    }
   }
 
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
@@ -178,13 +222,17 @@ export class RpcHandlers {
         const p = Schemas.projectSettingsGet.parse(params);
         const project = this.store.projectGet(p.projectId);
         if (!project) throw new Error(`project ${p.projectId} not found`);
-        return this.projectSettings.read(project.path);
+        const settings = this.projectSettings.read(project.path);
+        this.ensureSettingsWatch(p.projectId, project.path);
+        return settings;
       }
       case "project.settings.update": {
         const p = Schemas.projectSettingsUpdate.parse(params);
         const project = this.store.projectGet(p.projectId);
         if (!project) throw new Error(`project ${p.projectId} not found`);
-        return this.projectSettings.write(project.path, p.patch as never);
+        const saved = this.projectSettings.write(project.path, p.patch as never);
+        this.emitProjectSettingsChanged(p.projectId, saved);
+        return saved;
       }
       case "project.settings.openFile": {
         const p = Schemas.projectSettingsOpenFile.parse(params);

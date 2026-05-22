@@ -106,8 +106,19 @@ function makeWithTempProject() {
   const dir = mkdtempSync(join(tmpdir(), "mvk-rpc-"));
   const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
   const project = store.projectAdd({ path: dir, name: "tmp" });
-  const handlers = new RpcHandlers({ store });
-  return { handlers, dir, projectId: project.id, store };
+  const notifications: Array<{ method: string; params: unknown }> = [];
+  const notifier = {
+    write(line: string) {
+      try {
+        const msg = JSON.parse(line) as { method?: string; params?: unknown };
+        if (msg.method) notifications.push({ method: msg.method, params: msg.params });
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+  const handlers = new RpcHandlers({ store, notifier });
+  return { handlers, dir, projectId: project.id, store, notifications };
 }
 
 describe("RpcHandlers", () => {
@@ -346,7 +357,7 @@ describe("RpcHandlers", () => {
       async prune() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
-    const h2 = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    const h2 = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
     await h2.dispatch("project.settings.update", {
       projectId,
       patch: { scripts: { setup: "echo setup-ran > .setup-marker", run: "", archive: "" } },
@@ -375,7 +386,7 @@ describe("RpcHandlers", () => {
       async prune() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
-    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
     await h.dispatch("workspace.create", {
       projectId,
       projectPath: dir,
@@ -401,7 +412,7 @@ describe("RpcHandlers", () => {
       async prune() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
-    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
 
     await h.dispatch("project.settings.update", {
       projectId,
@@ -429,12 +440,48 @@ describe("RpcHandlers", () => {
       async prune() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
-    const h = new RpcHandlers({ store, worktree: fakeWorktree as never });
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
     const ws = (await h.dispatch("workspace.create", {
       projectId, projectPath: dir, branch: "feat/no-archive", backend: "claude",
     })) as { id: string };
     const result = (await h.dispatch("workspace.destroy", { workspaceId: ws.id })) as { ok: boolean };
     expect(result.ok).toBe(true);
     expect(existsSync(wtPath)).toBe(true);
+  });
+
+  it("emits project.settings.changed after successful update", async () => {
+    const { handlers, projectId, notifications } = makeWithTempProject();
+    await handlers.dispatch("project.settings.update", { projectId, patch: { remote: "alpha" } });
+    const changed = notifications.filter((n) => n.method === "project.settings.changed");
+    expect(changed.length).toBe(1);
+    expect((changed[0].params as { projectId: string }).projectId).toBe(projectId);
+    expect((changed[0].params as { settings: { remote: string } }).settings.remote).toBe("alpha");
+  });
+
+  it("emits project.settings.changed when file is edited externally", async () => {
+    const { handlers, dir, projectId, notifications } = makeWithTempProject();
+    await handlers.dispatch("project.settings.get", { projectId });
+    const fs = await import("fs");
+    const path = await import("path");
+    const filePath = path.join(dir, "maverick.json");
+    const writePayload = (remote: string): void => {
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify(
+          { version: 1, backends: { default: "claude", available: [] }, project: { remote } },
+          null,
+          2
+        )
+      );
+    };
+    const filterChanged = (): Array<{ method: string; params: unknown }> =>
+      notifications.filter((n) => n.method === "project.settings.changed");
+    const deadline = Date.now() + 2000;
+    let attempt = 0;
+    while (Date.now() < deadline && filterChanged().length === 0) {
+      writePayload(`beta-${attempt++}`);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(filterChanged().length).toBeGreaterThan(0);
   });
 });
