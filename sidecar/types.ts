@@ -62,6 +62,21 @@ export interface MaverickConfig {
   presets?: WorkspacePreset[];
   automations?: Automation[];
   mcps?: MCPServerConfig[];
+  project?: ProjectSettings;
+}
+
+export interface ProjectSettings {
+  name: string;
+  rootPath: string;
+  workspaces: {
+    basePath?: string;
+    branchFrom: string;
+    filesToCopy: string[];
+  };
+  remote: string;
+  previewUrl: string;
+  scripts: { setup: string; run: string; archive: string };
+  preferences: Record<string, string>;
 }
 
 export interface WorkspacePreset {

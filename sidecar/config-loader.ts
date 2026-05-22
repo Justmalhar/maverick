@@ -3,6 +3,7 @@ import { join } from "path";
 import yaml from "js-yaml";
 import { z } from "zod";
 import type { MaverickConfig } from "./types";
+import { ProjectSettingsSchema } from "./project-settings";
 
 const BackendDefSchema = z.object({
   name: z.string(),
@@ -84,6 +85,7 @@ export const MaverickConfigSchema = z.object({
   presets: z.array(PresetSchema).optional(),
   automations: z.array(AutomationSchema).optional(),
   mcps: z.array(MCPSchema).optional(),
+  project: ProjectSettingsSchema.optional(),
 });
 
 export interface ConfigLoaderOptions {
