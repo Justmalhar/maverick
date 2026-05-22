@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -31,12 +32,23 @@ export function Workbench() {
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
   const projectSettingsState = useWorkbench((s) => s.projectSettings);
   const closeProjectSettings = useWorkbench((s) => s.closeProjectSettings);
+  const activeWsProjectId = useWorkbench((s) => {
+    const ws = s.activeWorkspaceId ? s.workspaces.find((w) => w.id === s.activeWorkspaceId) : null;
+    return ws?.projectId ?? null;
+  });
+  const loadProjectSettings = useProjectSettingsStore((s) => s.load);
   const { refreshProjects, refreshWorkspaces } = useWorkspace();
 
   useEffect(() => {
     refreshProjects().catch((e) => console.error("refreshProjects failed", e));
     refreshWorkspaces().catch((e) => console.error("refreshWorkspaces failed", e));
   }, [refreshProjects, refreshWorkspaces]);
+
+  useEffect(() => {
+    if (activeWsProjectId) {
+      void loadProjectSettings(activeWsProjectId);
+    }
+  }, [activeWsProjectId, loadProjectSettings]);
 
   return (
     <div
