@@ -129,4 +129,25 @@ describe("workbench store", () => {
 
     expect(selectWorkspacesForProject("p1")(useWorkbench.getState())).toHaveLength(1);
   });
+
+  it("openProjectSettings sets projectId and section, marks open", () => {
+    useWorkbench.getState().openProjectSettings({
+      projectId: "p1",
+      initialSection: "scripts",
+      focusField: "setup",
+    });
+    const ps = useWorkbench.getState().projectSettings;
+    expect(ps.open).toBe(true);
+    expect(ps.projectId).toBe("p1");
+    expect(ps.initialSection).toBe("scripts");
+    expect(ps.focusField).toBe("setup");
+  });
+
+  it("closeProjectSettings clears projectId", () => {
+    useWorkbench.getState().openProjectSettings({ projectId: "p1" });
+    useWorkbench.getState().closeProjectSettings();
+    const ps = useWorkbench.getState().projectSettings;
+    expect(ps.open).toBe(false);
+    expect(ps.projectId).toBeNull();
+  });
 });

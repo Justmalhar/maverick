@@ -51,6 +51,12 @@ interface WorkbenchState {
   presetLauncherOpen: boolean;
   keybindingHelpOpen: boolean;
   settingsOpen: boolean;
+  projectSettings: {
+    open: boolean;
+    projectId: string | null;
+    initialSection?: "identity" | "workspaces" | "preview" | "scripts" | "preferences";
+    focusField?: string;
+  };
 
   // Mutators
   setProjects: (projects: Project[]) => void;
@@ -82,6 +88,12 @@ interface WorkbenchState {
   setPresetLauncherOpen: (open: boolean) => void;
   setKeybindingHelpOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
+  openProjectSettings: (args: {
+    projectId: string;
+    initialSection?: "identity" | "workspaces" | "preview" | "scripts" | "preferences";
+    focusField?: string;
+  }) => void;
+  closeProjectSettings: () => void;
 
   // System tabs
   openSystemTab: (id: SystemTabId) => void;
@@ -118,6 +130,7 @@ export const useWorkbench = create<WorkbenchState>()(
     presetLauncherOpen: false,
     keybindingHelpOpen: false,
     settingsOpen: false,
+    projectSettings: { open: false, projectId: null },
 
     setProjects: (projects) => set({ projects }),
     addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
@@ -178,6 +191,10 @@ export const useWorkbench = create<WorkbenchState>()(
     setPresetLauncherOpen: (open) => set({ presetLauncherOpen: open }),
     setKeybindingHelpOpen: (open) => set({ keybindingHelpOpen: open }),
     setSettingsOpen: (open) => set({ settingsOpen: open }),
+    openProjectSettings: ({ projectId, initialSection, focusField }) =>
+      set({ projectSettings: { open: true, projectId, initialSection, focusField } }),
+    closeProjectSettings: () =>
+      set((s) => ({ projectSettings: { ...s.projectSettings, open: false, projectId: null } })),
 
     openSystemTab: (id) =>
       set((s) => ({
