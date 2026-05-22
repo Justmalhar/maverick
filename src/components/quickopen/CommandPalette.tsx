@@ -7,6 +7,7 @@ import {
   Zap,
   Plug,
   Settings,
+  SlidersHorizontal,
   PanelLeft,
   PanelRight,
   PanelBottom,
@@ -45,6 +46,7 @@ export function CommandPalette() {
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const toggleEditorMode = useWorkbench((s) => s.toggleEditorMode);
+  const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
 
   const commands: CommandEntry[] = useMemo(
     () => [
@@ -118,6 +120,19 @@ export function CommandPalette() {
         shortcutId: "global.settings",
       },
       {
+        id: "project-settings.open",
+        label: "Project Settings: Open for active project",
+        icon: SlidersHorizontal,
+        run: () => {
+          const state = useWorkbench.getState();
+          const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+          if (!ws) return;
+          openProjectSettings({ projectId: ws.projectId });
+          setOpen(false);
+        },
+        shortcutId: "project-settings.open",
+      },
+      {
         id: "global.presets",
         label: "Maverick: Open preset launcher",
         icon: Sparkles,
@@ -170,6 +185,7 @@ export function CommandPalette() {
     ],
     [
       activeId,
+      openProjectSettings,
       setActivityView,
       setOpen,
       setPresetLauncherOpen,

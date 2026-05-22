@@ -5,6 +5,7 @@ export interface KeybindingDef {
   id: string;
   label: string;
   category: "Workspace" | "Editor" | "Terminal" | "Panel" | "Git" | "Global";
+  // Empty string means the action is palette-only with no global shortcut bound.
   keys: string;
   // Display form (rendered as ⌘⇧K etc.). Falls back to keys.
   display?: string;
@@ -17,6 +18,8 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "workspace.new", label: "New workspace", category: "Workspace", keys: "$mod+n", display: "⌘N" },
   { id: "workspace.close", label: "Close active workspace", category: "Workspace", keys: "$mod+w", display: "⌘W" },
   { id: "project.new", label: "Add project", category: "Workspace", keys: "$mod+Shift+n", display: "⌘⇧N" },
+  { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+,", display: "⌘⇧," },
+  { id: "project-settings.edit-file", label: "Project Settings: Edit maverick.json", category: "Workspace", keys: "" },
 
   // Editor modes
   { id: "editor.toggleMode", label: "Toggle Agent ↔ Terminal", category: "Editor", keys: "$mod+t", display: "⌘T" },

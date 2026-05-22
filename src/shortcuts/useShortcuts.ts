@@ -66,6 +66,15 @@ export function useShortcuts() {
       "global.presets": () => useWorkbench.getState().setPresetLauncherOpen(true),
       "global.settings": () => useWorkbench.getState().setSettingsOpen(true),
       "global.help": () => useWorkbench.getState().setKeybindingHelpOpen(true),
+      "project-settings.open": () => {
+        const state = useWorkbench.getState();
+        const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+        if (!ws) return;
+        state.openProjectSettings({ projectId: ws.projectId });
+      },
+      "project-settings.edit-file": () => {
+        /* delegated to palette entry — no global shortcut */
+      },
     };
 
     // Workspace index jump 1-9
@@ -82,6 +91,7 @@ export function useShortcuts() {
 
     const bindings: Record<string, (e: KeyboardEvent) => void> = { ...indexJumps };
     for (const kb of KEYBINDINGS) {
+      if (!kb.keys) continue;
       bindings[kb.keys] = (e: KeyboardEvent) => {
         e.preventDefault();
         handlers[kb.id as ActionId]();
