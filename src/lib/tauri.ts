@@ -45,9 +45,10 @@ export async function workspaceDestroy(workspaceId: string): Promise<void> {
 export async function ptySpawn(
   workspaceId: string,
   command: string,
-  args: string[]
+  args: string[],
+  cwd?: string,
 ): Promise<{ ptyId: string }> {
-  return invoke("pty_spawn", { workspaceId, command, args });
+  return invoke("pty_spawn", { workspaceId, command, args, cwd });
 }
 
 export async function ptyWrite(ptyId: string, data: string): Promise<void> {
@@ -60,6 +61,10 @@ export async function ptyResize(ptyId: string, cols: number, rows: number): Prom
 
 export async function ptyKill(ptyId: string): Promise<void> {
   return invoke("pty_kill", { ptyId });
+}
+
+export async function defaultShell(): Promise<string> {
+  return invoke("default_shell");
 }
 
 export async function configLoad(projectPath: string): Promise<MaverickConfig> {

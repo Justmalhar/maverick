@@ -35,7 +35,11 @@ describe("tauri command wrappers", () => {
   it("pty commands", async () => {
     await api.ptySpawn("w1", "bash", ["-l"]);
     expect(invoke).toHaveBeenLastCalledWith("pty_spawn", {
-      workspaceId: "w1", command: "bash", args: ["-l"],
+      workspaceId: "w1", command: "bash", args: ["-l"], cwd: undefined,
+    });
+    await api.ptySpawn("w1", "bash", ["-l"], "/Users/me/Desktop");
+    expect(invoke).toHaveBeenLastCalledWith("pty_spawn", {
+      workspaceId: "w1", command: "bash", args: ["-l"], cwd: "/Users/me/Desktop",
     });
     await api.ptyWrite("pty1", "data");
     expect(invoke).toHaveBeenLastCalledWith("pty_write", { ptyId: "pty1", data: "data" });
@@ -43,6 +47,13 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("pty_resize", { ptyId: "pty1", cols: 80, rows: 24 });
     await api.ptyKill("pty1");
     expect(invoke).toHaveBeenLastCalledWith("pty_kill", { ptyId: "pty1" });
+  });
+
+  it("defaultShell forwards to the default_shell command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("/bin/zsh" as never);
+    const shell = await api.defaultShell();
+    expect(invoke).toHaveBeenLastCalledWith("default_shell");
+    expect(shell).toBe("/bin/zsh");
   });
 
   it("config and messages", async () => {
