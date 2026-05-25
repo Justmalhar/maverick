@@ -67,6 +67,15 @@ describe("TitleBar", () => {
     expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(!before);
   });
 
+  it("startDrag silently swallows errors when getCurrentWindow rejects", async () => {
+    startDragging.mockRejectedValueOnce(new Error("no Tauri"));
+    renderWithProviders(<TitleBar />);
+    const header = screen.getByTestId("titlebar");
+    header.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    await new Promise((r) => setTimeout(r, 0));
+    // No assertion needed — just verify no unhandled rejection
+  });
+
   it("clicking Panel toggle calls togglePanel", async () => {
     const before = useWorkbench.getState().layout.panelVisible;
     renderWithProviders(<TitleBar />);

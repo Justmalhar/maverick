@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { fireEvent, act, createEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
@@ -73,6 +74,16 @@ describe("TaskComposer", () => {
     expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
   });
 
+  it("shows branch error in select placeholder when gitBranches fails", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("branch fail"));
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-branch")).toHaveTextContent("Could not load branches")
+    );
+  });
+
   it("gitBranches called when project selected", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(["main", "dev"] as never);
     setup();
@@ -128,5 +139,56 @@ describe("TaskComposer", () => {
 
     await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
     expect((screen.getByTestId("composer-prompt") as HTMLTextAreaElement).value).toBe("do work");
+  });
+
+  it("dragOver adds ring style to composer", () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    fireEvent.dragOver(composer);
+    expect(composer.className).toContain("ring-1");
+  });
+
+  it("dragLeave removes ring style from composer", () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    fireEvent.dragOver(composer);
+    expect(composer.className).toContain("ring-1");
+    fireEvent.dragLeave(composer);
+    expect(composer.className).not.toContain("ring-1");
+  });
+
+  it("drop with text file creates a utf8 attachment", async () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    const mockFile = { name: "notes.txt", type: "text/plain", size: 100, text: vi.fn().mockResolvedValue("hello content"), arrayBuffer: vi.fn() };
+    const dropEv = createEvent.drop(composer);
+    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
+    await act(async () => fireEvent(composer, dropEv));
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("notes.txt");
+  });
+
+  it("drop with binary file creates a base64 attachment", async () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    const buf = new Uint8Array([0, 1, 2]).buffer;
+    const mockFile = { name: "image.png", type: "image/png", size: 3, text: vi.fn(), arrayBuffer: vi.fn().mockResolvedValue(buf) };
+    const dropEv = createEvent.drop(composer);
+    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
+    await act(async () => fireEvent(composer, dropEv));
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("image.png");
+  });
+
+  it("drop with oversized file shows error and no attachment", async () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    const mockFile = { name: "huge.bin", type: "application/octet-stream", size: 3 * 1024 * 1024, text: vi.fn(), arrayBuffer: vi.fn() };
+    const dropEv = createEvent.drop(composer);
+    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
+    await act(async () => fireEvent(composer, dropEv));
+    await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-error").textContent).toContain("too large");
+    expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
   });
 });

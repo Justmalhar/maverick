@@ -40,6 +40,13 @@ describe("useProjectSettingsStore", () => {
     expect(useProjectSettingsStore.getState().status).toBe("loaded");
   });
 
+  it("load surfaces error and sets status:error when invoke fails", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("not found"));
+    await useProjectSettingsStore.getState().load("missing");
+    expect(useProjectSettingsStore.getState().status).toBe("error");
+    expect(useProjectSettingsStore.getState().lastError).toContain("not found");
+  });
+
   it("flush surfaces error and keeps dirty", async () => {
     useProjectSettingsStore.setState({ data: STUB, projectId: "p1", status: "loaded" });
     useProjectSettingsStore.getState().patch({ remote: "upstream" });

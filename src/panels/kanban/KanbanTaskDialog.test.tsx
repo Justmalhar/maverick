@@ -72,4 +72,11 @@ describe("KanbanTaskDialog", () => {
     await userEvent.type(due, "2026-01-01");
     expect(due.value).toBeTruthy();
   });
+
+  it("changing the branch input wires through setBranch", async () => {
+    renderWithProviders(<KanbanTaskDialog open onOpenChange={() => {}} task={{ labels: [] }} onSubmit={() => {}} />);
+    const branch = screen.getByTestId("kanban-branch") as HTMLInputElement;
+    await userEvent.type(branch, "feature/test");
+    expect(branch.value).toBe("feature/test");
+  });
 });

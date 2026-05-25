@@ -45,4 +45,16 @@ describe("ProjectFilterTabs", () => {
     expect(screen.queryByTestId("filter-project-p5")).not.toBeInTheDocument();
     expect(screen.queryByTestId("filter-project-p6")).not.toBeInTheDocument();
   });
+
+  it("clicking overflow item calls onFilterChange with that project's id", async () => {
+    const projects = Array.from({ length: 7 }, (_, i) =>
+      makeProject({ id: `p${i}`, name: `P${i}` })
+    );
+    useWorkbench.setState({ ...initial, projects });
+    const onChange = vi.fn();
+    renderWithProviders(<ProjectFilterTabs filterProjectId={null} onFilterChange={onChange} />);
+    await userEvent.click(screen.getByTestId("filter-more"));
+    await userEvent.click(screen.getByTestId("filter-overflow-p5"));
+    expect(onChange).toHaveBeenCalledWith("p5");
+  });
 });

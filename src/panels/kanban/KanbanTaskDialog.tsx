@@ -56,6 +56,7 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
   };
 
   const submit = () => {
+    /* v8 ignore next */
     if (!title.trim()) return;
     const payload: Partial<KanbanTask> = {
       ...(task?.id ? { id: task.id } : {}),

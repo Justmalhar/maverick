@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "@/test/utils";
+
+vi.mock("@tauri-apps/plugin-shell", () => ({ open: vi.fn() }));
 import { PanelTabs } from "./PanelTabs";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
@@ -15,8 +17,8 @@ describe("PanelTabs", () => {
   it("invokes onChange when a tab is clicked", async () => {
     const onChange = vi.fn();
     renderWithProviders(<PanelTabs value="setup" onChange={onChange} />);
-    await userEvent.click(screen.getByTestId("panel-tab-setup"));
-    expect(onChange).toHaveBeenCalledWith("setup");
+    await userEvent.click(screen.getByTestId("panel-tab-run"));
+    expect(onChange).toHaveBeenCalledWith("run");
   });
 
   it("collapse button toggles panel in store", async () => {
@@ -36,5 +38,19 @@ describe("PanelTabs", () => {
     });
     renderWithProviders(<PanelTabs value="setup" onChange={() => {}} />);
     expect(screen.getByRole("button", { name: /Open preview/i })).toBeInTheDocument();
+  });
+
+  it("clicking Open preview button triggers dynamic shell import without crashing", async () => {
+    useWorkbench.setState({
+      activeWorkspaceId: "w1",
+      workspaces: [{ id: "w1", projectId: "p1", branch: "main", agentBackend: "claude", worktreePath: "/p/w", status: "active", sessionId: "s1" }],
+    } as never);
+    useProjectSettingsStore.setState({
+      data: { name: "demo", rootPath: "/p", workspaces: { branchFrom: "origin/main", filesToCopy: [] }, remote: "origin", previewUrl: "http://localhost:3000", scripts: { setup: "", run: "", archive: "" }, preferences: {} },
+      projectId: "p1", status: "loaded", dirty: {}, lastError: null,
+    });
+    renderWithProviders(<PanelTabs value="setup" onChange={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: /Open preview/i }));
+    // Dynamic import fires but shell.open is mocked — no crash is the criterion
   });
 });

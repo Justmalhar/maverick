@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, fireEvent } from "@/test/utils";
 import GeneralSettings from "./GeneralSettings";
-import { _resetSettingsStoreForTests } from "@/lib/stores/settings";
+import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 
 describe("GeneralSettings", () => {
   beforeEach(() => _resetSettingsStoreForTests());
@@ -19,5 +19,18 @@ describe("GeneralSettings", () => {
     expect(toggle).toBeChecked();
     await userEvent.click(toggle);
     expect(toggle).not.toBeChecked();
+  });
+
+  it("shows custom binary path input when defaultBackend is 'other'", () => {
+    useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
+    renderWithProviders(<GeneralSettings />);
+    expect(screen.getByTestId("general-default-backend-binpath")).toBeInTheDocument();
+  });
+
+  it("custom binary path input onChange updates the store value", () => {
+    useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
+    renderWithProviders(<GeneralSettings />);
+    fireEvent.change(screen.getByTestId("general-default-backend-binpath"), { target: { value: "/usr/local/bin/myagent" } });
+    expect(useSettingsStore.getState().values["general.defaultBackendBinPath"]).toBe("/usr/local/bin/myagent");
   });
 });

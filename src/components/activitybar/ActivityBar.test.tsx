@@ -16,6 +16,18 @@ beforeEach(() => {
 });
 
 describe("ActivityBar", () => {
+  it("calls setActivityView when sidebar is hidden (makes it visible again)", async () => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      layout: { ...useWorkbench.getState().layout, activityView: "projects", primarySideBarVisible: false },
+    });
+    renderWithProviders(<ActivityBar />);
+    await userEvent.click(screen.getByTestId("activitybar-projects"));
+    // setActivityView always opens the sidebar — so it becomes true
+    expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(true);
+    expect(useWorkbench.getState().layout.activityView).toBe("projects");
+  });
+
   it("toggles the primary sidebar when clicking the active view", async () => {
     renderWithProviders(<ActivityBar />);
     await userEvent.click(screen.getByTestId("activitybar-projects"));

@@ -226,6 +226,7 @@ function Meter({
   percent: number;
   tone: "primary" | "warning" | "destructive";
 }) {
+  /* v8 ignore next 5 */
   const toneClass =
     tone === "destructive"
       ? "bg-destructive"

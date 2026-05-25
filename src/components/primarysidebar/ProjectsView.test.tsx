@@ -17,10 +17,9 @@ describe("ProjectsView", () => {
   it("shows empty state when no projects", () => {
     renderWithProviders(<ProjectsView />);
     expect(screen.getByText("No projects yet")).toBeInTheDocument();
-    expect(screen.getByText("none configured")).toBeInTheDocument();
   });
 
-  it("renders backend chips and project list", () => {
+  it("renders project list", () => {
     useWorkbench.setState({
       ...initial,
       projects: [makeProject({ id: "p1", name: "demo" })],
@@ -28,7 +27,6 @@ describe("ProjectsView", () => {
     });
     renderWithProviders(<ProjectsView />);
     expect(screen.getByText("demo")).toBeInTheDocument();
-    expect(screen.getByText("claude")).toBeInTheDocument();
   });
 
   it("clicking add prompts and invokes projectAdd; cancel is a no-op", async () => {
@@ -56,58 +54,51 @@ describe("ProjectsView", () => {
     errSpy.mockRestore();
   });
 
-  it("onAddWorkspace prompts for branch & backend then creates", async () => {
+  it("onAddWorkspace creates workspace with hardcoded defaults", async () => {
     useWorkbench.setState({
       ...initial,
       projects: [makeProject({ id: "p1", name: "demo" })],
       backends: [makeBackend({ id: "claude", name: "claude" })],
     });
-    const promptSpy = vi.spyOn(window, "prompt");
-    promptSpy.mockReturnValueOnce("main").mockReturnValueOnce("claude");
-    vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude", worktreePath: "", status: "active", sessionId: "s" } as never);
+    vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s" } as never);
     renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", { projectId: "p1", branch: "main", backend: "claude" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", { projectId: "p1", branch: "main", backend: "claude-code" }));
+  });
 
-    // cancel branch
-    promptSpy.mockReset();
-    promptSpy.mockReturnValueOnce(null);
-    await userEvent.click(screen.getByLabelText("New workspace"));
-
-    // cancel backend
-    promptSpy.mockReset();
-    promptSpy.mockReturnValueOnce("main").mockReturnValueOnce(null);
-    await userEvent.click(screen.getByLabelText("New workspace"));
-
-    // failing create logs
+  it("logs an error when workspace creation fails", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "demo" })],
+      backends: [makeBackend({ id: "claude", name: "claude" })],
+    });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    promptSpy.mockReset();
-    promptSpy.mockReturnValueOnce("main").mockReturnValueOnce("claude");
     vi.mocked(invoke).mockRejectedValueOnce(new Error("fail"));
+    renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
     await waitFor(() => expect(errSpy).toHaveBeenCalled());
-    promptSpy.mockRestore();
     errSpy.mockRestore();
   });
 
-  it("uses default backend label fallback when no backends configured", async () => {
-    useWorkbench.setState({ ...initial, projects: [makeProject({ id: "p1" })], backends: [] });
-    const promptSpy = vi.spyOn(window, "prompt");
-    promptSpy.mockReturnValueOnce("main").mockReturnValueOnce("claude-code");
-    vi.mocked(invoke).mockResolvedValueOnce({ id: "w", projectId: "p1", branch: "main", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "" } as never);
-    renderWithProviders(<ProjectsView />);
-    await userEvent.click(screen.getByLabelText("New workspace"));
-    expect(promptSpy).toHaveBeenNthCalledWith(2, "Backend", "claude-code");
-    promptSpy.mockRestore();
-  });
-
-  it("renders idle backend dot", () => {
+  it("renders project when backend is idle", () => {
     useWorkbench.setState({
       ...initial,
-      projects: [makeProject({ id: "p1" })],
+      projects: [makeProject({ id: "p1", name: "demo" })],
       backends: [makeBackend({ id: "claude", name: "claude", active: false })],
     });
     renderWithProviders(<ProjectsView />);
-    expect(screen.getByText("claude")).toBeInTheDocument();
+    expect(screen.getByText("demo")).toBeInTheDocument();
+  });
+
+  it("onSettings callback opens project settings for that project", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "demo" })],
+      backends: [],
+    });
+    renderWithProviders(<ProjectsView />);
+    await userEvent.click(screen.getByLabelText("Project settings"));
+    expect(useWorkbench.getState().projectSettings.open).toBe(true);
+    expect(useWorkbench.getState().projectSettings.projectId).toBe("p1");
   });
 });

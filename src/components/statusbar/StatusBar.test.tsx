@@ -13,8 +13,19 @@ beforeEach(() => {
 describe("StatusBar", () => {
   it("renders no backends placeholder + workspace count", () => {
     renderWithProviders(<StatusBar />);
-    expect(screen.getByTestId("statusbar-backends-empty")).toHaveTextContent("no backends");
-    expect(screen.getByTestId("statusbar-workspaces")).toHaveTextContent("0 workspaces");
+    expect(screen.getByTestId("statusbar-backends")).toHaveTextContent("no backends");
+    expect(screen.getByTestId("statusbar-workspaces")).toHaveTextContent("0 ws");
+  });
+
+  it("shows N backends when multiple are configured but none active", () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude", active: false }), makeBackend({ id: "codex", active: false })],
+      workspaces: [],
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<StatusBar />);
+    expect(screen.getByTestId("statusbar-backends")).toHaveTextContent("2 backends");
   });
 
   it("renders active backend chip(s) and branch when active workspace exists", () => {
@@ -25,9 +36,8 @@ describe("StatusBar", () => {
       activeWorkspaceId: "w1",
     });
     renderWithProviders(<StatusBar />);
-    expect(screen.getByTestId("statusbar-backend-claude")).toHaveTextContent("claude");
-    expect(screen.getByTestId("statusbar-backend-codex")).toBeInTheDocument();
+    expect(screen.getByTestId("statusbar-backends")).toHaveTextContent("claude");
     expect(screen.getByTestId("statusbar-branch")).toHaveTextContent("feat");
-    expect(screen.getByTestId("statusbar-workspaces")).toHaveTextContent("1 workspace");
+    expect(screen.getByTestId("statusbar-workspaces")).toHaveTextContent("1 ws");
   });
 });

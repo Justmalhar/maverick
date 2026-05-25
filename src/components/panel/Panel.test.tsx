@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen } from "@/test/utils";
+import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { Panel } from "./Panel";
+import { useScriptRunner } from "@/hooks/useScriptRunner";
+
+vi.mock("@/hooks/useScriptRunner");
 
 const BASE_SETTINGS = (overrides: object = {}) => ({
   name: "demo", rootPath: "/p",
@@ -17,6 +20,10 @@ const BASE_SETTINGS = (overrides: object = {}) => ({
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  vi.mocked(useScriptRunner).mockReturnValue({
+    state: "idle", exitCode: null, startedAt: null, output: "",
+    start: vi.fn(), stop: vi.fn(),
+  });
   useWorkbench.setState({
     projects: [{ id: "p1", name: "demo", path: "/p", createdAt: 0 }],
     workspaces: [{ id: "w1", projectId: "p1", branch: "main", agentBackend: "claude", worktreePath: "/p/w", status: "active", sessionId: "s1" }],
@@ -42,10 +49,34 @@ describe("Panel", () => {
     expect(ps.focusField).toBe("setup");
   });
 
-  it("configured setup → Run setup button visible", () => {
+  it("configured setup → Run setup button visible when idle", () => {
     useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
     renderWithProviders(<Panel />);
     expect(screen.getByRole("button", { name: /Run setup/i })).toBeInTheDocument();
+  });
+
+  it("Stop button visible when runner is running", () => {
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "running", exitCode: null, startedAt: Date.now(), output: "running...",
+      start: vi.fn(), stop: vi.fn(),
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    renderWithProviders(<Panel />);
+    expect(screen.getByRole("button", { name: /Stop/i })).toBeInTheDocument();
+  });
+
+  it("shows exit error banner when runner exited with non-zero code", async () => {
+    const mockStart = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "exited", exitCode: 1, startedAt: Date.now(), output: "error output",
+      start: mockStart, stop: vi.fn(),
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    renderWithProviders(<Panel />);
+    const banner = await waitFor(() => screen.getByText(/Exited 1/i));
+    expect(banner).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Retry/i }));
+    expect(mockStart).toHaveBeenCalled();
   });
 
   it("Run tab CTA opens ProjectSettings to scripts/run", async () => {
@@ -55,5 +86,41 @@ describe("Panel", () => {
     const ps = useWorkbench.getState().projectSettings;
     expect(ps.initialSection).toBe("scripts");
     expect(ps.focusField).toBe("run");
+  });
+
+  it("Run button click starts the runner", async () => {
+    const mockStart = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "idle", exitCode: null, startedAt: null, output: "",
+      start: mockStart, stop: vi.fn(),
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    renderWithProviders(<Panel />);
+    await userEvent.click(screen.getByRole("button", { name: /Run setup/i }));
+    expect(mockStart).toHaveBeenCalled();
+  });
+
+  it("Stop button click stops the runner", async () => {
+    const mockStop = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "running", exitCode: null, startedAt: Date.now(), output: "running...",
+      start: vi.fn(), stop: mockStop,
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    renderWithProviders(<Panel />);
+    await userEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  it("shows empty state CTA when no active workspace", () => {
+    useWorkbench.setState({ ...useWorkbench.getState(), activeWorkspaceId: null });
+    renderWithProviders(<Panel />);
+    expect(screen.getByRole("button", { name: /Open Project Settings/i })).toBeInTheDocument();
+  });
+
+  it("no-workspace CTA button is clickable (no-op)", async () => {
+    useWorkbench.setState({ ...useWorkbench.getState(), activeWorkspaceId: null });
+    renderWithProviders(<Panel />);
+    await userEvent.click(screen.getByRole("button", { name: /Open Project Settings/i }));
   });
 });

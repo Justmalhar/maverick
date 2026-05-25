@@ -47,7 +47,7 @@ describe("CommandPalette", () => {
     ["global.presets", (s) => expect(s.presetLauncherOpen).toBe(true)],
     ["layout.toggleSidebar", (s) => expect(s.layout.primarySideBarVisible).toBe(false)],
     ["layout.toggleAuxBar", (s) => expect(s.layout.auxiliaryBarVisible).toBe(false)],
-    ["layout.togglePanel", (s) => expect(s.layout.panelVisible).toBe(true)],
+    ["layout.togglePanel", (s) => expect(s.layout.panelVisible).toBe(false)],
   ];
 
   it.each(cases)("dispatches command %s", async (id, check) => {
@@ -76,5 +76,29 @@ describe("CommandPalette", () => {
     renderWithProviders(<CommandPalette />);
     await userEvent.click(screen.getByTestId("commandpalette-item-editor.toggleMode"));
     expect(useWorkbench.getState().editorModes["wA"]).toBe("terminal");
+  });
+
+  it("project-settings.open opens project settings when active workspace exists", async () => {
+    useWorkbench.setState({
+      ...initial,
+      commandPaletteOpen: true,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      activeWorkspaceId: "w1",
+    });
+    renderWithProviders(<CommandPalette />);
+    await userEvent.click(screen.getByTestId("commandpalette-item-project-settings.open"));
+    expect(useWorkbench.getState().projectSettings.open).toBe(true);
+  });
+
+  it("project-settings.open is a no-op when no active workspace", async () => {
+    useWorkbench.setState({
+      ...initial,
+      commandPaletteOpen: true,
+      workspaces: [],
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<CommandPalette />);
+    await userEvent.click(screen.getByTestId("commandpalette-item-project-settings.open"));
+    expect(useWorkbench.getState().projectSettings.open).toBe(false);
   });
 });

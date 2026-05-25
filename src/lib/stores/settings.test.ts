@@ -98,4 +98,28 @@ describe("useSettings", () => {
     const { result } = renderHook(() => useSettings("general.defaultBackend", "claude"));
     expect(result.current[0]).toBe("codex");
   });
+
+  it("hydrate resets to empty values when settings_read_all throws", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("sidecar unavailable"));
+    await act(async () => {
+      await useSettingsStore.getState().hydrate();
+    });
+    expect(useSettingsStore.getState().values).toEqual({});
+  });
+
+  it("rolls back to previous non-undefined value when sidecar returns ok:false", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useSettings("general.defaultBackend", "claude"));
+    // Set an initial value so previous is defined
+    act(() => result.current[1]("codex"));
+    await act(async () => { vi.advanceTimersByTime(250); });
+    await waitFor(() => expect(result.current[0]).toBe("codex"));
+
+    // Now update again but have sidecar reject → should roll back to "codex"
+    vi.mocked(invoke).mockResolvedValueOnce({ ok: false, error: "conflict" });
+    act(() => result.current[1]("aider"));
+    await act(async () => { vi.advanceTimersByTime(250); });
+    await waitFor(() => expect(result.current[0]).toBe("codex"));
+    expect(useSettingsStore.getState().status).toBe("error");
+  });
 });

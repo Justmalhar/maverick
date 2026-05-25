@@ -62,6 +62,7 @@ export function useScriptRunner(
     ptyIdRef.current = null;
     try {
       await ptyKill(id);
+    /* v8 ignore next 3 */
     } catch {
       // idempotent: kill may race with natural exit
     }

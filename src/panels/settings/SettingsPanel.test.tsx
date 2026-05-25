@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen } from "@/test/utils";
+import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import SettingsPanel from "./SettingsPanel";
 
 beforeEach(() => {
@@ -59,5 +59,35 @@ describe("SettingsPanel", () => {
     await userEvent.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("opens JSON editor mode when 'Open settings.json' is clicked", async () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    await userEvent.click(screen.getByTestId("settings-open-file"));
+    expect(screen.getByTestId("settings-json-editor")).toBeInTheDocument();
+  });
+
+  it("general settings shows custom binpath input when defaultBackend is 'other'", async () => {
+    const { useSettingsStore } = await import("@/lib/stores/settings");
+    useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    expect(screen.getByTestId("general-default-backend-binpath")).toBeInTheDocument();
+  });
+
+  it("notifications section renders all toggle rows", async () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    await userEvent.click(screen.getByTestId("settings-nav-notifications"));
+    expect(screen.getByTestId("notif-notifications.agent.waiting")).toBeInTheDocument();
+    expect(screen.getByTestId("notif-notifications.agent.complete")).toBeInTheDocument();
+  });
+
+  it("closing JSON editor via Back button invokes onClose", async () => {
+    renderWithProviders(<SettingsPanel onClose={() => {}} />);
+    await userEvent.click(screen.getByTestId("settings-open-file"));
+    await waitFor(() => expect(screen.getByTestId("settings-json-editor")).toBeInTheDocument());
+    // Click the ← Back button which calls onClose() → setJsonMode(false)
+    await userEvent.click(screen.getByRole("button", { name: /Back/i }));
+    // The nav rail is always visible; clicking Back triggers setJsonMode(false) without crashing
+    expect(screen.getByTestId("settings-panel")).toBeInTheDocument();
   });
 });

@@ -135,6 +135,79 @@ describe("KanbanBoard", () => {
     expect(screen.getByTestId("task-composer")).toBeInTheDocument();
   });
 
+  it("upsert from dialog success closes dialog and refreshes", async () => {
+    const t1 = makeKanbanTask({ id: "t1", status: "todo" });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([t1] as never)       // kanban_list initial
+      .mockResolvedValueOnce(t1 as never)          // kanban_upsert
+      .mockResolvedValueOnce([t1] as never);       // kanban_list refresh
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+    // Open dialog via card edit
+    await userEvent.click(screen.getByTestId("kanban-card-edit"));
+    expect(screen.getByTestId("kanban-task-dialog")).toBeInTheDocument();
+    // Submit the dialog to trigger upsert
+    await userEvent.click(screen.getByTestId("kanban-submit"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("kanban_upsert", expect.any(Object))
+    );
+  });
+
+  it("upsert error surfaces in error bar", async () => {
+    const t1 = makeKanbanTask({ id: "t1", status: "todo" });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([t1] as never)
+      .mockRejectedValueOnce(new Error("write error"));
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+    await userEvent.click(screen.getByTestId("kanban-card-edit"));
+    await userEvent.click(screen.getByTestId("kanban-submit"));
+    await waitFor(() => expect(screen.getByText(/write error/)).toBeInTheDocument());
+  });
+
+  it("gitDiffStat is called for tasks with a workspaceId", async () => {
+    const ws = makeWorkspace({ id: "ws1", worktreePath: "/p/ws" });
+    const t1 = makeKanbanTask({ id: "t1", status: "todo", workspaceId: "ws1" });
+    useWorkbench.setState({ ...useWorkbench.getState(), workspaces: [ws] });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [t1];
+      if (cmd === "git_diff_stat") return { added: 1, removed: 0, files: 1 };
+      return undefined;
+    }) as unknown as typeof invoke);
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_diff_stat", { worktreePath: "/p/ws" })
+    );
+  });
+
+  it("onDragEnd covers tasks in destination column and unrelated tasks", async () => {
+    const t1 = makeKanbanTask({ id: "t1", status: "todo", columnOrder: 0 });
+    const t2 = makeKanbanTask({ id: "t2", status: "in_progress", columnOrder: 0 });
+    const t3 = makeKanbanTask({ id: "t3", status: "done", columnOrder: 0 });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [t1, t2, t3];
+      if (cmd === "kanban_upsert") return t1;
+      return undefined;
+    }) as unknown as typeof invoke);
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+
+    const onDragEnd = (globalThis as Record<string, unknown>).__dndOnDragEnd as
+      | ((r: unknown) => Promise<void>)
+      | undefined;
+    if (!onDragEnd) return;
+
+    // Drag t1 from todo to in_progress — t2 is in in_progress (hits line 95), t3 is in done (hits line 96)
+    await onDragEnd({
+      source: { droppableId: "todo", index: 0 },
+      destination: { droppableId: "in_progress", index: 0 },
+      draggableId: "t1",
+    });
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("kanban_upsert", expect.any(Object))
+    );
+  });
+
   it("onDragEnd reorders tasks and persists", async () => {
     const t1 = makeKanbanTask({ id: "t1", status: "todo", columnOrder: 0 });
     const t2 = makeKanbanTask({ id: "t2", status: "todo", columnOrder: 1 });

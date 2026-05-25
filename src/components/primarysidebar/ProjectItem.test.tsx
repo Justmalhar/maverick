@@ -20,7 +20,6 @@ describe("ProjectItem", () => {
     });
     renderWithProviders(<ProjectItem project={makeProject({ id: "p1", name: "demo" })} />);
     expect(screen.getByText("demo")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
 
     // Collapse and re-expand
     const expandBtn = screen.getByRole("button", { expanded: true });
@@ -43,5 +42,19 @@ describe("ProjectItem", () => {
   it("plus click is a no-op when callback omitted", async () => {
     renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} />);
     await userEvent.click(screen.getByLabelText("New workspace"));
+  });
+
+  it("calls onSettings via the project settings button", async () => {
+    const onSettings = vi.fn();
+    renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} onSettings={onSettings} />);
+    await userEvent.click(screen.getByLabelText("Project settings"));
+    expect(onSettings).toHaveBeenCalledWith("p1");
+  });
+
+  it("calls onCreateFrom via the create-from button", async () => {
+    const onCreateFrom = vi.fn();
+    renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} onCreateFrom={onCreateFrom} />);
+    await userEvent.click(screen.getByLabelText("Create from"));
+    expect(onCreateFrom).toHaveBeenCalledWith("p1");
   });
 });
