@@ -144,11 +144,11 @@ describe("useShortcuts", () => {
     act(() => fire("$mod+Shift+g"));
     expect(useWorkbench.getState().layout.activityView).toBe("git");
     act(() => fire("$mod+Shift+k"));
-    expect(useWorkbench.getState().layout.activityView).toBe("kanban");
+    expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
     act(() => fire("$mod+Shift+b"));
-    expect(useWorkbench.getState().layout.activityView).toBe("browser");
+    expect(useWorkbench.getState().activeSystemTab).toBe("browser");
     act(() => fire("$mod+Shift+a"));
-    expect(useWorkbench.getState().layout.activityView).toBe("automations");
+    expect(useWorkbench.getState().activeSystemTab).toBe("automations");
     act(() => fire("$mod+Shift+p"));
     expect(useWorkbench.getState().commandPaletteOpen).toBe(true);
     act(() => fire("$mod+p"));
@@ -171,5 +171,21 @@ describe("useShortcuts", () => {
     act(() => fire("$mod+9"));
     // unchanged
     expect(useWorkbench.getState().activeWorkspaceId).toBe("b");
+  });
+
+  it("project-settings.open opens settings for active workspace project", () => {
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "ws1", projectId: "p1" })]);
+    useWorkbench.getState().setActiveWorkspace("ws1");
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+,"));
+    const { projectSettings } = useWorkbench.getState();
+    expect(projectSettings.open).toBe(true);
+    expect(projectSettings.projectId).toBe("p1");
+  });
+
+  it("project-settings.open is a no-op when no active workspace", () => {
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+,"));
+    expect(useWorkbench.getState().projectSettings.open).toBe(false);
   });
 });

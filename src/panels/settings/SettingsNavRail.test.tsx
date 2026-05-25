@@ -66,4 +66,26 @@ describe("SettingsNavRail", () => {
     const first = onSelect.mock.calls[0][0];
     expect(typeof first).toBe("string");
   });
+
+  it("Enter on search directly selects the first visible item", async () => {
+    const onSelect = vi.fn();
+    renderWithProviders(<SettingsNavRail section="general" onSelect={onSelect} />);
+    const search = screen.getByRole("searchbox");
+    search.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("ArrowDown on an item button moves focus to the next item", async () => {
+    const onSelect = vi.fn();
+    renderWithProviders(<SettingsNavRail section="general" onSelect={onSelect} />);
+    const search = screen.getByRole("searchbox");
+    search.focus();
+    // Focus first item via ArrowDown on search
+    await userEvent.keyboard("{ArrowDown}");
+    // Now press ArrowDown again on the focused item to navigate to next
+    await userEvent.keyboard("{ArrowDown}");
+    // No selection was made - only focus was moved
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

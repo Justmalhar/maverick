@@ -44,7 +44,7 @@ describe("AgentView", () => {
   it("clears messages list when messages fetch fails", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("fail"));
     renderWithProviders(<AgentView workspace={makeWorkspace({ id: "w1", sessionId: "s1" })} />);
-    await waitFor(() => expect(screen.getByText("Send a prompt to start the conversation")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Start a conversation")).toBeInTheDocument());
   });
 
   it("does nothing when sessionId is empty", () => {

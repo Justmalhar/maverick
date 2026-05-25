@@ -59,14 +59,23 @@ export function ProjectsView() {
 
       <ScrollArea className="flex-1">
         <div className="py-1">
-          {projects.map((p) => (
-            <ProjectItem
-              key={p.id}
-              project={p}
-              onAddWorkspace={onAddWorkspace}
-              onSettings={(projectId) => openProjectSettings({ projectId })}
-            />
-          ))}
+          {projects.length === 0 ? (
+            <p
+              data-testid="projects-empty"
+              className="px-4 py-3 text-xs text-muted-foreground"
+            >
+              No projects yet
+            </p>
+          ) : (
+            projects.map((p) => (
+              <ProjectItem
+                key={p.id}
+                project={p}
+                onAddWorkspace={onAddWorkspace}
+                onSettings={(projectId) => openProjectSettings({ projectId })}
+              />
+            ))
+          )}
         </div>
       </ScrollArea>
 

@@ -60,4 +60,35 @@ describe("ProjectSettingsPanel", () => {
     await userEvent.click(screen.getByTestId("project-nav-scripts"));
     expect(screen.getByTestId("project-scripts")).toBeInTheDocument();
   });
+
+  it("shows saving status in footer when store is saving", async () => {
+    useProjectSettingsStore.setState({
+      projectId: "p1", status: "saving", data: STUB, dirty: {}, lastError: null,
+    });
+    renderWithProviders(
+      <ProjectSettingsPanel open projectId="p1" onOpenChange={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument());
+  });
+
+  it("shows error status in footer when store has error", async () => {
+    useProjectSettingsStore.setState({
+      projectId: "p1", status: "error", data: STUB, dirty: {}, lastError: "save failed",
+    });
+    renderWithProviders(
+      <ProjectSettingsPanel open projectId="p1" onOpenChange={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument());
+  });
+
+  it("resets store when panel closes (open transitions to false)", async () => {
+    const { rerender } = renderWithProviders(
+      <ProjectSettingsPanel open projectId="p1" onOpenChange={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument());
+    rerender(<ProjectSettingsPanel open={false} projectId="p1" onOpenChange={() => {}} />);
+    await waitFor(() =>
+      expect(useProjectSettingsStore.getState().status).toBe("idle"),
+    );
+  });
 });

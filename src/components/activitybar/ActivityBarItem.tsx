@@ -47,7 +47,7 @@ export function ActivityBarItem({
           <Icon className="h-5 w-5" strokeWidth={1.6} />
           {badge && badge > 0 ? (
             <span className="absolute right-2 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
-              {badge > 99 ? "99+" : badge}
+              {badge > 9 ? "9+" : badge}
             </span>
           ) : null}
         </button>

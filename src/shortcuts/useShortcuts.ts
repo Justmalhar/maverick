@@ -10,7 +10,7 @@ export function useShortcuts() {
   const store = useWorkbench();
 
   useEffect(() => {
-    const handlers: Record<ActionId, () => void> = {
+    const handlers: Partial<Record<ActionId, () => void>> = {
       "workspace.next": () => {
         const { workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkbench.getState();
         if (!workspaces.length) return;
@@ -72,9 +72,6 @@ export function useShortcuts() {
         if (!ws) return;
         state.openProjectSettings({ projectId: ws.projectId });
       },
-      "project-settings.edit-file": () => {
-        /* delegated to palette entry — no global shortcut */
-      },
     };
 
     // Workspace index jump 1-9
@@ -94,7 +91,7 @@ export function useShortcuts() {
       if (!kb.keys) continue;
       bindings[kb.keys] = (e: KeyboardEvent) => {
         e.preventDefault();
-        handlers[kb.id as ActionId]();
+        handlers[kb.id as ActionId]?.();
       };
     }
 

@@ -42,7 +42,7 @@ describe("FilesView", () => {
     expect(screen.getByText("readme.md")).toBeInTheDocument();
   });
 
-  it("shows 'No files' when the tree is empty", async () => {
+  it("shows 'Empty worktree' when the tree is empty", async () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
@@ -50,7 +50,7 @@ describe("FilesView", () => {
     });
     vi.mocked(invoke).mockResolvedValueOnce([] as never);
     renderWithProviders(<FilesView />);
-    await waitFor(() => expect(screen.getByText("No files")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Empty worktree")).toBeInTheDocument());
   });
 
   it("clears entries when fetch fails", async () => {
@@ -61,6 +61,6 @@ describe("FilesView", () => {
     });
     vi.mocked(invoke).mockRejectedValueOnce(new Error("boom"));
     renderWithProviders(<FilesView />);
-    await waitFor(() => expect(screen.getByText("No files")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Empty worktree")).toBeInTheDocument());
   });
 });

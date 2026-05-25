@@ -1,8 +1,6 @@
 # Project Settings — Design Spec
 
-**Status:** Approved 2026-05-23 — Malhar Ujawane
-**Owner:** Frontend + Sidecar
-**Tracking:** docs/superpowers/plans/2026-05-23-project-settings.md (to be written)
+**Status:** Approved 2026-05-23 — Malhar Ujawane **Owner:** Frontend + Sidecar **Tracking:** docs/superpowers/plans/2026-05-23-project-settings.md (to be written)
 
 ## Goal
 
@@ -66,11 +64,13 @@ Per-project configuration UI ("Project Settings") that mirrors Conductor's surfa
 ```
 
 **Rules**
+
 - Entire `project` block is optional; loader normalizes missing fields to defaults so consumers always read a fully-populated `ProjectSettings` struct.
 - `workspaces.basePath` overrides the global `worktrees.base` per project (behavior chosen during design).
 - Unknown keys under `preferences.*` are preserved on write so additive preference fields don't require a schema migration.
 
 **Defaults applied by loader when absent:**
+
 - `name`: basename of the project directory
 - `rootPath`: project root path
 - `workspaces.branchFrom`: `origin/main`
@@ -87,7 +87,7 @@ Per-project configuration UI ("Project Settings") that mirrors Conductor's surfa
 
 Extract from current `SettingsPanel`:
 
-```
+```plaintext
 src/components/settings-shell/
   SettingsShell.tsx          // Dialog + 240px nav rail + content pane + footer grid
   SettingsNavRail.tsx        // generic groups + items, selected/onSelect
@@ -100,7 +100,7 @@ src/components/settings-shell/
 
 ### 2.2 `ProjectSettingsPanel` Sections
 
-```
+```plaintext
 ABOUT
   · Identity          (name, root path display, "Remove project" action)
 
@@ -115,7 +115,7 @@ AGENT
   · Preferences       (6 textareas)
 ```
 
-Title chip in `SettingsHeader`: **"Project Settings · {project.name}"**.
+Title chip in `SettingsHeader`: **"Project Settings · {[project.name](http://project.name)}"**.
 
 JSON mode: shows entire `maverick.json` (not just the `project` block) so users can edit any field. Validation via the same zod schema.
 
@@ -130,7 +130,7 @@ Each section component takes no props and pulls state from `useProjectSettingsSt
 ### 3.1 IPC
 
 | RPC | Request | Response |
-|---|---|---|
+| --- | --- | --- |
 | `project.settings.get` | `{ projectId }` | `ProjectSettings` (fully populated, defaults applied) |
 | `project.settings.update` | `{ projectId, patch: Partial<ProjectSettings> }` | `ProjectSettings` (the saved value) |
 | `project.settings.openFile` | `{ projectId }` | `{ path }` — also reveals the file in Finder via shell open |
@@ -202,8 +202,8 @@ Backed by existing `pty_spawn(workspaceId, "/bin/sh", ["-c", scriptString])` wit
 ### 4.3 Tab Rendering Matrix
 
 | script field | tab body |
-|---|---|
-| empty / undefined | Dashed empty-state card: icon + helper text + `Add setup script` / `Add run script` button → `openProjectSettings({ projectId, initialSection: "scripts", focusField: "setup" \| "run" })` |
+| --- | --- |
+| empty / undefined | Dashed empty-state card: icon + helper text + `Add setup script` / `Add run script` button → `openProjectSettings({ projectId, initialSection: "scripts", focusField: "setup" | "run" })` |
 | has content, idle | `Last run · {relative}` line + `View command` expander + `▶ Run setup` / `▶ Run` button |
 | running | xterm.js viewport streaming PTY output; red `■ Stop` button; green dot in tab label |
 | exited non-zero | xterm output stays visible; red banner "Exited {code}" + `Retry` button |
@@ -213,7 +213,7 @@ The Panel header `+` button (already removed) does not return. The existing Run 
 ### 4.4 Lifecycle Hooks
 
 | event | behavior |
-|---|---|
+| --- | --- |
 | `workspace.create` succeeds | Sidecar auto-runs `scripts.setup` once in the new worktree (if non-empty). Output streams to Setup tab. Non-zero exit doesn't roll back workspace creation. |
 | `workspace.destroy` requested | Sidecar runs `scripts.archive` synchronously before deleting the worktree. 30s soft timeout → modal prompts "Force archive?". |
 | `scripts.setup` edited later | No auto-rerun. User triggers via Panel Run button. |
@@ -235,7 +235,7 @@ Both tabs show: "Open a workspace from a project to configure setup and run scri
 ## 5. Entry Points
 
 | Entry | Trigger |
-|---|---|
+| --- | --- |
 | Hover-revealed `Cog` icon in `ProjectItem` row | Opens modal for that project |
 | Setup / Run empty-state CTA | Opens modal at Scripts section with focused field |
 | Command Palette: `Projects: Open project settings…` | Project picker (if multiple) or direct open |
@@ -262,7 +262,7 @@ projectSettings: {
 Zones from `CLAUDE.md`:
 
 | Zone | Scope |
-|---|---|
+| --- | --- |
 | **Design system** | Extract `SettingsShell` + generic `SettingsNavRail` / `SettingsJsonEditor` to `src/components/settings-shell/`. Rewire `SettingsPanel` to use it (zero behavior change). Add `Cog` hover affordance to `ProjectItem`. |
 | **Sidecar** | Extend `MaverickConfigSchema`; new `config-writer.ts` (atomic write); 3 RPC handlers; `project.settings.changed` fs.watch; workspace-create auto-setup + files-to-copy; workspace-destroy archive hook. Tests for each. |
 | **Rust IPC** | 3 new Tauri commands wrapping the sidecar RPCs; registration in `lib.rs`; cargo tests. |
@@ -282,6 +282,7 @@ Zones from `CLAUDE.md`:
 ## 7. Testing Plan
 
 **Sidecar**
+
 - Schema round-trip (write → read → equal) under all defaults.
 - Atomic write: mock fs, verify temp-file + rename order.
 - `project.settings.changed` fires on fs event.
@@ -290,9 +291,11 @@ Zones from `CLAUDE.md`:
 - Files-to-copy copies present sources, skips missing.
 
 **Rust**
+
 - Each new command pipes JSON to sidecar and returns the response (mock sidecar via fixture stream).
 
 **React store**
+
 - load → patch → flush state transitions.
 - Concurrent flush calls coalesce.
 - Conflict notification with no dirty edits → silent reload.
@@ -300,12 +303,14 @@ Zones from `CLAUDE.md`:
 - Retry path after error.
 
 **React components**
+
 - Each section component: field bindings, blur triggers flush, validation errors render.
 - `ProjectSettingsPanel`: section switching, JSON-mode toggle, header reflects project name.
 - `ProjectItem`: cog appears on hover, click opens modal.
 - `Panel`: empty state → CTA opens modal; configured + idle → Run button starts script; running → Stop kills PTY; exited non-zero → red banner + Retry.
 
 **E2E (Playwright, golden path)**
+
 - Add a project → open Project Settings → set setup script → save → create workspace → setup script auto-runs → output appears in Panel.
 
 ---
@@ -313,7 +318,7 @@ Zones from `CLAUDE.md`:
 ## 8. Risks & Mitigations
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | User defines destructive `scripts.setup` and it auto-fires on workspace create | Defer to user judgment in v1; surface a follow-up issue to add a "first-time confirm" UX. |
 | Conflict resolution UX confuses users editing the file externally | Banner is explicit ("Reload" / "Keep editing — overwrites on next save"). |
 | Archive script hangs forever | 30s soft timeout + "Force archive?" modal. |

@@ -6,7 +6,7 @@ import { makeMessage } from "@/test/fixtures";
 describe("MessageList", () => {
   it("renders empty state", () => {
     renderWithProviders(<MessageList messages={[]} />);
-    expect(screen.getByText("Send a prompt to start the conversation")).toBeInTheDocument();
+    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
   });
 
   it("renders user + agent messages", () => {

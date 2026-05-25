@@ -24,4 +24,13 @@ describe("SettingsGroup", () => {
     );
     expect(screen.getByTestId("only-child")).toBeInTheDocument();
   });
+
+  it("renders description without title", () => {
+    renderWithProviders(
+      <SettingsGroup description="Some description only">
+        <div>child</div>
+      </SettingsGroup>,
+    );
+    expect(screen.getByText("Some description only")).toBeInTheDocument();
+  });
 });

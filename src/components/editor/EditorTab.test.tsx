@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/react";
 import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTab } from "./EditorTab";
 import { useWorkbench } from "@/state/store";
@@ -42,5 +43,25 @@ describe("EditorTab", () => {
         active={false} onSelect={() => {}} onClose={() => {}} />
     );
     expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
+  });
+
+  it("Enter key on tab triggers onSelect", () => {
+    const onSelect = vi.fn();
+    renderWithProviders(
+      <EditorTab workspace={makeWorkspace({ id: "w1" })}
+        active={false} onSelect={onSelect} onClose={() => {}} />
+    );
+    fireEvent.keyDown(screen.getByTestId("editor-tab-w1"), { key: "Enter" });
+    expect(onSelect).toHaveBeenCalled();
+  });
+
+  it("Space key on tab triggers onSelect", () => {
+    const onSelect = vi.fn();
+    renderWithProviders(
+      <EditorTab workspace={makeWorkspace({ id: "w1" })}
+        active={false} onSelect={onSelect} onClose={() => {}} />
+    );
+    fireEvent.keyDown(screen.getByTestId("editor-tab-w1"), { key: " " });
+    expect(onSelect).toHaveBeenCalled();
   });
 });

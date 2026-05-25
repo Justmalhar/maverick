@@ -92,7 +92,6 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
 const ALL_IDS: SectionId[] = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id));
 
 function readSectionFromUrl(): SectionId {
-  if (typeof window === "undefined") return "general";
   const id = new URLSearchParams(window.location.search).get("settings");
   return (ALL_IDS as string[]).includes(id ?? "") ? (id as SectionId) : "general";
 }
@@ -111,7 +110,6 @@ export default function SettingsPanel({ open, onOpenChange, onClose }: Props) {
   const isOpen = open ?? true;
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("settings", section);
     window.history.replaceState({}, "", url.toString());

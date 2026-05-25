@@ -17,13 +17,15 @@ function EmptyState({
   icon: Icon,
   title,
   hint,
+  testId,
 }: {
   icon: typeof GitCompare;
   title: string;
   hint: string;
+  testId?: string;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+    <div data-testid={testId} className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
       <Icon className="h-6 w-6 text-muted-foreground" strokeWidth={1.5} />
       <span className="text-[13px] text-foreground">{title}</span>
       <p className="max-w-xs text-xs text-muted-foreground">{hint}</p>
@@ -70,6 +72,7 @@ export function DiffView() {
         icon={GitCommitVertical}
         title="Working tree clean"
         hint="No staged or unstaged changes in this worktree."
+        testId="diff-view-empty"
       />
     );
   }

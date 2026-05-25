@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanCard from "./KanbanCard";
 import { useWorkbench } from "@/state/store";
-import { makeBackend, makeKanbanTask } from "@/test/fixtures";
+import { makeBackend, makeKanbanTask, makeWorkspace } from "@/test/fixtures";
 import type { DiffStat } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
@@ -131,5 +131,37 @@ describe("KanbanCard", () => {
     expect(screen.queryByTestId("kanban-start")).not.toBeInTheDocument();
     expect(screen.queryByTestId("kanban-view")).not.toBeInTheDocument();
     expect(screen.queryByTestId("kanban-create-pr")).not.toBeInTheDocument();
+  });
+
+  it("startInMaverick falls back to 'claude' when backends list is empty and task has no agentBackend", async () => {
+    useWorkbench.setState({ ...initial, backends: [] });
+    vi.mocked(invoke).mockResolvedValueOnce({
+      id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude",
+      worktreePath: "", status: "active", sessionId: "s",
+    } as never);
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ projectId: "p1", agentBackend: "" })} index={0} onEdit={() => {}} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-start"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("workspace_create", expect.objectContaining({ backend: "claude" }))
+    );
+  });
+
+  it("viewWorkspace sets the active workspace when clicked", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "ws-active" })],
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "in_progress", workspaceId: "ws-active" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-view"));
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("ws-active");
   });
 });
