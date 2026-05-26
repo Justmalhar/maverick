@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 use tauri_plugin_notification::NotificationExt;
 
+use crate::backend_detector::{detect_all, DetectedBackend};
 use crate::bootstrap::{
     read_settings, seed_global_md, write_settings, MaverickSettings, CURRENT_WIZARD_VERSION,
 };
@@ -132,4 +133,34 @@ pub async fn reset_first_run(state: State<'_, AppState>) -> Result<Value, String
     s.first_run_completed_at = None;
     write_settings(paths, &s).map_err(|e| e.to_string())?;
     Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub async fn detect_backends() -> Result<Vec<DetectedBackend>, String> {
+    // Spawn on a blocking thread so the 2s per-binary version probes
+    // don't block the Tauri async runtime.
+    tauri::async_runtime::spawn_blocking(detect_all)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn request_notification_permission(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    // Persist the request timestamp so we never auto-re-ask.
+    let now = now_ms();
+    let paths = &state.paths;
+    if let Ok(mut s) = read_settings(paths, now) {
+        s.notifications_requested_at = Some(now);
+        let _ = write_settings(paths, &s);
+    }
+
+    match app.notification().request_permission() {
+        Ok(tauri_plugin_notification::PermissionState::Granted) => Ok("granted".into()),
+        Ok(tauri_plugin_notification::PermissionState::Denied) => Ok("denied".into()),
+        Ok(_) => Ok("default".into()),
+        Err(_) => Ok("unavailable".into()),
+    }
 }
