@@ -1,10 +1,11 @@
 use serde::Serialize;
+use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::bootstrap::{
-    read_settings, seed_global_md, MaverickSettings, CURRENT_WIZARD_VERSION,
+    read_settings, seed_global_md, write_settings, MaverickSettings, CURRENT_WIZARD_VERSION,
 };
 use crate::state::AppState;
 
@@ -71,4 +72,64 @@ pub async fn bootstrap_status(
         settings,
         notification_permission,
     })
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPatch {
+    pub theme: Option<String>,
+    pub default_backend: Option<String>,
+    pub notifications_requested_at: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn bootstrap_update_settings(
+    state: State<'_, AppState>,
+    patch: SettingsPatch,
+) -> Result<MaverickSettings, String> {
+    let paths = &state.paths;
+    let mut s = read_settings(paths, now_ms()).map_err(|e| e.to_string())?;
+    // Wizard only ever ASSIGNS values; "missing in patch" === "don't change".
+    // Explicit clearing isn't a user action in any current flow.
+    if let Some(t) = patch.theme {
+        s.theme = t;
+    }
+    if let Some(b) = patch.default_backend {
+        s.default_backend = Some(b);
+    }
+    if let Some(n) = patch.notifications_requested_at {
+        s.notifications_requested_at = Some(n);
+    }
+    write_settings(paths, &s).map_err(|e| e.to_string())?;
+    Ok(s)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapCompletePayload {
+    pub first_run_completed_at: u64,
+}
+
+#[tauri::command]
+pub async fn bootstrap_complete(
+    state: State<'_, AppState>,
+) -> Result<BootstrapCompletePayload, String> {
+    let paths = &state.paths;
+    let mut s = read_settings(paths, now_ms()).map_err(|e| e.to_string())?;
+    let t = now_ms();
+    s.first_run_completed_at = Some(t);
+    s.wizard_version = CURRENT_WIZARD_VERSION;
+    write_settings(paths, &s).map_err(|e| e.to_string())?;
+    Ok(BootstrapCompletePayload {
+        first_run_completed_at: t,
+    })
+}
+
+#[tauri::command]
+pub async fn reset_first_run(state: State<'_, AppState>) -> Result<Value, String> {
+    let paths = &state.paths;
+    let mut s = read_settings(paths, now_ms()).map_err(|e| e.to_string())?;
+    s.first_run_completed_at = None;
+    write_settings(paths, &s).map_err(|e| e.to_string())?;
+    Ok(json!({ "ok": true }))
 }
