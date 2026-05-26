@@ -71,6 +71,22 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
+
+            // Compute paths from OS-resolved roots (home + app-data dir).
+            let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+            let app_data = handle
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| PathBuf::from("/tmp/maverick"));
+            let paths = crate::bootstrap::MaverickPaths::from_roots(&home, &app_data);
+
+            if let Err(e) = crate::bootstrap::ensure_dirs(&paths) {
+                log::error!("ensure_dirs failed: {e}; running in degraded mode");
+            }
+            if let Err(e) = crate::bootstrap::seed_global_md(&paths) {
+                log::warn!("seed_global_md failed: {e}");
+            }
+
             let sink = Arc::new(TauriEventSink {
                 handle: handle.clone(),
             });
@@ -82,21 +98,18 @@ pub fn run() {
             };
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-            // The app must launch even when the sidecar fails — degraded mode
-            // is better than a hard crash that leaves the user with a Console
-            // report and no UI to explain what went wrong.
             match tauri::async_runtime::block_on(async {
                 Sidecar::spawn(&cmd, &arg_refs, cwd, sink).await
             }) {
                 Ok(sidecar) => {
                     log::info!("sidecar spawned: {cmd}");
-                    app.manage(AppState::new(sidecar));
+                    app.manage(AppState::new(sidecar, paths));
                 }
                 Err(e) => {
                     log::error!(
                         "sidecar failed to start (cmd='{cmd}'): {e:#}. UI in degraded mode."
                     );
-                    app.manage(AppState::new(Sidecar::placeholder()));
+                    app.manage(AppState::new(Sidecar::placeholder(), paths));
                 }
             }
             Ok(())
