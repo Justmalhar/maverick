@@ -269,7 +269,10 @@ export async function bootstrapComplete(): Promise<{ firstRunCompletedAt: number
 }
 
 export async function resetFirstRun(): Promise<void> {
-  return invoke("reset_first_run");
+  await invoke<void>("reset_first_run");
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("maverick:firstrun:reset"));
+  }
 }
 
 export async function detectBackends(): Promise<DetectedBackend[]> {

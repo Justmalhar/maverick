@@ -65,4 +65,14 @@ describe("BackendStep", () => {
     render(<BackendStep />);
     expect(await screen.findByText("installed")).toBeInTheDocument();
   });
+
+  it("renders empty list on detect_backends error (no infinite spinner)", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("boom"));
+    render(<BackendStep />);
+    // Wait for header text to be present (always rendered)
+    await screen.findByText(/scanned/i);
+    // Give the catch handler time to fire
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryAllByRole("radio").length).toBe(0);
+  });
 });

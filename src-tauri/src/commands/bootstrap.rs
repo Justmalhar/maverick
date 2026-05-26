@@ -62,7 +62,8 @@ pub async fn bootstrap_status(
     Ok(BootstrapStatusPayload {
         ok,
         error,
-        first_run: settings.first_run_completed_at.is_none(),
+        // Per spec §7: degraded mode must NOT open the wizard.
+        first_run: ok && settings.first_run_completed_at.is_none(),
         wizard_version: settings.wizard_version,
         current_wizard_version: CURRENT_WIZARD_VERSION,
         paths: BootstrapPaths {

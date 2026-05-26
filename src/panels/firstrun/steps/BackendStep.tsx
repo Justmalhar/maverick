@@ -10,9 +10,13 @@ export function BackendStep() {
 
   useEffect(() => {
     let cancelled = false;
-    detectBackends().then((r) => {
-      if (!cancelled) setRows(Array.isArray(r) ? r : []);
-    });
+    detectBackends()
+      .then((r) => {
+        if (!cancelled) setRows(Array.isArray(r) ? r : []);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      });
     return () => {
       cancelled = true;
     };

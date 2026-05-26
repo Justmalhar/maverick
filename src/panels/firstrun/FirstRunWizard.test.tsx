@@ -71,4 +71,14 @@ describe("FirstRunWizard", () => {
     await userEvent.click(btn);
     expect(complete).toHaveBeenCalled();
   });
+
+  it("step 4 Skip button also calls complete()", async () => {
+    const complete = vi.fn().mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue([]);
+    withController({ step: 4, complete });
+    render(<FirstRunWizard />);
+    const skip = screen.getByRole("button", { name: /skip/i });
+    await userEvent.click(skip);
+    expect(complete).toHaveBeenCalled();
+  });
 });

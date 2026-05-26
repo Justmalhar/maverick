@@ -63,7 +63,11 @@ export function FirstRunWizard() {
 
         <div className="flex items-center justify-end gap-2">
           {!isFirst && (
-            <Button variant="ghost" size="sm" onClick={ctrl.advance}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={isLast ? () => void ctrl.complete() : ctrl.advance}
+            >
               Skip
             </Button>
           )}

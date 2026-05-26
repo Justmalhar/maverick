@@ -115,4 +115,26 @@ describe("useFirstRun", () => {
     act(() => result.current.advance()); // stays at 4
     expect(result.current.step).toBe(4);
   });
+
+  it("listens to maverick:firstrun:reset event and refreshes", async () => {
+    mockInvoke.mockResolvedValueOnce({ ...baseStatus, firstRun: false });
+    const { result } = renderHook(() => useFirstRun());
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+    expect(result.current.open).toBe(false);
+
+    mockInvoke.mockResolvedValueOnce(baseStatus);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("maverick:firstrun:reset"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(result.current.open).toBe(true);
+  });
+
+  it("refresh() handles bootstrap_status rejection without crashing", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("ipc-down"));
+    const { result } = renderHook(() => useFirstRun());
+    await waitFor(() => expect(result.current.open).toBe(false));
+    // status stays null, open=false
+    expect(result.current.status).toBeNull();
+  });
 });

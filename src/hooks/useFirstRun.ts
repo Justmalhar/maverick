@@ -24,14 +24,25 @@ export function useFirstRun(): FirstRunController {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   const refresh = useCallback(async () => {
-    const s = await bootstrapStatus();
-    setStatus(s);
-    setOpen(s.firstRun);
-    setStep(1);
+    try {
+      const s = await bootstrapStatus();
+      setStatus(s);
+      setOpen(s.firstRun);
+      setStep(1);
+    } catch (err) {
+      console.error("[useFirstRun] bootstrap_status failed:", err);
+      setOpen(false);
+    }
   }, []);
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const handler = () => { void refresh(); };
+    window.addEventListener("maverick:firstrun:reset", handler);
+    return () => window.removeEventListener("maverick:firstrun:reset", handler);
   }, [refresh]);
 
   const advance = useCallback(() => {
