@@ -4,6 +4,7 @@ import { renderWithProviders, screen, fireEvent } from "@/test/utils";
 import { invoke } from "@tauri-apps/api/core";
 import GeneralSettings from "./GeneralSettings";
 import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
+import { useWorkbench } from "@/state/store";
 
 const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>;
 
@@ -42,5 +43,14 @@ describe("GeneralSettings", () => {
     renderWithProviders(<GeneralSettings />);
     await userEvent.click(screen.getByRole("button", { name: /run setup wizard/i }));
     expect(mockInvoke).toHaveBeenCalledWith("reset_first_run");
+  });
+
+  it("Run setup wizard button closes the Settings modal", async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    useWorkbench.getState().setSettingsOpen(true);
+    expect(useWorkbench.getState().settingsOpen).toBe(true);
+    renderWithProviders(<GeneralSettings />);
+    await userEvent.click(screen.getByRole("button", { name: /run setup wizard/i }));
+    expect(useWorkbench.getState().settingsOpen).toBe(false);
   });
 });

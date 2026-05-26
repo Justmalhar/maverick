@@ -5,6 +5,7 @@ import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
 import { SettingsSelect } from "../primitives/SettingsSelect";
 import { useSettings } from "@/lib/stores/settings";
+import { useWorkbench } from "@/state/store";
 import { resetFirstRun } from "@/lib/tauri";
 
 const BACKENDS = [
@@ -21,6 +22,15 @@ export default function GeneralSettings() {
   const [defaultBranch, setDefaultBranch] = useSettings("general.defaultBranch", "origin/main");
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");
   const [restore, setRestore] = useSettings("general.restoreSession", true);
+  const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
+
+  function runSetupWizard() {
+    // Close the Settings modal first so the wizard isn't hidden behind it,
+    // then reset the first-run sentinel. useFirstRun listens for the reset
+    // event dispatched by resetFirstRun() and re-opens the wizard.
+    setSettingsOpen(false);
+    void resetFirstRun();
+  }
 
   return (
     <div data-testid="general-settings" className="space-y-5">
@@ -104,7 +114,7 @@ export default function GeneralSettings() {
               variant="outline"
               size="sm"
               data-testid="general-run-setup-wizard"
-              onClick={() => void resetFirstRun()}
+              onClick={runSetupWizard}
             >
               Run setup wizard
             </Button>
