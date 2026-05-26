@@ -1,9 +1,11 @@
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { SettingsGroup } from "../primitives/SettingsGroup";
 import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
 import { SettingsSelect } from "../primitives/SettingsSelect";
 import { useSettings } from "@/lib/stores/settings";
+import { resetFirstRun } from "@/lib/tauri";
 
 const BACKENDS = [
   { value: "claude", label: "Claude" },
@@ -89,6 +91,23 @@ export default function GeneralSettings() {
               onCheckedChange={setRestore}
               data-testid="general-restore"
             />
+          }
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title="First-run" description="Re-trigger the welcome wizard.">
+        <SettingsRow
+          title="Run setup wizard"
+          description="Walks you through directory creation, permissions, theme, and default backend."
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="general-run-setup-wizard"
+              onClick={() => void resetFirstRun()}
+            >
+              Run setup wizard
+            </Button>
           }
         />
       </SettingsGroup>
