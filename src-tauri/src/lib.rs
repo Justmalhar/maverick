@@ -154,6 +154,12 @@ pub fn run() {
             attachment_create,
             automation_run,
             notify_send,
+            bootstrap_status,
+            bootstrap_update_settings,
+            bootstrap_complete,
+            reset_first_run,
+            detect_backends,
+            request_notification_permission,
         ]);
 
     let app = builder
