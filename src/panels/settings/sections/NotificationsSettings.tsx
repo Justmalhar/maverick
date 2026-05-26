@@ -3,6 +3,8 @@ import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
 import { useSettings } from "@/lib/stores/settings";
 import type { SettingsKey } from "@/lib/ipc";
+import { Button } from "@/components/ui/button";
+import { requestNotificationPermission } from "@/lib/tauri";
 
 interface NotifSetting {
   key: SettingsKey;
@@ -45,6 +47,22 @@ export default function NotificationsSettings() {
         {NOTIFS.map((s) => (
           <NotifRow key={s.key} s={s} />
         ))}
+      </SettingsGroup>
+      <SettingsGroup title="System permission" description="Maverick uses your OS to deliver notifications.">
+        <SettingsRow
+          title="OS notification permission"
+          description="Re-request permission. If you previously denied it, change it in System Settings."
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="notifications-request-permission"
+              onClick={() => { void requestNotificationPermission(); }}
+            >
+              Request notification permission
+            </Button>
+          }
+        />
       </SettingsGroup>
     </div>
   );
