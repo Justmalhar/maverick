@@ -21,16 +21,21 @@ interface StepDotProps {
 function StepDot({ index, current, label, isLast }: StepDotProps) {
   const done = index < current;
   const active = index === current;
+  // Line is the next-step "edge": connector becomes "done" once we're past `index`.
+  const lineDone = index < current;
   return (
-    <div className="flex flex-1 items-center" data-testid={`wizard-step-dot-${index}`}>
-      <div className="flex flex-col items-center gap-1">
+    <div
+      className="flex flex-1 items-start"
+      data-testid={`wizard-step-dot-${index}`}
+    >
+      <div className="flex flex-col items-center gap-1.5">
         <div
           aria-current={active ? "step" : undefined}
           className={cn(
             "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-colors",
             done && "bg-primary text-primary-foreground",
             active && "bg-primary text-primary-foreground ring-2 ring-primary/30",
-            !done && !active && "bg-muted text-muted-foreground"
+            !done && !active && "bg-muted-foreground/20 text-muted-foreground"
           )}
         >
           {done ? <Check className="h-3 w-3" strokeWidth={3} /> : index}
@@ -45,10 +50,12 @@ function StepDot({ index, current, label, isLast }: StepDotProps) {
         </span>
       </div>
       {!isLast && (
+        // mt-[11px] aligns the 2px line with the center of the 24px dot above.
         <div
+          data-testid={`wizard-step-line-${index}`}
           className={cn(
-            "mx-2 h-px flex-1 transition-colors",
-            done ? "bg-primary/60" : "bg-border"
+            "mx-2 mt-[11px] h-0.5 flex-1 rounded-full transition-colors",
+            lineDone ? "bg-primary/70" : "bg-muted-foreground/30"
           )}
         />
       )}
