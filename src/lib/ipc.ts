@@ -297,3 +297,52 @@ export interface ProjectSettings {
   scripts: { setup: string; run: string; archive: string };
   preferences: Record<string, string>;
 }
+
+export interface MaverickSettings {
+  schemaVersion: number;
+  wizardVersion: number;
+  firstRunCompletedAt: number | null;
+  theme: string;
+  defaultBackend: string | null;
+  notificationsRequestedAt: number | null;
+}
+
+export type NotificationPermission = "granted" | "denied" | "default" | "unavailable";
+
+export interface BootstrapPaths {
+  configRoot: string;
+  dbPath: string;
+  logsDir: string;
+}
+
+export interface BootstrapStatus {
+  ok: boolean;
+  error: string | null;
+  firstRun: boolean;
+  wizardVersion: number;
+  currentWizardVersion: number;
+  paths: BootstrapPaths;
+  settings: MaverickSettings;
+  notificationPermission: NotificationPermission;
+}
+
+export type KnownBackendName =
+  | "claude-code"
+  | "codex"
+  | "gemini"
+  | "aider"
+  | "ollama";
+
+export interface DetectedBackend {
+  name: KnownBackendName;
+  command: string;
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+}
+
+export interface SettingsPatch {
+  theme?: string;
+  defaultBackend?: string;
+  notificationsRequestedAt?: number;
+}
