@@ -2,21 +2,26 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
-  Message,
-  MaverickConfig,
-  DiffResult,
+  BootstrapStatus,
   Commit,
-  Stash,
-  KanbanTask,
-  DiffStat,
-  WorkspacePreset,
-  Workspace,
-  Project,
-  Skill,
-  FileEntry,
   ContextUsage,
+  DetectedBackend,
+  DiffResult,
+  DiffStat,
+  FileEntry,
+  KanbanTask,
+  MaverickConfig,
+  MaverickSettings,
   MCPServer,
+  Message,
+  NotificationPermission,
+  Project,
   ProjectSettings,
+  SettingsPatch,
+  Skill,
+  Stash,
+  Workspace,
+  WorkspacePreset,
 } from "./ipc";
 
 export async function projectAdd(path: string): Promise<Project> {
@@ -245,4 +250,32 @@ export function onProjectSettingsChanged(
     "project:settings:changed",
     (e) => callback(e.payload)
   );
+}
+
+// Bootstrap commands
+
+export async function bootstrapStatus(): Promise<BootstrapStatus> {
+  return invoke("bootstrap_status");
+}
+
+export async function bootstrapUpdateSettings(
+  patch: SettingsPatch
+): Promise<MaverickSettings> {
+  return invoke("bootstrap_update_settings", { patch });
+}
+
+export async function bootstrapComplete(): Promise<{ firstRunCompletedAt: number }> {
+  return invoke("bootstrap_complete");
+}
+
+export async function resetFirstRun(): Promise<void> {
+  return invoke("reset_first_run");
+}
+
+export async function detectBackends(): Promise<DetectedBackend[]> {
+  return invoke("detect_backends");
+}
+
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  return invoke("request_notification_permission");
 }
