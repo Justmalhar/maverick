@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 
 /// Absolute paths Maverick reads/writes on startup. Computed once at boot.
 #[derive(Debug, Clone)]
@@ -51,6 +52,95 @@ pub fn ensure_dirs(paths: &MaverickPaths) -> std::io::Result<()> {
     Ok(())
 }
 
+pub const CURRENT_WIZARD_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 1;
+const DB_SUPPRESS_BYTES: u64 = 16 * 1024; // existing DB > this ⇒ treat as existing user
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MaverickSettings {
+    pub schema_version: u32,
+    pub wizard_version: u32,
+    pub first_run_completed_at: Option<u64>,
+    pub theme: String,
+    pub default_backend: Option<String>,
+    pub notifications_requested_at: Option<u64>,
+}
+
+impl MaverickSettings {
+    pub fn defaults() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            wizard_version: CURRENT_WIZARD_VERSION,
+            first_run_completed_at: None,
+            theme: "maverick-dark".to_string(),
+            default_backend: None,
+            notifications_requested_at: None,
+        }
+    }
+
+    /// Defaults for migration: pre-existing user, suppress wizard.
+    pub fn defaults_completed(now_ms: u64) -> Self {
+        Self {
+            first_run_completed_at: Some(now_ms),
+            ..Self::defaults()
+        }
+    }
+}
+
+/// Read settings.json. Missing → seed defaults (or completed-defaults for existing users).
+/// Corrupt → rename + re-seed defaults.
+pub fn read_settings(paths: &MaverickPaths, now_ms: u64) -> std::io::Result<MaverickSettings> {
+    if !paths.settings_file.exists() {
+        let seed = if existing_install(&paths.db_path) {
+            MaverickSettings::defaults_completed(now_ms)
+        } else {
+            MaverickSettings::defaults()
+        };
+        write_settings(paths, &seed)?;
+        return Ok(seed);
+    }
+    let raw = fs::read_to_string(&paths.settings_file)?;
+    match serde_json::from_str::<MaverickSettings>(&raw) {
+        Ok(s) => Ok(s),
+        Err(_) => {
+            // Corrupt: rename and re-seed defaults.
+            let corrupt = paths
+                .settings_file
+                .with_extension(format!("json.corrupt-{now_ms}"));
+            let _ = fs::rename(&paths.settings_file, &corrupt);
+            let seed = MaverickSettings::defaults();
+            write_settings(paths, &seed)?;
+            Ok(seed)
+        }
+    }
+}
+
+/// Atomic-ish write: serialize → write tmp → rename.
+pub fn write_settings(paths: &MaverickPaths, s: &MaverickSettings) -> std::io::Result<()> {
+    let json = serde_json::to_string_pretty(s)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let tmp = paths.settings_file.with_extension("json.tmp");
+    fs::write(&tmp, json)?;
+    fs::rename(&tmp, &paths.settings_file)?;
+    Ok(())
+}
+
+const GLOBAL_MD_SEED: &str = "<!-- Maverick global instructions.\n     This file is auto-prepended to every prompt sent to AI backends across ALL repos,\n     unless overridden by a project-local MAVERICK.md, CLAUDE.md, or AGENTS.md.\n     Edit freely; comments are stripped before injection. -->\n";
+
+pub fn seed_global_md(paths: &MaverickPaths) -> std::io::Result<()> {
+    if !paths.global_md.exists() {
+        fs::write(&paths.global_md, GLOBAL_MD_SEED)?;
+    }
+    Ok(())
+}
+
+fn existing_install(db_path: &Path) -> bool {
+    fs::metadata(db_path)
+        .map(|m| m.len() > DB_SUPPRESS_BYTES)
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +182,83 @@ mod tests {
         assert_eq!(p.themes_dir, PathBuf::from("/h/.maverick/themes"));
         assert_eq!(p.settings_file, PathBuf::from("/h/.maverick/settings.json"));
         assert_eq!(p.db_path, PathBuf::from("/d/db.sqlite"));
+    }
+
+    #[test]
+    fn read_settings_seeds_defaults_when_missing() {
+        let home = tempdir().unwrap();
+        let data = tempdir().unwrap();
+        let paths = paths_in(home.path(), data.path());
+        ensure_dirs(&paths).unwrap();
+
+        let s = read_settings(&paths, 1_700_000_000_000).unwrap();
+        assert_eq!(s.theme, "maverick-dark");
+        assert_eq!(s.first_run_completed_at, None);
+        assert!(paths.settings_file.exists());
+    }
+
+    #[test]
+    fn read_settings_suppresses_wizard_for_existing_install() {
+        let home = tempdir().unwrap();
+        let data = tempdir().unwrap();
+        let paths = paths_in(home.path(), data.path());
+        ensure_dirs(&paths).unwrap();
+        // simulate a real existing DB: 32 KiB of zeros
+        fs::write(&paths.db_path, vec![0u8; 32 * 1024]).unwrap();
+
+        let s = read_settings(&paths, 1_700_000_000_000).unwrap();
+        assert_eq!(s.first_run_completed_at, Some(1_700_000_000_000));
+    }
+
+    #[test]
+    fn read_settings_recovers_from_corrupt_json() {
+        let home = tempdir().unwrap();
+        let data = tempdir().unwrap();
+        let paths = paths_in(home.path(), data.path());
+        ensure_dirs(&paths).unwrap();
+        fs::write(&paths.settings_file, "{not json").unwrap();
+
+        let s = read_settings(&paths, 42).unwrap();
+        assert_eq!(s, MaverickSettings::defaults());
+
+        // corrupt file is renamed; new settings.json is valid JSON
+        let renamed: Vec<_> = fs::read_dir(&paths.config_root)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("settings.json.corrupt-"))
+            .collect();
+        assert_eq!(renamed.len(), 1);
+    }
+
+    #[test]
+    fn write_settings_round_trips() {
+        let home = tempdir().unwrap();
+        let data = tempdir().unwrap();
+        let paths = paths_in(home.path(), data.path());
+        ensure_dirs(&paths).unwrap();
+        let mut s = MaverickSettings::defaults();
+        s.theme = "dracula".to_string();
+        s.default_backend = Some("codex".to_string());
+
+        write_settings(&paths, &s).unwrap();
+        let read_back = read_settings(&paths, 0).unwrap();
+        assert_eq!(s, read_back);
+    }
+
+    #[test]
+    fn seed_global_md_creates_when_missing_and_skips_when_present() {
+        let home = tempdir().unwrap();
+        let data = tempdir().unwrap();
+        let paths = paths_in(home.path(), data.path());
+        ensure_dirs(&paths).unwrap();
+
+        seed_global_md(&paths).unwrap();
+        assert!(paths.global_md.exists());
+
+        // overwrite, call again, ensure we did NOT clobber
+        fs::write(&paths.global_md, "user edits").unwrap();
+        seed_global_md(&paths).unwrap();
+        let kept = fs::read_to_string(&paths.global_md).unwrap();
+        assert_eq!(kept, "user edits");
     }
 }
