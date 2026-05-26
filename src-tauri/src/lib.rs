@@ -1,3 +1,4 @@
+mod backend_detector;
 mod bootstrap;
 mod commands;
 pub mod sidecar;
