@@ -18,6 +18,9 @@ import { CommandPalette } from "@/components/quickopen/CommandPalette";
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
 const SettingsPanel = lazy(() => import("@/panels/settings/SettingsPanel"));
 const ProjectSettingsPanel = lazy(() => import("@/panels/project-settings/ProjectSettingsPanel"));
+const FirstRunWizard = lazy(() =>
+  import("@/panels/firstrun/FirstRunWizard").then((m) => ({ default: m.FirstRunWizard }))
+);
 
 function OverlayFallback() {
   return null;
@@ -136,6 +139,10 @@ export function Workbench() {
           />
         </Suspense>
       )}
+
+      <Suspense fallback={<OverlayFallback />}>
+        <FirstRunWizard />
+      </Suspense>
     </div>
   );
 }
