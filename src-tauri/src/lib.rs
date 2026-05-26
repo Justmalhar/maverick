@@ -84,8 +84,8 @@ pub fn run() {
             if let Err(e) = crate::bootstrap::ensure_dirs(&paths) {
                 log::error!("ensure_dirs failed: {e}; running in degraded mode");
             }
-            if let Err(e) = crate::bootstrap::seed_global_md(&paths) {
-                log::warn!("seed_global_md failed: {e}");
+            if let Err(e) = crate::bootstrap::seed_maverick_md(&paths) {
+                log::warn!("seed_maverick_md failed: {e}");
             }
 
             let sink = Arc::new(TauriEventSink {
@@ -160,8 +160,8 @@ pub fn run() {
             reset_first_run,
             detect_backends,
             request_notification_permission,
-            read_global_md,
-            write_global_md,
+            read_maverick_md,
+            write_maverick_md,
         ]);
 
     let app = builder

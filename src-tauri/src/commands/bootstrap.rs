@@ -6,7 +6,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::backend_detector::{detect_all, DetectedBackend};
 use crate::bootstrap::{
-    read_settings, seed_global_md, write_settings, MaverickSettings, CURRENT_WIZARD_VERSION,
+    read_settings, seed_maverick_md, write_settings, MaverickSettings, CURRENT_WIZARD_VERSION,
 };
 use crate::state::AppState;
 
@@ -48,8 +48,8 @@ pub async fn bootstrap_status(
         Ok(s) => (true, None, s),
         Err(e) => (false, Some(e.to_string()), MaverickSettings::defaults()),
     };
-    // Seed GLOBAL.md best-effort (don't fail status read on it).
-    let _ = seed_global_md(paths);
+    // Seed MAVERICK.md best-effort (don't fail status read on it).
+    let _ = seed_maverick_md(paths);
 
     let notification_permission = match app.notification().permission_state() {
         Ok(tauri_plugin_notification::PermissionState::Granted) => "granted",
@@ -167,8 +167,8 @@ pub async fn request_notification_permission(
 }
 
 #[tauri::command]
-pub async fn read_global_md(state: State<'_, AppState>) -> Result<String, String> {
-    let path = &state.paths.global_md;
+pub async fn read_maverick_md(state: State<'_, AppState>) -> Result<String, String> {
+    let path = &state.paths.maverick_md;
     match std::fs::read_to_string(path) {
         Ok(s) => Ok(s),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
@@ -177,11 +177,11 @@ pub async fn read_global_md(state: State<'_, AppState>) -> Result<String, String
 }
 
 #[tauri::command]
-pub async fn write_global_md(
+pub async fn write_maverick_md(
     state: State<'_, AppState>,
     contents: String,
 ) -> Result<(), String> {
-    let path = &state.paths.global_md;
+    let path = &state.paths.maverick_md;
     // Atomic-ish: write to tmp then rename, matching write_settings pattern.
     let tmp = path.with_extension("md.tmp");
     std::fs::write(&tmp, contents).map_err(|e| e.to_string())?;

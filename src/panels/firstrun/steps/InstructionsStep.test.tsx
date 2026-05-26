@@ -11,14 +11,14 @@ beforeEach(() => {
 });
 
 describe("InstructionsStep", () => {
-  it("calls read_global_md on mount and shows existing content", async () => {
+  it("calls read_maverick_md on mount and shows existing content", async () => {
     mockInvoke.mockResolvedValueOnce("Be concise.");
     render(<InstructionsStep />);
     await waitFor(() => {
       const ta = screen.getByTestId("instructions-textarea") as HTMLTextAreaElement;
       expect(ta.value).toBe("Be concise.");
     });
-    expect(mockInvoke).toHaveBeenCalledWith("read_global_md");
+    expect(mockInvoke).toHaveBeenCalledWith("read_maverick_md");
   });
 
   it("starts empty when the file only contains the seeded HTML comment", async () => {
@@ -30,11 +30,11 @@ describe("InstructionsStep", () => {
     });
   });
 
-  it("debounces user input and writes via write_global_md", async () => {
-    mockInvoke.mockResolvedValueOnce(""); // read_global_md
+  it("debounces user input and writes via write_maverick_md", async () => {
+    mockInvoke.mockResolvedValueOnce(""); // read_maverick_md
     render(<InstructionsStep />);
     const ta = await screen.findByTestId("instructions-textarea");
-    mockInvoke.mockResolvedValueOnce(undefined); // write_global_md
+    mockInvoke.mockResolvedValueOnce(undefined); // write_maverick_md
 
     vi.useFakeTimers();
     fireEvent.change(ta, { target: { value: "Hi" } });
@@ -44,12 +44,12 @@ describe("InstructionsStep", () => {
     vi.useRealTimers();
 
     expect(mockInvoke).toHaveBeenCalledWith(
-      "write_global_md",
+      "write_maverick_md",
       expect.objectContaining({ contents: "Hi" })
     );
   });
 
-  it("falls back to empty textarea if read_global_md rejects", async () => {
+  it("falls back to empty textarea if read_maverick_md rejects", async () => {
     mockInvoke.mockRejectedValueOnce(new Error("nope"));
     render(<InstructionsStep />);
     await waitFor(() => {

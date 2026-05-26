@@ -9,7 +9,7 @@ pub struct MaverickPaths {
     pub themes_dir: PathBuf,  // ~/.maverick/themes
     pub attachments_dir: PathBuf, // ~/.maverick/attachments
     pub settings_file: PathBuf, // ~/.maverick/settings.json
-    pub global_md: PathBuf,   // ~/.maverick/GLOBAL.md
+    pub maverick_md: PathBuf, // ~/.maverick/MAVERICK.md (auto-prepended to every agent prompt)
     pub app_data_dir: PathBuf, // OS app data dir (parent of db.sqlite)
     pub db_path: PathBuf,     // <app_data_dir>/db.sqlite
     pub logs_dir: PathBuf,    // <app_data_dir>/logs
@@ -23,7 +23,7 @@ impl MaverickPaths {
         let themes_dir = config_root.join("themes");
         let attachments_dir = config_root.join("attachments");
         let settings_file = config_root.join("settings.json");
-        let global_md = config_root.join("GLOBAL.md");
+        let maverick_md = config_root.join("MAVERICK.md");
         let app_data_dir = app_data.to_path_buf();
         let db_path = app_data_dir.join("db.sqlite");
         let logs_dir = app_data_dir.join("logs");
@@ -32,7 +32,7 @@ impl MaverickPaths {
             themes_dir,
             attachments_dir,
             settings_file,
-            global_md,
+            maverick_md,
             app_data_dir,
             db_path,
             logs_dir,
@@ -126,11 +126,11 @@ pub fn write_settings(paths: &MaverickPaths, s: &MaverickSettings) -> std::io::R
     Ok(())
 }
 
-const GLOBAL_MD_SEED: &str = "<!-- Maverick global instructions.\n     This file is auto-prepended to every prompt sent to AI backends across ALL repos,\n     unless overridden by a project-local MAVERICK.md, CLAUDE.md, or AGENTS.md.\n     Edit freely; comments are stripped before injection. -->\n";
+const MAVERICK_MD_SEED: &str = "<!-- Your global Maverick instructions.\n     This file is auto-prepended to every conversation with every AI agent.\n     Drop a MAVERICK.md inside any repository to override these notes for that project.\n     Edit freely; HTML comments like this one are stripped before injection. -->\n";
 
-pub fn seed_global_md(paths: &MaverickPaths) -> std::io::Result<()> {
-    if !paths.global_md.exists() {
-        fs::write(&paths.global_md, GLOBAL_MD_SEED)?;
+pub fn seed_maverick_md(paths: &MaverickPaths) -> std::io::Result<()> {
+    if !paths.maverick_md.exists() {
+        fs::write(&paths.maverick_md, MAVERICK_MD_SEED)?;
     }
     Ok(())
 }
@@ -246,19 +246,19 @@ mod tests {
     }
 
     #[test]
-    fn seed_global_md_creates_when_missing_and_skips_when_present() {
+    fn seed_maverick_md_creates_when_missing_and_skips_when_present() {
         let home = tempdir().unwrap();
         let data = tempdir().unwrap();
         let paths = paths_in(home.path(), data.path());
         ensure_dirs(&paths).unwrap();
 
-        seed_global_md(&paths).unwrap();
-        assert!(paths.global_md.exists());
+        seed_maverick_md(&paths).unwrap();
+        assert!(paths.maverick_md.exists());
 
         // overwrite, call again, ensure we did NOT clobber
-        fs::write(&paths.global_md, "user edits").unwrap();
-        seed_global_md(&paths).unwrap();
-        let kept = fs::read_to_string(&paths.global_md).unwrap();
+        fs::write(&paths.maverick_md, "user edits").unwrap();
+        seed_maverick_md(&paths).unwrap();
+        let kept = fs::read_to_string(&paths.maverick_md).unwrap();
         assert_eq!(kept, "user edits");
     }
 }

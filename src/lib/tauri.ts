@@ -283,10 +283,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return invoke("request_notification_permission");
 }
 
-export async function readGlobalMd(): Promise<string> {
-  return invoke("read_global_md");
+export async function readMaverickMd(): Promise<string> {
+  return invoke("read_maverick_md");
 }
 
-export async function writeGlobalMd(contents: string): Promise<void> {
-  return invoke("write_global_md", { contents });
+export async function writeMaverickMd(contents: string): Promise<void> {
+  return invoke("write_maverick_md", { contents });
 }
