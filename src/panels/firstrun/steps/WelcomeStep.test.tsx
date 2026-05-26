@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { WelcomeStep } from "./WelcomeStep";
 import type { BootstrapStatus } from "@/lib/ipc";
 
@@ -19,18 +18,26 @@ const status: BootstrapStatus = {
 };
 
 describe("WelcomeStep", () => {
-  it("renders the three created paths", () => {
+  it("shows the Maverick brand mark and wordmark", () => {
     render(<WelcomeStep status={status} />);
-    expect(screen.getByText("/home/me/.maverick")).toBeInTheDocument();
-    expect(screen.getByText("/data/db.sqlite")).toBeInTheDocument();
-    expect(screen.getByText("/data/logs")).toBeInTheDocument();
+    const img = screen.getByAltText("Maverick") as HTMLImageElement;
+    expect(img).toBeInTheDocument();
+    expect(img.getAttribute("src")).toMatch(/app-icon\.png$/);
+    expect(screen.getByTestId("firstrun-wordmark")).toHaveTextContent(/welcome to maverick/i);
   });
 
-  it("clicking a path copies it to the clipboard", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  it("renders the four feature cards", () => {
     render(<WelcomeStep status={status} />);
-    await userEvent.click(screen.getByText("/home/me/.maverick"));
-    expect(writeText).toHaveBeenCalledWith("/home/me/.maverick");
+    expect(screen.getByText(/run multiple agents/i)).toBeInTheDocument();
+    expect(screen.getByText(/make it yours/i)).toBeInTheDocument();
+    expect(screen.getByText(/teach it once/i)).toBeInTheDocument();
+    expect(screen.getByText(/stay in flow/i)).toBeInTheDocument();
+  });
+
+  it("does not surface technical filesystem paths to the user", () => {
+    render(<WelcomeStep status={status} />);
+    expect(screen.queryByText("/home/me/.maverick")).not.toBeInTheDocument();
+    expect(screen.queryByText("/data/db.sqlite")).not.toBeInTheDocument();
+    expect(screen.queryByText("/data/logs")).not.toBeInTheDocument();
   });
 });
