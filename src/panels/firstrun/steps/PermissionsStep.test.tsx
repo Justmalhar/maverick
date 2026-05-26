@@ -66,4 +66,15 @@ describe("PermissionsStep", () => {
     });
     expect(onAdvance).toHaveBeenCalled();
   });
+
+  it("shows denied guidance paragraph when permission is denied", () => {
+    render(
+      <PermissionsStep
+        status={{ ...baseStatus, notificationPermission: "denied" }}
+        onAdvance={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("perm-state")).toHaveTextContent(/denied/i);
+    expect(screen.getByText(/system settings.*notifications/i)).toBeInTheDocument();
+  });
 });

@@ -49,4 +49,20 @@ describe("BackendStep", () => {
       expect.objectContaining({ patch: { defaultBackend: "claude-code" } })
     );
   });
+
+  it("handles non-array detect_backends result by rendering empty list", async () => {
+    mockInvoke.mockResolvedValueOnce(null as unknown as never);
+    render(<BackendStep />);
+    // No backends rendered, no crash; the empty <ul> exists once loading completes.
+    await screen.findByText(/scanned/i); // header text always present
+    expect(screen.queryAllByRole("radio").length).toBe(0);
+  });
+
+  it("renders 'installed' fallback when version is null", async () => {
+    mockInvoke.mockResolvedValueOnce([
+      { name: "ollama", command: "ollama", installed: true, path: "/opt/ollama", version: null },
+    ]);
+    render(<BackendStep />);
+    expect(await screen.findByText("installed")).toBeInTheDocument();
+  });
 });

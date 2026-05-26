@@ -87,4 +87,32 @@ describe("useFirstRun", () => {
     expect(mockInvoke).toHaveBeenCalledWith("reset_first_run");
     expect(result.current.open).toBe(true);
   });
+
+  it("back() decrements step but not below 1", async () => {
+    mockInvoke.mockResolvedValueOnce(baseStatus);
+    const { result } = renderHook(() => useFirstRun());
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+    act(() => result.current.advance()); // step 1 → 2
+    act(() => result.current.back()); // step 2 → 1
+    expect(result.current.step).toBe(1);
+    act(() => result.current.back()); // clamps at 1
+    expect(result.current.step).toBe(1);
+  });
+
+  it("goTo() jumps to the requested step", async () => {
+    mockInvoke.mockResolvedValueOnce(baseStatus);
+    const { result } = renderHook(() => useFirstRun());
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+    act(() => result.current.goTo(3));
+    expect(result.current.step).toBe(3);
+  });
+
+  it("advance() clamps at step 4 (final step)", async () => {
+    mockInvoke.mockResolvedValueOnce(baseStatus);
+    const { result } = renderHook(() => useFirstRun());
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+    act(() => result.current.goTo(4));
+    act(() => result.current.advance()); // stays at 4
+    expect(result.current.step).toBe(4);
+  });
 });
