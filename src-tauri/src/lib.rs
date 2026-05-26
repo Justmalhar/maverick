@@ -160,6 +160,8 @@ pub fn run() {
             reset_first_run,
             detect_backends,
             request_notification_permission,
+            read_global_md,
+            write_global_md,
         ]);
 
     let app = builder

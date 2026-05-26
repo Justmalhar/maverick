@@ -6,13 +6,16 @@ import {
 } from "@/lib/tauri";
 import type { BootstrapStatus } from "@/lib/ipc";
 
+export type WizardStep = 1 | 2 | 3 | 4 | 5;
+export const WIZARD_STEP_COUNT = 5;
+
 export interface FirstRunController {
   open: boolean;
-  step: 1 | 2 | 3 | 4;
+  step: WizardStep;
   status: BootstrapStatus | null;
   advance: () => void;
   back: () => void;
-  goTo: (step: 1 | 2 | 3 | 4) => void;
+  goTo: (step: WizardStep) => void;
   refresh: () => Promise<void>;
   complete: () => Promise<void>;
   reset: () => Promise<void>;
@@ -21,7 +24,7 @@ export interface FirstRunController {
 export function useFirstRun(): FirstRunController {
   const [status, setStatus] = useState<BootstrapStatus | null>(null);
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<WizardStep>(1);
 
   const refresh = useCallback(async () => {
     try {
@@ -46,14 +49,14 @@ export function useFirstRun(): FirstRunController {
   }, [refresh]);
 
   const advance = useCallback(() => {
-    setStep((s) => (s < 4 ? ((s + 1) as 1 | 2 | 3 | 4) : s));
+    setStep((s) => (s < WIZARD_STEP_COUNT ? ((s + 1) as WizardStep) : s));
   }, []);
 
   const back = useCallback(() => {
-    setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4) : s));
+    setStep((s) => (s > 1 ? ((s - 1) as WizardStep) : s));
   }, []);
 
-  const goTo = useCallback((s: 1 | 2 | 3 | 4) => setStep(s), []);
+  const goTo = useCallback((s: WizardStep) => setStep(s), []);
 
   const complete = useCallback(async () => {
     await bootstrapComplete();

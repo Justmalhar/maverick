@@ -33,22 +33,24 @@ describe("PermissionsStep", () => {
     expect(screen.getByTestId("perm-state")).toHaveTextContent(/not yet asked/i);
   });
 
-  it("shows 'granted' pill when already granted", () => {
+  it("shows the friendly 'all set' card instead of an Allow button when already granted", () => {
     render(
       <PermissionsStep
         status={{ ...baseStatus, notificationPermission: "granted" }}
         onAdvance={vi.fn()}
       />
     );
-    expect(screen.getByTestId("perm-state")).toHaveTextContent(/granted/i);
+    expect(screen.getByTestId("perm-granted-card")).toBeInTheDocument();
+    expect(screen.getByText(/you're all set/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /allow notifications/i })).not.toBeInTheDocument();
   });
 
-  it("clicks Allow → invokes request_notification_permission → state pill updates", async () => {
+  it("clicks Allow → invokes request_notification_permission → transitions to granted card", async () => {
     mockInvoke.mockResolvedValueOnce("granted");
     render(<PermissionsStep status={baseStatus} onAdvance={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: /allow notifications/i }));
     expect(mockInvoke).toHaveBeenCalledWith("request_notification_permission");
-    expect(await screen.findByText(/granted/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("perm-granted-card")).toBeInTheDocument();
   });
 
   it("when permission is unavailable, auto-advances after 800ms", async () => {
@@ -74,7 +76,7 @@ describe("PermissionsStep", () => {
         onAdvance={vi.fn()}
       />
     );
-    expect(screen.getByTestId("perm-state")).toHaveTextContent(/denied/i);
+    expect(screen.getByTestId("perm-state")).toHaveTextContent(/off/i);
     expect(screen.getByText(/system settings.*notifications/i)).toBeInTheDocument();
   });
 });

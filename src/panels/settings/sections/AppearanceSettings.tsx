@@ -4,6 +4,7 @@ import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
 import { useSettings, useSettingsStore } from "@/lib/stores/settings";
 import { useThemeContext } from "@/themes/theme-provider";
+import { ThemeCard } from "@/themes/theme-card";
 import { cn } from "@/lib/utils";
 import type { SettingsKey } from "@/lib/ipc";
 import { Button } from "@/components/ui/button";
@@ -57,16 +58,6 @@ const CUSTOM_COLORS: CustomColor[] = [
   { key: "appearance.customColors.statusbar", cssVar: "--statusbar-bg", label: "Status bar" },
 ];
 
-function themeBackground(colors?: Record<string, string>, ui?: Record<string, string>): string {
-  /* v8 ignore next */
-  return colors?.["editor.background"] ?? ui?.["bg-base"] ?? "hsl(var(--background))";
-}
-
-function themeAccent(colors?: Record<string, string>, ui?: Record<string, string>): string {
-  /* v8 ignore next */
-  return colors?.["activityBar.activeBorder"] ?? ui?.["accent"] ?? "hsl(var(--accent))";
-}
-
 export default function AppearanceSettings() {
   const { theme, themes, setTheme } = useThemeContext();
   const [uiFontSize, setUiFontSize] = useSettings("appearance.uiFontSize", 12);
@@ -79,38 +70,14 @@ export default function AppearanceSettings() {
       <SettingsGroup title="Theme" description="Affects UI surfaces, terminal palette, and syntax colors.">
         <div className="py-3">
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {themes.map((t) => {
-              const selected = theme.name === t.name;
-              const bg = themeBackground(t.colors, t.ui);
-              const accent = themeAccent(t.colors, t.ui);
-              /* v8 ignore next */
-              const fg = t.colors?.["editor.foreground"] ?? t.ui?.["text-primary"] ?? "hsl(var(--foreground))";
-              return (
-                <button
-                  key={t.name}
-                  type="button"
-                  onClick={() => setTheme(t)}
-                  data-testid={`theme-${t.name.toLowerCase().replace(/\s+/g, "-")}`}
-                  aria-pressed={selected}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-md p-2 text-left text-[11px] transition-colors",
-                    selected ? "ring-1 ring-accent/60" : "",
-                  )}
-                  style={{ border: selected ? "1px solid hsl(var(--accent))" : "1px solid hsl(var(--border))" }}
-                >
-                  <div
-                    className="h-10 w-full rounded"
-                    style={{ background: bg, border: "1px solid hsl(var(--border))" }}
-                  >
-                    <div className="flex h-full items-center justify-center gap-1">
-                      <span className="h-2 w-2 rounded-full" style={{ background: fg }} />
-                      <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
-                    </div>
-                  </div>
-                  <span className="truncate">{t.name}</span>
-                </button>
-              );
-            })}
+            {themes.map((t) => (
+              <ThemeCard
+                key={t.name}
+                theme={t}
+                selected={theme.name === t.name}
+                onSelect={() => setTheme(t)}
+              />
+            ))}
           </div>
         </div>
       </SettingsGroup>

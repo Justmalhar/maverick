@@ -165,3 +165,26 @@ pub async fn request_notification_permission(
         Err(_) => Ok("unavailable".into()),
     }
 }
+
+#[tauri::command]
+pub async fn read_global_md(state: State<'_, AppState>) -> Result<String, String> {
+    let path = &state.paths.global_md;
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn write_global_md(
+    state: State<'_, AppState>,
+    contents: String,
+) -> Result<(), String> {
+    let path = &state.paths.global_md;
+    // Atomic-ish: write to tmp then rename, matching write_settings pattern.
+    let tmp = path.with_extension("md.tmp");
+    std::fs::write(&tmp, contents).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    Ok(())
+}

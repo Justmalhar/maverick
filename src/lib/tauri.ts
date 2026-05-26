@@ -282,3 +282,11 @@ export async function detectBackends(): Promise<DetectedBackend[]> {
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   return invoke("request_notification_permission");
 }
+
+export async function readGlobalMd(): Promise<string> {
+  return invoke("read_global_md");
+}
+
+export async function writeGlobalMd(contents: string): Promise<void> {
+  return invoke("write_global_md", { contents });
+}

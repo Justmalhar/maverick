@@ -21,7 +21,7 @@ pub use attachment::attachment_create;
 pub use automation::automation_run;
 pub use bootstrap::{
     bootstrap_complete, bootstrap_status, bootstrap_update_settings, detect_backends,
-    request_notification_permission, reset_first_run,
+    read_global_md, request_notification_permission, reset_first_run, write_global_md,
 };
 pub use config::config_load;
 pub use context::context_usage;

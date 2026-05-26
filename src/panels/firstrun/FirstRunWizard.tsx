@@ -1,13 +1,60 @@
-import { useFirstRun } from "@/hooks/useFirstRun";
+import { Check } from "lucide-react";
+import { useFirstRun, WIZARD_STEP_COUNT, type WizardStep } from "@/hooks/useFirstRun";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { WelcomeStep } from "./steps/WelcomeStep";
 import { PermissionsStep } from "./steps/PermissionsStep";
 import { ThemeStep } from "./steps/ThemeStep";
+import { InstructionsStep } from "./steps/InstructionsStep";
 import { BackendStep } from "./steps/BackendStep";
 
-const LABELS = ["Welcome", "Permissions", "Theme", "Backend"] as const;
+const LABELS = ["Welcome", "Notifications", "Theme", "Instructions", "Backend"] as const;
+
+interface StepDotProps {
+  index: WizardStep;
+  current: WizardStep;
+  label: string;
+  isLast: boolean;
+}
+
+function StepDot({ index, current, label, isLast }: StepDotProps) {
+  const done = index < current;
+  const active = index === current;
+  return (
+    <div className="flex flex-1 items-center" data-testid={`wizard-step-dot-${index}`}>
+      <div className="flex flex-col items-center gap-1">
+        <div
+          aria-current={active ? "step" : undefined}
+          className={cn(
+            "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-colors",
+            done && "bg-primary text-primary-foreground",
+            active && "bg-primary text-primary-foreground ring-2 ring-primary/30",
+            !done && !active && "bg-muted text-muted-foreground"
+          )}
+        >
+          {done ? <Check className="h-3 w-3" strokeWidth={3} /> : index}
+        </div>
+        <span
+          className={cn(
+            "text-[10px] leading-none",
+            active ? "text-foreground" : "text-muted-foreground"
+          )}
+        >
+          {label}
+        </span>
+      </div>
+      {!isLast && (
+        <div
+          className={cn(
+            "mx-2 h-px flex-1 transition-colors",
+            done ? "bg-primary/60" : "bg-border"
+          )}
+        />
+      )}
+    </div>
+  );
+}
 
 export function FirstRunWizard() {
   const ctrl = useFirstRun();
@@ -18,12 +65,13 @@ export function FirstRunWizard() {
       case 1: return <WelcomeStep status={ctrl.status} />;
       case 2: return <PermissionsStep status={ctrl.status} onAdvance={ctrl.advance} />;
       case 3: return <ThemeStep />;
-      case 4: return <BackendStep />;
+      case 4: return <InstructionsStep />;
+      case 5: return <BackendStep />;
     }
   })();
 
   const isFirst = ctrl.step === 1;
-  const isLast = ctrl.step === 4;
+  const isLast = ctrl.step === WIZARD_STEP_COUNT;
 
   return (
     <motion.div
@@ -33,56 +81,61 @@ export function FirstRunWizard() {
       transition={{ duration: 0.2 }}
       className="fixed inset-0 z-overlay flex items-center justify-center bg-background/95 backdrop-blur"
     >
-      <div className="flex w-full max-w-2xl flex-col gap-6 rounded-lg border border-border bg-card p-8 shadow-md">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <div className="flex w-full max-w-2xl flex-col gap-8 rounded-lg border border-border bg-card p-8 shadow-md">
+        {/* Step indicator */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-1 items-start">
             {LABELS.map((label, i) => {
-              const n = (i + 1) as 1 | 2 | 3 | 4;
+              const n = (i + 1) as WizardStep;
               return (
-                <div key={label} className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      n === ctrl.step ? "bg-primary" : n < ctrl.step ? "bg-primary/50" : "bg-muted"
-                    )}
-                  />
-                  <span className={cn("text-[11px]", n === ctrl.step ? "text-foreground" : "text-muted-foreground")}>
-                    {label}
-                  </span>
-                </div>
+                <StepDot
+                  key={label}
+                  index={n}
+                  current={ctrl.step}
+                  label={label}
+                  isLast={i === LABELS.length - 1}
+                />
               );
             })}
           </div>
-          <span data-testid="firstrun-step-indicator" className="text-[11px] text-muted-foreground">
-            Step {ctrl.step} / 4
+          <span
+            data-testid="firstrun-step-indicator"
+            className="shrink-0 self-start pt-0.5 text-[11px] text-muted-foreground"
+          >
+            Step {ctrl.step} / {WIZARD_STEP_COUNT}
           </span>
         </div>
 
-        <div className="min-h-[280px]">{StepBody}</div>
+        {/* Body — extra top margin away from the step indicator */}
+        <div className="min-h-[320px] pt-2">{StepBody}</div>
 
-        <div className="flex items-center justify-end gap-2">
-          {!isFirst && (
+        {/* Footer: Skip on the left, Back + Continue on the right */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center">
+            {!isFirst && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={isLast ? () => void ctrl.complete() : ctrl.advance}
+              >
+                Skip
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!isFirst && (
+              <Button variant="ghost" size="sm" onClick={ctrl.back}>
+                Back
+              </Button>
+            )}
             <Button
-              variant="ghost"
+              variant="default"
               size="sm"
               onClick={isLast ? () => void ctrl.complete() : ctrl.advance}
             >
-              Skip
+              {isLast ? "Get started" : "Continue"}
             </Button>
-          )}
-          {!isFirst && (
-            <Button variant="ghost" size="sm" onClick={ctrl.back}>
-              Back
-            </Button>
-          )}
-          <Button
-            variant="default"
-            size="sm"
-            onClick={isLast ? () => void ctrl.complete() : ctrl.advance}
-          >
-            {isLast ? "Get started" : "Continue"}
-          </Button>
+          </div>
         </div>
       </div>
     </motion.div>

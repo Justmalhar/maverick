@@ -107,13 +107,13 @@ describe("useFirstRun", () => {
     expect(result.current.step).toBe(3);
   });
 
-  it("advance() clamps at step 4 (final step)", async () => {
+  it("advance() clamps at step 5 (final step)", async () => {
     mockInvoke.mockResolvedValueOnce(baseStatus);
     const { result } = renderHook(() => useFirstRun());
     await waitFor(() => expect(result.current.status).not.toBeNull());
-    act(() => result.current.goTo(4));
-    act(() => result.current.advance()); // stays at 4
-    expect(result.current.step).toBe(4);
+    act(() => result.current.goTo(5));
+    act(() => result.current.advance()); // stays at 5
+    expect(result.current.step).toBe(5);
   });
 
   it("listens to maverick:firstrun:reset event and refreshes", async () => {
