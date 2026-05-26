@@ -331,6 +331,8 @@ export type KnownBackendName =
   | "codex"
   | "gemini"
   | "aider"
+  | "opencode"
+  | "antigravity"
   | "ollama";
 
 export interface DetectedBackend {

@@ -14,6 +14,21 @@ vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(),
 }));
 
+// The shell plugin reaches into `window.__TAURI_INTERNALS__` directly instead
+// of going through `@tauri-apps/api/core::invoke`, so our existing mock above
+// doesn't catch its `open(url)` calls. Provide a separate spy.
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  open: vi.fn().mockResolvedValue(undefined),
+  Command: class {
+    static create() {
+      return { execute: vi.fn().mockResolvedValue({ code: 0, stdout: "", stderr: "" }) };
+    }
+    execute() {
+      return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+    }
+  },
+}));
+
 // matchMedia polyfill
 Object.defineProperty(window, "matchMedia", {
   writable: true,
@@ -87,6 +102,48 @@ vi.mock("framer-motion", () => {
     useReducedMotion: () => false,
     LazyMotion: ({ children }: { children: React.ReactNode }) => children,
     domAnimation: {},
+  };
+});
+
+// @lobehub/icons pulls in @lobehub/fluent-emoji which uses directory imports
+// that Node's strict ESM resolver rejects under jsdom. We don't render real
+// brand SVGs in unit tests — substitute a lightweight stub that preserves the
+// compound .Color / .Mono / .Avatar / .Combine / .Text shape.
+vi.mock("@lobehub/icons", () => {
+  const Stub = (label: string) => {
+    const Component: React.ComponentType<{ size?: number }> = ({ size = 24 }) =>
+      React.createElement("svg", {
+        "data-testid": `icon-${label}`,
+        "data-icon": label,
+        width: size,
+        height: size,
+        role: "img",
+        "aria-label": label,
+      });
+    Component.displayName = `Icon(${label})`;
+    return Component;
+  };
+  const compound = (label: string) => {
+    const root = Stub(label) as unknown as Record<string, unknown>;
+    root.Color = Stub(`${label}.Color`);
+    root.Mono = Stub(`${label}.Mono`);
+    root.Avatar = Stub(`${label}.Avatar`);
+    root.Combine = Stub(`${label}.Combine`);
+    root.Text = Stub(`${label}.Text`);
+    return root;
+  };
+  return {
+    Antigravity: compound("Antigravity"),
+    Anthropic: compound("Anthropic"),
+    Claude: compound("Claude"),
+    ClaudeCode: compound("ClaudeCode"),
+    Codex: compound("Codex"),
+    Gemini: compound("Gemini"),
+    GeminiCLI: compound("GeminiCLI"),
+    Google: compound("Google"),
+    Ollama: compound("Ollama"),
+    OpenAI: compound("OpenAI"),
+    OpenCode: compound("OpenCode"),
   };
 });
 

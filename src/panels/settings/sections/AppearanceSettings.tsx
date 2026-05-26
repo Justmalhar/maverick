@@ -5,7 +5,6 @@ import { SettingsToggle } from "../primitives/SettingsToggle";
 import { useSettings, useSettingsStore } from "@/lib/stores/settings";
 import { useThemeContext } from "@/themes/theme-provider";
 import { ThemeCard } from "@/themes/theme-card";
-import { cn } from "@/lib/utils";
 import type { SettingsKey } from "@/lib/ipc";
 import { Button } from "@/components/ui/button";
 

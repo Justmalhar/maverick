@@ -50,11 +50,11 @@ function StepDot({ index, current, label, isLast }: StepDotProps) {
         </span>
       </div>
       {!isLast && (
-        // mt-[11px] aligns the 2px line with the center of the 24px dot above.
+        // mt-3 (12px) puts the 2px line at the vertical center of the 24px dot.
         <div
           data-testid={`wizard-step-line-${index}`}
           className={cn(
-            "mx-2 mt-[11px] h-0.5 flex-1 rounded-full transition-colors",
+            "mx-2 mt-3 h-0.5 flex-1 rounded-full transition-colors",
             lineDone ? "bg-primary/70" : "bg-muted-foreground/30"
           )}
         />
@@ -114,7 +114,7 @@ export function FirstRunWizard() {
         </div>
 
         {/* Body — extra top margin away from the step indicator */}
-        <div className="min-h-[320px] pt-2">{StepBody}</div>
+        <div className="min-h-80 pt-2">{StepBody}</div>
 
         {/* Footer: Skip on the left, Back + Continue on the right */}
         <div className="flex items-center justify-between gap-2">

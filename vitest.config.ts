@@ -14,6 +14,14 @@ export default defineConfig({
     css: true,
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules/**", "sidecar/**", "src-tauri/**"],
+    server: {
+      deps: {
+        // @lobehub/icons re-exports brand SVGs and uses directory imports
+        // (e.g. ".../FluentEmoji") that Node's strict ESM resolver rejects.
+        // Inlining lets vite's resolver handle them through the dev pipeline.
+        inline: [/@lobehub/],
+      },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

@@ -26,12 +26,14 @@ describe("GeneralSettings", () => {
   });
 
   it("shows custom binary path input when defaultBackend is 'other'", () => {
+    // @ts-expect-error - test fixture intentionally bypasses the strict Status union
     useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
     renderWithProviders(<GeneralSettings />);
     expect(screen.getByTestId("general-default-backend-binpath")).toBeInTheDocument();
   });
 
   it("custom binary path input onChange updates the store value", () => {
+    // @ts-expect-error - test fixture intentionally bypasses the strict Status union
     useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
     renderWithProviders(<GeneralSettings />);
     fireEvent.change(screen.getByTestId("general-default-backend-binpath"), { target: { value: "/usr/local/bin/myagent" } });

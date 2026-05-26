@@ -69,6 +69,7 @@ describe("SettingsPanel", () => {
 
   it("general settings shows custom binpath input when defaultBackend is 'other'", async () => {
     const { useSettingsStore } = await import("@/lib/stores/settings");
+    // @ts-expect-error - test fixture intentionally bypasses the strict Status union
     useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
     renderWithProviders(<SettingsPanel onClose={() => {}} />);
     expect(screen.getByTestId("general-default-backend-binpath")).toBeInTheDocument();

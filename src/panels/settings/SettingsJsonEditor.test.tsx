@@ -18,6 +18,7 @@ describe("SettingsJsonEditor", () => {
   });
 
   it("includes unknown (non-SETTINGS_KEYS) values in the snapshot", () => {
+    // @ts-expect-error - test fixture intentionally uses an unknown SettingsKey
     useSettingsStore.setState({ values: { "custom.unknown.key": "custom-val" } });
     renderWithProviders(<SettingsJsonEditor onClose={() => {}} />);
     const textarea = screen.getByTestId("settings-json-textarea") as HTMLTextAreaElement;
