@@ -1,5 +1,6 @@
 pub mod attachment;
 pub mod automation;
+pub mod bootstrap;
 pub mod config;
 pub mod context;
 pub mod diff;
@@ -18,6 +19,10 @@ pub mod workspace;
 
 pub use attachment::attachment_create;
 pub use automation::automation_run;
+pub use bootstrap::{
+    bootstrap_complete, bootstrap_status, bootstrap_update_settings, detect_backends,
+    request_notification_permission, reset_first_run,
+};
 pub use config::config_load;
 pub use context::context_usage;
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};

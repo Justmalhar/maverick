@@ -1,8 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, fireEvent } from "@/test/utils";
+import { invoke } from "@tauri-apps/api/core";
 import GeneralSettings from "./GeneralSettings";
 import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
+
+const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>;
 
 describe("GeneralSettings", () => {
   beforeEach(() => _resetSettingsStoreForTests());
@@ -32,5 +35,12 @@ describe("GeneralSettings", () => {
     renderWithProviders(<GeneralSettings />);
     fireEvent.change(screen.getByTestId("general-default-backend-binpath"), { target: { value: "/usr/local/bin/myagent" } });
     expect(useSettingsStore.getState().values["general.defaultBackendBinPath"]).toBe("/usr/local/bin/myagent");
+  });
+
+  it("Run setup wizard button calls reset_first_run", async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    renderWithProviders(<GeneralSettings />);
+    await userEvent.click(screen.getByRole("button", { name: /run setup wizard/i }));
+    expect(mockInvoke).toHaveBeenCalledWith("reset_first_run");
   });
 });
