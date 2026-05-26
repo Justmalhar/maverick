@@ -32,6 +32,11 @@ export function ThemeCard({ theme, selected, onSelect }: ThemeCardProps) {
   const fg = themeForeground(theme.colors, theme.ui);
   const slug = themeSlug(theme.name);
 
+  // --border is intentionally near-invisible against the card surface; for the
+  // unselected outline we derive from --muted-foreground so the swatch always
+  // stands apart regardless of theme.
+  const unselectedBorder = "hsl(var(--muted-foreground) / 0.3)";
+
   return (
     <button
       type="button"
@@ -41,15 +46,15 @@ export function ThemeCard({ theme, selected, onSelect }: ThemeCardProps) {
       aria-label={`Apply theme ${slug}`}
       className={cn(
         "flex flex-col gap-1 rounded-md p-2 text-left text-[11px] transition-colors",
-        selected ? "ring-1 ring-accent/60" : ""
+        selected ? "ring-1 ring-accent/60" : "hover:border-foreground/40"
       )}
       style={{
-        border: selected ? "1px solid hsl(var(--accent))" : "1px solid hsl(var(--border))",
+        border: selected ? "1px solid hsl(var(--accent))" : `1px solid ${unselectedBorder}`,
       }}
     >
       <div
         className="h-10 w-full rounded"
-        style={{ background: bg, border: "1px solid hsl(var(--border))" }}
+        style={{ background: bg, border: `1px solid ${unselectedBorder}` }}
       >
         <div className="flex h-full items-center justify-center gap-1">
           <span className="h-2 w-2 rounded-full" style={{ background: fg }} />
