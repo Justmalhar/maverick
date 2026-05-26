@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { invoke } from "@tauri-apps/api/core";
 import { FirstRunWizard } from "./FirstRunWizard";
 import * as hook from "@/hooks/useFirstRun";
+
+const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>;
 
 function withController(overrides: Partial<ReturnType<typeof hook.useFirstRun>>) {
   vi.spyOn(hook, "useFirstRun").mockReturnValue({
@@ -61,6 +64,7 @@ describe("FirstRunWizard", () => {
 
   it("step 4 primary button reads 'Get started' and calls complete()", async () => {
     const complete = vi.fn().mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue([]);
     withController({ step: 4, complete });
     render(<FirstRunWizard />);
     const btn = screen.getByRole("button", { name: /get started/i });

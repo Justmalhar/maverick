@@ -11,7 +11,7 @@ export function BackendStep() {
   useEffect(() => {
     let cancelled = false;
     detectBackends().then((r) => {
-      if (!cancelled) setRows(r);
+      if (!cancelled) setRows(Array.isArray(r) ? r : []);
     });
     return () => {
       cancelled = true;
