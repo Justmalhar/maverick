@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
-import { BottomTerminal, __testing__ } from "./BottomTerminal";
+import { BottomTerminal, killBottomPty, __testing__ } from "./BottomTerminal";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
@@ -140,5 +140,17 @@ describe("BottomTerminal", () => {
 
     renderWithProviders(<BottomTerminal />);
     expect(await screen.findByTestId("bottom-terminal-error")).toHaveTextContent("spawn failed");
+  });
+
+  it("killBottomPty kills and evicts the cached shell pty", async () => {
+    __testing__.ptyCache.set("ws-k", "pty-bottom");
+    killBottomPty("ws-k");
+    expect(__testing__.ptyCache.has("ws-k")).toBe(false);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-bottom" }));
+  });
+
+  it("killBottomPty is a no-op when nothing is cached", () => {
+    killBottomPty("absent");
+    expect(invoke).not.toHaveBeenCalledWith("pty_kill", expect.anything());
   });
 });

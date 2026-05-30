@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
-import { ptySpawn } from "@/lib/tauri";
+import { ptySpawn, ptyKill } from "@/lib/tauri";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
 
@@ -26,6 +26,14 @@ interface SpawnState {
 
 // Keyed by workspace id so the agent process survives tab switches / remounts.
 const agentPtyCache = new Map<string, string>();
+
+/** Kill and evict a workspace's agent-CLI PTY. Called when the workspace is destroyed. */
+export function killAgentPty(workspaceId: string): void {
+  const ptyId = agentPtyCache.get(workspaceId);
+  if (!ptyId) return;
+  agentPtyCache.delete(workspaceId);
+  void ptyKill(ptyId).catch(() => {});
+}
 
 /** Live terminal running the workspace's backend CLI in its worktree. */
 export function AgentTerminal({ workspace }: Props) {

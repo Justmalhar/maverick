@@ -28,6 +28,14 @@ export function killLeaf(leafId: string): void {
   void ptyKill(ptyId).catch(() => {});
 }
 
+/** Kill every terminal-mode leaf PTY belonging to a workspace (ids are `${workspaceId}-…`). */
+export function killWorkspaceLeaves(workspaceId: string): void {
+  const prefix = `${workspaceId}-`;
+  for (const leafId of [...leafPtyCache.keys()]) {
+    if (leafId.startsWith(prefix)) killLeaf(leafId);
+  }
+}
+
 interface Props {
   leafId: string;
   workspace: Workspace;

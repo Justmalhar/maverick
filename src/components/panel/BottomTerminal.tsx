@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Terminal } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
-import { ptySpawn } from "@/lib/tauri";
+import { ptySpawn, ptyKill } from "@/lib/tauri";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
 
 const DEFAULT_SHELL = "/bin/zsh";
@@ -14,6 +14,14 @@ interface SpawnState {
 }
 
 const ptyCache = new Map<string, string>();
+
+/** Kill and evict a workspace's bottom-panel shell PTY. Called on workspace destroy. */
+export function killBottomPty(workspaceId: string): void {
+  const ptyId = ptyCache.get(workspaceId);
+  if (!ptyId) return;
+  ptyCache.delete(workspaceId);
+  void ptyKill(ptyId).catch(() => {});
+}
 
 export function BottomTerminal() {
   const ws = useWorkbench(selectActiveWorkspace);

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
-import { TerminalLeaf, killLeaf, __testing__ } from "./TerminalLeaf";
+import { TerminalLeaf, killLeaf, killWorkspaceLeaves, __testing__ } from "./TerminalLeaf";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
@@ -74,6 +74,21 @@ describe("TerminalLeaf", () => {
   it("killLeaf is a no-op for an unknown leaf", () => {
     killLeaf("never-existed");
     expect(invoke).not.toHaveBeenCalledWith("pty_kill", expect.anything());
+  });
+
+  it("killWorkspaceLeaves kills only the matching workspace's leaves", async () => {
+    __testing__.leafPtyCache.set("w1-1", "pty-1");
+    __testing__.leafPtyCache.set("w1-1700000000", "pty-2");
+    __testing__.leafPtyCache.set("w2-1", "pty-3");
+    killWorkspaceLeaves("w1");
+    expect(__testing__.leafPtyCache.has("w1-1")).toBe(false);
+    expect(__testing__.leafPtyCache.has("w1-1700000000")).toBe(false);
+    expect(__testing__.leafPtyCache.has("w2-1")).toBe(true);
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-1" });
+      expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-2" });
+    });
+    expect(invoke).not.toHaveBeenCalledWith("pty_kill", { ptyId: "pty-3" });
   });
 
   it("ignores a late spawn result after unmount", async () => {

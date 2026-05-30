@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
-import { AgentTerminal, __testing__ } from "./AgentTerminal";
+import { AgentTerminal, killAgentPty, __testing__ } from "./AgentTerminal";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeBackend } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
@@ -128,5 +128,17 @@ describe("AgentTerminal", () => {
     rejectSpawn(new Error("late"));
     await Promise.resolve();
     expect(__testing__.agentPtyCache.has("w7")).toBe(false);
+  });
+
+  it("killAgentPty kills and evicts the cached agent pty", async () => {
+    __testing__.agentPtyCache.set("wk", "pty-agent");
+    killAgentPty("wk");
+    expect(__testing__.agentPtyCache.has("wk")).toBe(false);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-agent" }));
+  });
+
+  it("killAgentPty is a no-op when nothing is cached", () => {
+    killAgentPty("absent");
+    expect(invoke).not.toHaveBeenCalledWith("pty_kill", expect.anything());
   });
 });
