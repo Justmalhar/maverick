@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 import { useShortcuts } from "./useShortcuts";
 import { useWorkbench } from "@/state/store";
-import { makeWorkspace } from "@/test/fixtures";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
@@ -133,6 +135,95 @@ describe("useShortcuts", () => {
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
   });
 
+  it("terminal.splitH dispatches maverick:terminal:splitH", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+d"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:splitH" })
+    );
+  });
+
+  it("terminal.splitV dispatches maverick:terminal:splitV", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Shift+d"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:splitV" })
+    );
+  });
+
+  it("terminal.closePane dispatches maverick:terminal:closePane", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Shift+w"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:closePane" })
+    );
+  });
+
+  it("browser.toggleInspect dispatches maverick:browser:toggleInspect", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Shift+i"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:browser:toggleInspect" })
+    );
+  });
+
+  it("terminal.focusLeft dispatches maverick:terminal:focusDirection with detail left", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Alt+ArrowLeft"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:focusDirection", detail: "left" })
+    );
+  });
+
+  it("terminal.focusRight dispatches maverick:terminal:focusDirection with detail right", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Alt+ArrowRight"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:focusDirection", detail: "right" })
+    );
+  });
+
+  it("terminal.focusUp dispatches maverick:terminal:focusDirection with detail up", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Alt+ArrowUp"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:focusDirection", detail: "up" })
+    );
+  });
+
+  it("terminal.focusDown dispatches maverick:terminal:focusDirection with detail down", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Alt+ArrowDown"));
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:terminal:focusDirection", detail: "down" })
+    );
+  });
+
+  it("terminal.openBottomTerminal shows panel and dispatches maverick:panel:tab with terminal", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("$mod+Shift+t"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:panel:tab", detail: "terminal" })
+    );
+  });
+
+  it("terminal.openBottomTerminal does not double-toggle when panel is already visible", () => {
+    useWorkbench.setState({ ...useWorkbench.getState(), layout: { ...useWorkbench.getState().layout, panelVisible: true } });
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+t"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+  });
+
   it("layout/view/global handlers update store", () => {
     renderHook(() => useShortcuts());
     act(() => fire("$mod+b"));
@@ -187,5 +278,41 @@ describe("useShortcuts", () => {
     renderHook(() => useShortcuts());
     act(() => fire("$mod+Shift+,"));
     expect(useWorkbench.getState().projectSettings.open).toBe(false);
+  });
+
+  it("ai.review is a no-op when there is no active workspace", () => {
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+r"));
+    // No active workspace → handler returns before touching editor mode.
+    expect(useWorkbench.getState().editorModes).toEqual({});
+  });
+
+  it("ai.review uses the project review preference and switches to agent mode", async () => {
+    vi.mocked(invoke).mockReset().mockImplementation(((cmd: string) => {
+      if (cmd === "diff_get") return Promise.resolve(makeDiff({ files: [makeDiffFile()] }));
+      return Promise.resolve(undefined);
+    }) as unknown as typeof invoke);
+    useProjectSettingsStore.setState({
+      data: {
+        name: "demo", rootPath: "/wt",
+        workspaces: { branchFrom: "main", filesToCopy: [] },
+        remote: "origin", previewUrl: "",
+        scripts: { setup: "", run: "", archive: "" },
+        preferences: { review: "Only flag security bugs." },
+      },
+      projectId: "p1", status: "loaded", dirty: {}, lastError: null,
+    });
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w1", worktreePath: "/wt" })]);
+    useWorkbench.getState().setActiveWorkspace("w1");
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+r"));
+    await waitFor(() => expect(useWorkbench.getState().editorModes["w1"]).toBe("agent"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        expect.objectContaining({ data: expect.stringContaining("Only flag security bugs.") })
+      )
+    );
+    useProjectSettingsStore.setState({ data: null, projectId: null, status: "idle", dirty: {}, lastError: null });
   });
 });

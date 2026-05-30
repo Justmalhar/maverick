@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanCard from "./KanbanCard";
 import { useWorkbench } from "@/state/store";
-import { makeBackend, makeKanbanTask, makeWorkspace } from "@/test/fixtures";
+import { makeBackend, makeKanbanTask, makeProject, makeWorkspace } from "@/test/fixtures";
 import type { DiffStat } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
@@ -36,6 +36,7 @@ describe("KanbanCard", () => {
     useWorkbench.setState({
       ...initial,
       backends: [makeBackend({ id: "claude", active: false })],
+      projects: [makeProject({ id: "p1", path: "/tmp/p1" })],
     });
     vi.mocked(invoke).mockResolvedValueOnce({
       id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude",
@@ -43,15 +44,34 @@ describe("KanbanCard", () => {
     } as never);
     renderWithProviders(<KanbanCard task={makeKanbanTask({ projectId: "p1" })} index={0} onEdit={() => {}} />);
     await userEvent.click(screen.getByTestId("kanban-start"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", expect.any(Object)));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(
+      "workspace_create",
+      expect.objectContaining({ projectId: "p1", projectPath: "/tmp/p1" })
+    ));
   });
 
   it("logs an error when start fails", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "proj-1", path: "/tmp/proj-1" })],
+    });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(invoke).mockRejectedValueOnce(new Error("no"));
     renderWithProviders(<KanbanCard task={makeKanbanTask()} index={0} onEdit={() => {}} />);
     await userEvent.click(screen.getByTestId("kanban-start"));
     await waitFor(() => expect(errSpy).toHaveBeenCalled());
+    errSpy.mockRestore();
+  });
+
+  it("logs an error when the project is missing from the store", async () => {
+    useWorkbench.setState({ ...initial, projects: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ projectId: "ghost" })} index={0} onEdit={() => {}} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-start"));
+    await waitFor(() => expect(errSpy).toHaveBeenCalled());
+    expect(invoke).not.toHaveBeenCalled();
     errSpy.mockRestore();
   });
 
@@ -134,7 +154,11 @@ describe("KanbanCard", () => {
   });
 
   it("startInMaverick falls back to 'claude' when backends list is empty and task has no agentBackend", async () => {
-    useWorkbench.setState({ ...initial, backends: [] });
+    useWorkbench.setState({
+      ...initial,
+      backends: [],
+      projects: [makeProject({ id: "p1", path: "/tmp/p1" })],
+    });
     vi.mocked(invoke).mockResolvedValueOnce({
       id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude",
       worktreePath: "", status: "active", sessionId: "s",
@@ -163,5 +187,58 @@ describe("KanbanCard", () => {
     );
     await userEvent.click(screen.getByTestId("kanban-view"));
     expect(useWorkbench.getState().activeWorkspaceId).toBe("ws-active");
+  });
+
+  it("calls onStart prop with the task when provided", async () => {
+    const onStart = vi.fn().mockResolvedValue(undefined);
+    const task = makeKanbanTask({ id: "t-start", projectId: "p1" });
+    renderWithProviders(
+      <KanbanCard task={task} index={0} onEdit={vi.fn()} onStart={onStart} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-start"));
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith(task));
+    // Should NOT call invoke directly when onStart is provided
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("shows error on card when onStart throws", async () => {
+    const onStart = vi.fn().mockRejectedValue(new Error("start-boom"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ projectId: "p1" })}
+        index={0}
+        onEdit={vi.fn()}
+        onStart={onStart}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-start"));
+    await waitFor(() =>
+      expect(screen.getByTestId("kanban-start-error")).toBeInTheDocument()
+    );
+    expect(screen.getByTestId("kanban-start-error").textContent).toContain("start-boom");
+    errSpy.mockRestore();
+  });
+
+  it("Start button is disabled when task has no projectId", () => {
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "todo", projectId: "" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("kanban-start")).toBeDisabled();
+  });
+
+  it("Start button is not shown when task is done", () => {
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "done", projectId: "p1" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId("kanban-start")).not.toBeInTheDocument();
   });
 });

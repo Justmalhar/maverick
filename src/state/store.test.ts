@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useWorkbench, selectActiveWorkspace, selectEditorMode, selectWorkspacesForProject } from "./store";
+import {
+  useWorkbench,
+  selectActiveWorkspace,
+  selectEditorMode,
+  selectWorkspacesForProject,
+  computeLiveWorkspaceIds,
+} from "./store";
 import { makeProject, makeWorkspace, makeBackend, makeSkill } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
@@ -61,6 +67,31 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
   });
 
+  it("tracks workspace access order (MRU first) across add/activate/remove", () => {
+    const wsA = makeWorkspace({ id: "a" });
+    const wsB = makeWorkspace({ id: "b" });
+    useWorkbench.getState().addWorkspace(wsA);
+    useWorkbench.getState().addWorkspace(wsB);
+    // addWorkspace prepends → most recent first
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual(["b", "a"]);
+
+    useWorkbench.getState().setActiveWorkspace("a");
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual(["a", "b"]);
+
+    useWorkbench.getState().setActiveWorkspace(null);
+    // null active leaves order unchanged
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual(["a", "b"]);
+
+    useWorkbench.getState().removeWorkspace("a");
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual(["b"]);
+
+    // setWorkspaces prunes ids that no longer exist
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "b" })]);
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual(["b"]);
+    useWorkbench.getState().setWorkspaces([]);
+    expect(useWorkbench.getState().workspaceAccessOrder).toEqual([]);
+  });
+
   it("editor mode set + toggle", () => {
     useWorkbench.getState().setEditorMode("w1", "agent");
     expect(useWorkbench.getState().editorModes["w1"]).toBe("agent");
@@ -114,6 +145,24 @@ describe("workbench store", () => {
     expect(s.keybindingHelpOpen && s.settingsOpen).toBe(true);
   });
 
+  it("activating a workspace clears the active system tab (and vice versa)", () => {
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "wA" })]);
+    // Open a system tab (e.g. Kanban) — this is the active editor.
+    useWorkbench.getState().openSystemTab("kanban");
+    expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+
+    // Clicking a workspace tab must switch away from the system tab.
+    useWorkbench.getState().setActiveWorkspace("wA");
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("wA");
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
+
+    // Re-selecting the system tab clears the active workspace again.
+    useWorkbench.getState().setActiveSystemTab("kanban");
+    expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+  });
+
   it("selectors", () => {
     const ws = makeWorkspace({ id: "wA", projectId: "p1" });
     useWorkbench.getState().setWorkspaces([ws, makeWorkspace({ id: "wB", projectId: "p2" })]);
@@ -149,5 +198,46 @@ describe("workbench store", () => {
     const ps = useWorkbench.getState().projectSettings;
     expect(ps.open).toBe(false);
     expect(ps.projectId).toBeNull();
+  });
+});
+
+describe("computeLiveWorkspaceIds", () => {
+  const ws = (id: string) => makeWorkspace({ id });
+
+  it("keeps every workspace live when at or below the limit", () => {
+    const list = [ws("a"), ws("b"), ws("c")];
+    const live = computeLiveWorkspaceIds(list, ["c", "b", "a"], "c", 8);
+    expect(live).toEqual(new Set(["a", "b", "c"]));
+  });
+
+  it("suspends the least-recently-used workspaces beyond the limit", () => {
+    const list = [ws("a"), ws("b"), ws("c"), ws("d")];
+    // MRU first: d, c, b, a — with limit 2 only d and c stay live.
+    const live = computeLiveWorkspaceIds(list, ["d", "c", "b", "a"], "d", 2);
+    expect(live).toEqual(new Set(["d", "c"]));
+    expect(live.has("a")).toBe(false);
+    expect(live.has("b")).toBe(false);
+  });
+
+  it("always keeps the active workspace live even if it is the LRU tail", () => {
+    const list = [ws("a"), ws("b"), ws("c"), ws("d")];
+    // Window of 2 = {a, b}; active 'd' is the stale tail but is force-kept live.
+    const live = computeLiveWorkspaceIds(list, ["a", "b", "c", "d"], "d", 2);
+    expect(live.has("a")).toBe(true);
+    expect(live.has("b")).toBe(true);
+    expect(live.has("d")).toBe(true); // active, force-kept
+    expect(live.has("c")).toBe(false); // suspended
+  });
+
+  it("appends open workspaces missing from the access order", () => {
+    const list = [ws("a"), ws("b"), ws("c")];
+    // 'c' never recorded in access order (e.g. restored from disk).
+    const live = computeLiveWorkspaceIds(list, ["a", "b"], null, 3);
+    expect(live).toEqual(new Set(["a", "b", "c"]));
+  });
+
+  it("treats a non-positive limit as no suspension", () => {
+    const list = [ws("a"), ws("b")];
+    expect(computeLiveWorkspaceIds(list, ["a", "b"], "a", 0)).toEqual(new Set(["a", "b"]));
   });
 });

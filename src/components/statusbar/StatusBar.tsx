@@ -2,19 +2,22 @@ import {
   AlertCircle,
   AlertTriangle,
   GitBranch,
-  Coffee,
   RefreshCw,
-  Bell,
   Check,
 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useContextUsage } from "@/hooks/useContextUsage";
+import { formatTokens } from "@/lib/context-usage";
 import { StatusBarItem } from "./StatusBarItem";
+import { NotificationBell } from "./NotificationBell";
+import { CaffeinateToggle } from "./CaffeinateToggle";
 
 export function StatusBar() {
   const backends = useWorkbench((s) => s.backends);
   const active = useWorkbench(selectActiveWorkspace);
   const workspaceCount = useWorkbench((s) => s.workspaces.length);
   const activeBackend = backends.find((b) => b.active);
+  const usage = useContextUsage(active?.sessionId);
 
   return (
     <footer
@@ -62,13 +65,12 @@ export function StatusBar() {
         <StatusBarItem testId="statusbar-language">
           {active ? active.agentBackend : "plaintext"}
         </StatusBarItem>
-        <StatusBarItem testId="statusbar-tokens">0 tokens</StatusBarItem>
-        <StatusBarItem
-          icon={<Coffee className="h-3 w-3" />}
-          testId="statusbar-caffeine"
-        >
-          caffeinate
+        <StatusBarItem testId="statusbar-tokens">
+          {active
+            ? `~${formatTokens(usage.tokensUsed)} tok · $${usage.sessionCostEstimate.toFixed(2)}`
+            : "0 tokens"}
         </StatusBarItem>
+        <CaffeinateToggle />
         <StatusBarItem
           icon={<Check className="h-3 w-3" />}
           testId="statusbar-backends"
@@ -82,12 +84,7 @@ export function StatusBar() {
         <StatusBarItem testId="statusbar-workspaces">
           {workspaceCount} ws
         </StatusBarItem>
-        <StatusBarItem
-          icon={<Bell className="h-3 w-3" />}
-          testId="statusbar-notifications"
-        >
-          v0.1
-        </StatusBarItem>
+        <NotificationBell />
       </div>
     </footer>
   );

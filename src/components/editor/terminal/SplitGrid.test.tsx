@@ -4,7 +4,7 @@ import { SplitGrid } from "./SplitGrid";
 import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
 
 const handle: TerminalHandle = {
-  write: vi.fn(), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
+  write: vi.fn(), onData: vi.fn(() => () => {}), onResize: vi.fn(() => () => {}), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
   get dimensions() { return { cols: 0, rows: 0 }; },
 };
 const provider: TerminalProvider = { mount: () => handle };

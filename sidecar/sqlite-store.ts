@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { defaultIds } from "./deps";
-import type { IdProvider, Project, Workspace, Message } from "./types";
+import type { IdProvider, Project, Workspace, Message, Notification } from "./types";
 
 export function defaultDbPath(): string {
   if (process.platform === "darwin") {
@@ -48,6 +48,16 @@ interface MessageRow {
 interface SessionRow {
   id: string;
   workspace_id: string;
+}
+
+interface NotificationRow {
+  id: string;
+  workspace_id: string | null;
+  type: string;
+  title: string;
+  body: string;
+  read: number;
+  created_at: number;
 }
 
 export interface SQLiteStoreOptions {
@@ -262,6 +272,66 @@ export class SQLiteStore {
       )
       .run(id, input.sessionId, input.role, input.content, input.toolCallsJson ?? null, createdAt);
     return { id };
+  }
+
+  notificationInsert(input: {
+    workspaceId?: string | null;
+    type: string;
+    title: string;
+    body: string;
+  }): Notification {
+    const id = this.ids.uuid("notif");
+    const createdAt = Math.floor(this.ids.now() / 1000);
+    this.db
+      .query(
+        "INSERT INTO notifications (id, workspace_id, type, title, body, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)"
+      )
+      .run(id, input.workspaceId ?? null, input.type, input.title, input.body, createdAt);
+    return {
+      id,
+      workspaceId: input.workspaceId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      read: false,
+      createdAt,
+    };
+  }
+
+  notificationList(input: { limit?: number; unreadOnly?: boolean } = {}): Notification[] {
+    const limit = input.limit ?? 50;
+    const where = input.unreadOnly ? "WHERE read = 0" : "";
+    const rows = this.db
+      .query<NotificationRow, [number]>(
+        `SELECT id, workspace_id, type, title, body, read, created_at FROM notifications ${where} ORDER BY created_at DESC LIMIT ?`
+      )
+      .all(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      workspaceId: r.workspace_id,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      read: r.read === 1,
+      createdAt: r.created_at,
+    }));
+  }
+
+  notificationMarkRead(input: { id: string }): { ok: true } {
+    this.db.query("UPDATE notifications SET read = 1 WHERE id = ?").run(input.id);
+    return { ok: true };
+  }
+
+  notificationMarkAllRead(): { ok: true } {
+    this.db.run("UPDATE notifications SET read = 1 WHERE read = 0");
+    return { ok: true };
+  }
+
+  notificationUnreadCount(): number {
+    const row = this.db
+      .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM notifications WHERE read = 0")
+      .get();
+    return row?.n ?? 0;
   }
 
   close(): void {

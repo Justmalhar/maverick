@@ -18,6 +18,8 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
+import { Caffeinate } from "./caffeinate";
+import { InstructionsResolver } from "./instructions-resolver";
 import type { KanbanTask, Shell } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
@@ -153,6 +155,40 @@ describe("RpcHandlers", () => {
     expect(empty).toHaveLength(0);
   });
 
+  test("workspace.create accepts baseBranch: null (Rust Option::None serializes to null)", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/ws-null" })) as { id: string };
+    // Mirrors the real Rust→sidecar payload: omitted optionals arrive as JSON null.
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/ws-null",
+      branch: "feat",
+      backend: "claude",
+      baseBranch: null,
+    })) as { id: string };
+    expect(ws.id).toBeDefined();
+    // workspace.list with a null projectId must not throw either.
+    const all = (await h.dispatch("workspace.list", { projectId: null })) as unknown[];
+    expect(Array.isArray(all)).toBe(true);
+  });
+
+  test("message.append tolerates toolCallsJson: null", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/msg-null" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/msg-null",
+      branch: "main",
+      backend: "claude",
+      baseBranch: null,
+    })) as { sessionId: string };
+    const r = (await h.dispatch("messages.append", {
+      sessionId: ws.sessionId,
+      role: "user",
+      content: "hi",
+      toolCallsJson: null,
+    })) as { id: string };
+    expect(r.id).toBeDefined();
+  });
+
   test("pty.spawn/write/resize/kill", async () => {
     const { ptyId } = (await h.dispatch("pty.spawn", {
       workspaceId: "ws",
@@ -163,6 +199,47 @@ describe("RpcHandlers", () => {
     await h.dispatch("pty.resize", { ptyId, cols: 80, rows: 24 });
     await h.dispatch("pty.kill", { ptyId });
     expect(h.process.has(ptyId)).toBe(false);
+  });
+
+  test("pty.spawn defaults cwd to the workspace worktree path", async () => {
+    const spawnCalls: Array<{ cmd: string[]; cwd?: string }> = [];
+    const ids = (() => {
+      let n = 0;
+      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
+    })();
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
+    const proc = new ProcessManager({
+      spawn: ((cmd, opts) => {
+        spawnCalls.push({ cmd, cwd: opts.cwd });
+        return fakeProc();
+      }) as Spawner,
+      notifier: { write: () => {} },
+      ids,
+    });
+    const handlers = new RpcHandlers({ store, process: proc });
+    const proj = (await handlers.dispatch("project.add", { path: "/tmp/wt-cwd" })) as { id: string };
+    store.workspaceCreate({
+      id: "ws-cwd",
+      projectId: proj.id,
+      branch: "main",
+      agentBackend: "claude",
+      worktreePath: "/tmp/wt-cwd/.maverick/worktrees/ws-cwd",
+    });
+
+    await handlers.dispatch("pty.spawn", {
+      workspaceId: "ws-cwd",
+      command: "/bin/zsh",
+      args: ["-l"],
+    });
+    expect(spawnCalls[0].cwd).toBe("/tmp/wt-cwd/.maverick/worktrees/ws-cwd");
+
+    await handlers.dispatch("pty.spawn", {
+      workspaceId: "ws-cwd",
+      command: "/bin/zsh",
+      args: ["-l"],
+      cwd: "/explicit/cwd",
+    });
+    expect(spawnCalls[1].cwd).toBe("/explicit/cwd");
   });
 
   test("config.load and skills.list/run", async () => {
@@ -298,6 +375,119 @@ describe("RpcHandlers", () => {
   test("notify.send", async () => {
     const r = (await h.dispatch("notify.send", { title: "t", body: "b" })) as { ok: boolean };
     expect(r.ok).toBe(true);
+  });
+
+  test("notify lifecycle: send persists, list returns it, mark read flips state, unreadCount updates", async () => {
+    const ids = (() => {
+      let n = 0;
+      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
+    })();
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
+    const handlers = new RpcHandlers({ store });
+
+    const created = (await handlers.dispatch("notify.send", {
+      title: "Done",
+      body: "Build passed",
+      type: "build.result",
+    })) as { id: string; title: string; read: boolean };
+    expect(created.title).toBe("Done");
+    expect(created.read).toBe(false);
+
+    const list = (await handlers.dispatch("notify.list", {})) as Array<{ id: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe(created.id);
+
+    const beforeMark = (await handlers.dispatch("notify.unreadCount", {})) as { count: number };
+    expect(beforeMark.count).toBe(1);
+
+    await handlers.dispatch("notify.markRead", { id: created.id });
+    const afterMark = (await handlers.dispatch("notify.unreadCount", {})) as { count: number };
+    expect(afterMark.count).toBe(0);
+
+    await handlers.dispatch("notify.send", { title: "Second", body: "" });
+    await handlers.dispatch("notify.send", { title: "Third", body: "" });
+    expect(((await handlers.dispatch("notify.unreadCount", {})) as { count: number }).count).toBe(2);
+    await handlers.dispatch("notify.markAllRead", {});
+    expect(((await handlers.dispatch("notify.unreadCount", {})) as { count: number }).count).toBe(0);
+
+    const unreadOnly = (await handlers.dispatch("notify.list", { unreadOnly: true })) as unknown[];
+    expect(unreadOnly).toHaveLength(0);
+  });
+
+  test("caffeinate start/status/stop lifecycle", async () => {
+    const ids = (() => {
+      let n = 0;
+      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
+    })();
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
+    const killed: boolean[] = [];
+    const caffeinate = new Caffeinate({
+      platform: "darwin",
+      spawn: (() => ({
+        exitCode: null,
+        exited: new Promise<number>(() => {}),
+        kill() { killed.push(true); },
+      })) as unknown as Spawner,
+    });
+    const handlers = new RpcHandlers({ store, caffeinate });
+
+    expect(((await handlers.dispatch("caffeinate.status", {})) as { active: boolean }).active).toBe(false);
+    const started = (await handlers.dispatch("caffeinate.start", {})) as { started: boolean; active: boolean };
+    expect(started.started).toBe(true);
+    expect(started.active).toBe(true);
+    expect(((await handlers.dispatch("caffeinate.status", {})) as { active: boolean }).active).toBe(true);
+    const stopped = (await handlers.dispatch("caffeinate.stop", {})) as { stopped: boolean; active: boolean };
+    expect(stopped.stopped).toBe(true);
+    expect(stopped.active).toBe(false);
+    expect(killed).toHaveLength(1);
+  });
+
+  test("context.usage + context.record round-trip", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/ctx" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/ctx",
+      branch: "main",
+      backend: "claude",
+    })) as { sessionId: string };
+
+    const before = (await h.dispatch("context.usage", { sessionId: ws.sessionId })) as {
+      tokensUsed: number;
+    };
+    expect(before.tokensUsed).toBe(0);
+
+    const recorded = (await h.dispatch("context.record", {
+      sessionId: ws.sessionId,
+      tokensUsed: 4321,
+      costEstimate: 0.42,
+    })) as { tokensUsed: number; sessionCostEstimate: number };
+    expect(recorded.tokensUsed).toBe(4321);
+    expect(recorded.sessionCostEstimate).toBeCloseTo(0.42);
+
+    const after = (await h.dispatch("context.usage", { sessionId: ws.sessionId })) as {
+      tokensUsed: number;
+    };
+    expect(after.tokensUsed).toBe(4321);
+  });
+
+  test("instructions.resolve dispatches to the resolver", async () => {
+    const ids = (() => {
+      let n = 0;
+      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
+    })();
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
+    const instructions = new InstructionsResolver({
+      home: "/home/test",
+      exists: (p: string) => p === "/wt/MAVERICK.md",
+      readFile: () => "project rules",
+    });
+    const handlers = new RpcHandlers({ store, instructions });
+    const result = (await handlers.dispatch("instructions.resolve", {
+      worktreePath: "/wt",
+    })) as { project: string; projectSource: string | null; global: string };
+    expect(result.project).toBe("project rules");
+    expect(result.projectSource).toBe("MAVERICK.md");
+    expect(result.global).toBe("");
   });
 
   test("unknown method throws", async () => {

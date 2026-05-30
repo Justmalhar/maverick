@@ -7,6 +7,8 @@ import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/
 
 interface Handle extends TerminalHandle {
   write: ReturnType<typeof vi.fn>;
+  onData: ReturnType<typeof vi.fn>;
+  onResize: ReturnType<typeof vi.fn>;
   resize: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
   focus: ReturnType<typeof vi.fn>;
@@ -37,6 +39,7 @@ beforeEach(() => {
 function makeProvider(): { provider: TerminalProvider; mountedHandle: Handle } {
   const handle: Handle = {
     write: vi.fn(),
+    onData: vi.fn(() => () => {}), onResize: vi.fn(() => () => {}),
     resize: vi.fn(),
     setTheme: vi.fn(),
     focus: vi.fn(),
@@ -73,6 +76,48 @@ describe("TerminalPane", () => {
 
     unmount();
     expect(mountedHandle.dispose).toHaveBeenCalled();
+  });
+
+  it("pipes user keystrokes back to the PTY via pty_write", async () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(<TerminalPane ptyId="p9" paneId="pane-k" isFocused onFocus={() => {}} />);
+
+    // The pane subscribes to terminal input on mount.
+    expect(mountedHandle.onData).toHaveBeenCalled();
+    const inputCb = mountedHandle.onData.mock.calls[0][0] as (d: string) => void;
+    inputCb("ls\r");
+
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "p9", data: "ls\r" })
+    );
+  });
+
+  it("focuses on mount and again when it becomes the active pane", () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    const { rerender } = renderWithProviders(
+      <TerminalPane ptyId="p11" paneId="pane-foc" isFocused={false} onFocus={() => {}} />
+    );
+    // Auto-focus on mount so the terminal is typeable without clicking.
+    expect(mountedHandle.focus).toHaveBeenCalledTimes(1);
+
+    rerender(<TerminalPane ptyId="p11" paneId="pane-foc" isFocused onFocus={() => {}} />);
+    expect(mountedHandle.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it("resizes the PTY to the renderer's fitted grid size", async () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(<TerminalPane ptyId="p10" paneId="pane-r" isFocused onFocus={() => {}} />);
+
+    expect(mountedHandle.onResize).toHaveBeenCalled();
+    const resizeCb = mountedHandle.onResize.mock.calls[0][0] as (c: number, r: number) => void;
+    resizeCb(120, 40);
+
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_resize", { ptyId: "p10", cols: 120, rows: 40 })
+    );
   });
 
   it("isFocused branch applies the focused ring class", () => {

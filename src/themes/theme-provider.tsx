@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import type { ThemeDefinition } from "@/lib/ipc";
 import MaverickDark from "./definitions/maverick-dark.json";
 import MaverickLight from "./definitions/maverick-light.json";
@@ -237,7 +237,7 @@ function applyToRoot(def: ThemeDefinition) {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeDefinition>(BUILTIN_THEMES[0]!);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyToRoot(theme);
   }, [theme]);
 

@@ -1,7 +1,7 @@
-// Usage Manager — shows token consumption, quota, cost estimates per backend.
-// Data placeholders today; wires to `context.usage` RPC + per-backend quota
-// rows from SQLite once those streams land.
-import { useMemo } from "react";
+// Usage Manager — shows estimated token consumption + cost per backend.
+// Figures are client-side estimates aggregated from each open workspace's
+// session usage (context.usage RPC), refreshed on context-update broadcasts.
+import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
+import { contextUsage } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 interface BackendUsage {
@@ -38,25 +39,64 @@ export default function UsagePanel() {
   const reduce = useReducedMotion();
   const backends = useWorkbench((s) => s.backends);
   const workspaces = useWorkbench((s) => s.workspaces);
+  const [usageByBackend, setUsageByBackend] = useState<
+    Record<string, { tokens: number; cost: number; requests: number }>
+  >({});
 
-  // Placeholder until context-tracker streams real numbers — derived solely
-  // from store data so the panel doesn't look hard-coded.
+  useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      const acc: Record<string, { tokens: number; cost: number; requests: number }> = {};
+      await Promise.all(
+        workspaces.map(async (ws) => {
+          if (!ws.sessionId) return;
+          try {
+            const u = await contextUsage(ws.sessionId);
+            const key = ws.agentBackend;
+            const entry = acc[key] ?? { tokens: 0, cost: 0, requests: 0 };
+            entry.tokens += u.tokensUsed;
+            entry.cost += u.sessionCostEstimate;
+            entry.requests += u.tokensUsed > 0 ? 1 : 0;
+            acc[key] = entry;
+          } catch {
+            /* skip sessions without usage */
+          }
+        })
+      );
+      if (!cancelled) setUsageByBackend(acc);
+    }
+    void refresh();
+    function onUpdated() {
+      void refresh();
+    }
+    window.addEventListener("maverick:context:updated", onUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("maverick:context:updated", onUpdated);
+    };
+  }, [workspaces]);
+
   const rows: BackendUsage[] = useMemo(() => {
-    const fallback: BackendUsage[] = [
-      { name: "claude-code", tokensUsed: 0, tokensLimit: 200_000, requestsToday: 0, requestsLimit: 200, costUSD: 0 },
-      { name: "codex", tokensUsed: 0, tokensLimit: 128_000, requestsToday: 0, requestsLimit: 150, costUSD: 0 },
-      { name: "gemini", tokensUsed: 0, tokensLimit: 1_000_000, requestsToday: 0, requestsLimit: 60, costUSD: 0 },
-    ];
-    if (backends.length === 0) return fallback;
-    return backends.map((b) => ({
-      name: b.name,
-      tokensUsed: 0,
-      tokensLimit: 200_000,
-      requestsToday: 0,
-      requestsLimit: 200,
-      costUSD: 0,
-    }));
-  }, [backends]);
+    const names =
+      backends.length > 0
+        ? backends.map((b) => b.name)
+        : ["claude-code", "codex", "gemini"];
+    // Surface any backend that has recorded usage even if it isn't configured.
+    for (const key of Object.keys(usageByBackend)) {
+      if (!names.includes(key)) names.push(key);
+    }
+    return names.map((name) => {
+      const u = usageByBackend[name] ?? { tokens: 0, cost: 0, requests: 0 };
+      return {
+        name,
+        tokensUsed: u.tokens,
+        tokensLimit: 200_000,
+        requestsToday: u.requests,
+        requestsLimit: 200,
+        costUSD: u.cost,
+      };
+    });
+  }, [backends, usageByBackend]);
 
   const totalTokens = rows.reduce((sum, r) => sum + r.tokensUsed, 0);
   const totalCost = rows.reduce((sum, r) => sum + r.costUSD, 0);

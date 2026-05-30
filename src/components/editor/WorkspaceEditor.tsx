@@ -1,6 +1,6 @@
 import { useWorkbench, selectEditorMode } from "@/state/store";
 import type { Workspace } from "@/lib/ipc";
-import { AgentView } from "./agent/AgentView";
+import { AgentTerminal } from "./agent/AgentTerminal";
 import { TerminalView } from "./terminal/TerminalView";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ export function WorkspaceEditor({ workspace, active }: Props) {
       aria-hidden={!active}
     >
       <div className="absolute inset-0" hidden={mode !== "agent"}>
-        <AgentView workspace={workspace} />
+        <AgentTerminal workspace={workspace} />
       </div>
       <div className="absolute inset-0" hidden={mode !== "terminal"}>
         <TerminalView workspace={workspace} />

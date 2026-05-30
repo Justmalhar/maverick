@@ -14,6 +14,7 @@ import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
 import { QuickOpen } from "@/components/quickopen/QuickOpen";
 import { CommandPalette } from "@/components/quickopen/CommandPalette";
+import { Toaster } from "@/components/notifications/Toaster";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
 const SettingsPanel = lazy(() => import("@/panels/settings/SettingsPanel"));
@@ -41,12 +42,13 @@ export function Workbench() {
     return ws?.projectId ?? null;
   });
   const loadProjectSettings = useProjectSettingsStore((s) => s.load);
-  const { refreshProjects, refreshWorkspaces } = useWorkspace();
+  const { refreshProjects, refreshWorkspaces, refreshBackends } = useWorkspace();
 
   useEffect(() => {
     refreshProjects().catch((e) => console.error("refreshProjects failed", e));
     refreshWorkspaces().catch((e) => console.error("refreshWorkspaces failed", e));
-  }, [refreshProjects, refreshWorkspaces]);
+    refreshBackends().catch((e) => console.error("refreshBackends failed", e));
+  }, [refreshProjects, refreshWorkspaces, refreshBackends]);
 
   useEffect(() => {
     if (activeWsProjectId) {
@@ -143,6 +145,8 @@ export function Workbench() {
       <Suspense fallback={<OverlayFallback />}>
         <FirstRunWizard />
       </Suspense>
+
+      <Toaster />
     </div>
   );
 }

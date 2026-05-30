@@ -14,8 +14,10 @@ import type {
   MaverickSettings,
   MCPServer,
   Message,
+  Notification,
   NotificationPermission,
   Project,
+  ResolvedInstructions,
   ProjectSettings,
   SettingsPatch,
   Skill,
@@ -38,10 +40,18 @@ export async function workspaceList(projectId?: string): Promise<Workspace[]> {
 
 export async function workspaceCreate(
   projectId: string,
+  projectPath: string,
   branch: string,
-  backend: string
+  backend: string,
+  baseBranch?: string
 ): Promise<Workspace> {
-  return invoke("workspace_create", { projectId, branch, backend });
+  return invoke("workspace_create", {
+    projectId,
+    projectPath,
+    branch,
+    backend,
+    baseBranch,
+  });
 }
 
 export async function workspaceDestroy(workspaceId: string): Promise<void> {
@@ -49,11 +59,12 @@ export async function workspaceDestroy(workspaceId: string): Promise<void> {
 }
 
 export async function ptySpawn(
-  workspaceId: string,
   command: string,
-  args: string[]
+  args: string[],
+  cwd?: string,
+  env?: Record<string, string>
 ): Promise<{ ptyId: string }> {
-  return invoke("pty_spawn", { workspaceId, command, args });
+  return invoke("pty_spawn", { command, args, cwd, env });
 }
 
 export async function ptyWrite(ptyId: string, data: string): Promise<void> {
@@ -191,6 +202,14 @@ export async function contextUsage(sessionId: string): Promise<ContextUsage> {
   return invoke("context_usage", { sessionId });
 }
 
+export async function contextRecord(
+  sessionId: string,
+  tokensUsed: number,
+  costEstimate: number
+): Promise<ContextUsage> {
+  return invoke("context_record", { sessionId, tokensUsed, costEstimate });
+}
+
 export async function attachmentCreate(
   worktreePath: string,
   text: string
@@ -208,9 +227,107 @@ export async function automationRun(
 export async function notifySend(
   title: string,
   body: string,
-  workspaceId?: string
-): Promise<void> {
-  return invoke("notify_send", { title, body, workspaceId });
+  workspaceId?: string,
+  type?: string
+): Promise<Notification | { ok: true }> {
+  return invoke("notify_send", { title, body, workspaceId, type });
+}
+
+export async function notifyList(
+  limit?: number,
+  unreadOnly?: boolean
+): Promise<Notification[]> {
+  return invoke("notify_list", { limit, unreadOnly });
+}
+
+export async function notifyMarkRead(id: string): Promise<void> {
+  await invoke("notify_mark_read", { id });
+}
+
+export async function notifyMarkAllRead(): Promise<void> {
+  await invoke("notify_mark_all_read");
+}
+
+export async function notifyUnreadCount(): Promise<number> {
+  const result = await invoke<{ count: number }>("notify_unread_count");
+  return result.count;
+}
+
+export function onNotificationSend(
+  callback: (n: Notification) => void
+): Promise<UnlistenFn> {
+  return listen<Notification>("notification:send", (e) => callback(e.payload));
+}
+
+export async function caffeinateStart(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_start");
+}
+
+export async function caffeinateStop(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_stop");
+}
+
+export async function caffeinateStatus(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_status");
+}
+
+export async function instructionsResolve(
+  worktreePath: string
+): Promise<ResolvedInstructions> {
+  return invoke("instructions_resolve", { worktreePath });
+}
+
+export async function prCreate(
+  worktreePath: string,
+  title?: string,
+  body?: string,
+  base?: string
+): Promise<{ url: string }> {
+  return invoke("pr_create", { worktreePath, title, body, base });
+}
+
+// Embedded Browser (native child webview) controls.
+export interface BrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export async function browserOpen(url: string, bounds: BrowserBounds): Promise<void> {
+  await invoke("browser_open", { url, ...bounds });
+}
+
+export async function browserNavigate(url: string): Promise<void> {
+  await invoke("browser_navigate", { url });
+}
+
+export async function browserSetBounds(bounds: BrowserBounds): Promise<void> {
+  await invoke("browser_set_bounds", { ...bounds });
+}
+
+export async function browserShow(): Promise<void> {
+  await invoke("browser_show");
+}
+
+export async function browserHide(): Promise<void> {
+  await invoke("browser_hide");
+}
+
+export async function browserClose(): Promise<void> {
+  await invoke("browser_close");
+}
+
+export async function browserEval(script: string): Promise<void> {
+  await invoke("browser_eval", { script });
+}
+
+export function onBrowserElementCaptured(
+  callback: (payload: { selector: string; text: string; html: string }) => void
+): Promise<UnlistenFn> {
+  return listen<{ selector: string; text: string; html: string }>("browser://captured", (e) =>
+    callback(e.payload)
+  );
 }
 
 export async function gitBranches(projectPath: string): Promise<string[]> {

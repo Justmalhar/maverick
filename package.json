@@ -16,6 +16,7 @@
     "test:sidecar": "cd sidecar && bun test",
     "test:rust": "cd src-tauri && cargo test",
     "test:all": "bun run test:coverage && bun run test:sidecar && bun run test:rust",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -60,6 +61,7 @@
     "zustand": "^5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.6.3",

@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Draggable } from "@hello-pangea/dnd";
 import { formatDistanceToNow } from "date-fns";
-import { Eye, GitPullRequest, Play } from "lucide-react";
+import { Eye, GitPullRequest, Loader2, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useWorkbench } from "@/state/store";
-import { workspaceCreate } from "@/lib/tauri";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/utils";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 
@@ -13,6 +14,8 @@ interface Props {
   index: number;
   diffStat?: DiffStat;
   onEdit: () => void;
+  /** When provided, Board-level start handler is used instead of card-local logic. */
+  onStart?: (task: KanbanTask) => Promise<void>;
 }
 
 const AGENT_DOT: Record<KanbanTask["status"], string> = {
@@ -22,24 +25,36 @@ const AGENT_DOT: Record<KanbanTask["status"], string> = {
   done: "bg-blue-400/40",
 };
 
-export default function KanbanCard({ task, index, diffStat, onEdit }: Props) {
-  const addWorkspace = useWorkbench((s) => s.addWorkspace);
+export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: Props) {
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const backends = useWorkbench((s) => s.backends);
   const workspaces = useWorkbench((s) => s.workspaces);
+  const { create } = useWorkspace();
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const startInMaverick = async () => {
-    const backend =
-      task.agentBackend ||
-      backends.find((b) => b.active)?.id ||
-      backends[0]?.id ||
-      "claude";
+    if (starting) return;
+    setStartError(null);
+    setStarting(true);
     try {
-      const ws = await workspaceCreate(task.projectId, task.branch || "main", backend);
-      addWorkspace(ws);
-      setActiveWorkspace(ws.id);
+      if (onStart) {
+        await onStart(task);
+      } else {
+        const project = useWorkbench.getState().projects.find((p) => p.id === task.projectId);
+        if (!project) throw new Error(`Project ${task.projectId} not found`);
+        const backend =
+          task.agentBackend ||
+          backends.find((b) => b.active)?.id ||
+          backends[0]?.id ||
+          "claude";
+        await create(task.projectId, task.branch || "main", backend);
+      }
     } catch (e) {
       console.error("Failed to start workspace", e);
+      setStartError(String(e));
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -56,11 +71,16 @@ export default function KanbanCard({ task, index, diffStat, onEdit }: Props) {
             size="sm"
             variant="outline"
             onClick={startInMaverick}
+            disabled={starting || !task.projectId}
             data-testid="kanban-start"
             className="h-6 gap-1 px-2 text-[11px] border-border/60 text-muted-foreground hover:text-foreground"
           >
-            <Play className="h-2.5 w-2.5" />
-            Start
+            {starting ? (
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            ) : (
+              <Play className="h-2.5 w-2.5" />
+            )}
+            {starting ? "Starting…" : "Start"}
           </Button>
         );
       case "in_progress":
@@ -159,6 +179,16 @@ export default function KanbanCard({ task, index, diffStat, onEdit }: Props) {
                 </Badge>
               ))}
             </div>
+          )}
+
+          {/* Start error */}
+          {startError && (
+            <p
+              data-testid="kanban-start-error"
+              className="mt-1.5 truncate text-[10px] text-destructive"
+            >
+              {startError}
+            </p>
           )}
 
           {/* Footer — action button + timestamp */}

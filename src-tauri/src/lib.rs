@@ -1,6 +1,7 @@
 mod backend_detector;
 mod bootstrap;
 mod commands;
+mod pty;
 pub mod sidecar;
 mod state;
 
@@ -72,6 +73,9 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
+
+            // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
+            app.manage(crate::pty::PtyManager::new());
 
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -151,9 +155,26 @@ pub fn run() {
             mcp_stop,
             mcp_list,
             context_usage,
+            context_record,
             attachment_create,
             automation_run,
             notify_send,
+            notify_list,
+            notify_mark_read,
+            notify_mark_all_read,
+            notify_unread_count,
+            caffeinate_start,
+            caffeinate_stop,
+            caffeinate_status,
+            instructions_resolve,
+            pr_create,
+            browser_open,
+            browser_navigate,
+            browser_set_bounds,
+            browser_show,
+            browser_hide,
+            browser_close,
+            browser_eval,
             bootstrap_status,
             bootstrap_update_settings,
             bootstrap_complete,

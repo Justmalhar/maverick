@@ -47,15 +47,19 @@ describe("KanbanBoard", () => {
     useWorkbench.setState({
       ...initial,
       projects: [
-        makeProject({ id: "p1", name: "Alpha" }),
-        makeProject({ id: "p2", name: "Beta" }),
+        makeProject({ id: "p1", name: "Alpha", path: "/alpha" }),
+        makeProject({ id: "p2", name: "Beta", path: "/beta" }),
       ],
       backends: [makeBackend()],
     });
-    vi.mocked(invoke).mockResolvedValueOnce([
-      makeKanbanTask({ id: "t1", projectId: "p1", title: "Alpha task" }),
-      makeKanbanTask({ id: "t2", projectId: "p2", title: "Beta task" }),
-    ] as never);
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [
+        makeKanbanTask({ id: "t1", projectId: "p1", title: "Alpha task" }),
+        makeKanbanTask({ id: "t2", projectId: "p2", title: "Beta task" }),
+      ];
+      if (cmd === "git_branches") return [];
+      return undefined;
+    }) as unknown as typeof invoke);
     renderWithProviders(<KanbanBoard />);
     await waitFor(() => screen.getByText("Alpha task"));
 
@@ -98,7 +102,10 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("composer-send"));
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("workspace_create", expect.any(Object))
+      expect(invoke).toHaveBeenCalledWith(
+        "workspace_create",
+        expect.objectContaining({ projectId: "p1", projectPath: "/p1" })
+      )
     );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
@@ -232,6 +239,171 @@ describe("KanbanBoard", () => {
     });
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("kanban_upsert", expect.any(Object))
+    );
+  });
+
+  it("handleStart creates workspace, dispatches maverick:input-append with title+description, and upserts to in_progress", async () => {
+    const project = makeProject({ id: "p1", path: "/p1" });
+    useWorkbench.setState({
+      ...initial,
+      projects: [project],
+      backends: [makeBackend({ id: "claude-code", active: true })],
+    });
+    const task = makeKanbanTask({
+      id: "t1",
+      projectId: "p1",
+      title: "Implement auth",
+      description: "Use JWT tokens",
+      branch: "feat/auth",
+      agentBackend: "claude-code",
+      status: "todo",
+    });
+
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [task];
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "feat/auth" });
+      if (cmd === "kanban_upsert") return { ...task, status: "in_progress" };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("kanban-start"));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "workspace_create",
+        expect.objectContaining({ projectId: "p1", branch: "feat/auth" })
+      )
+    );
+
+    const appendCall = dispatchSpy.mock.calls.find(
+      (c) => (c[0] as CustomEvent).type === "maverick:input-append"
+    );
+    expect(appendCall).toBeDefined();
+    expect((appendCall![0] as CustomEvent).detail.text).toBe(
+      "Implement auth\n\nUse JWT tokens"
+    );
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "kanban_upsert",
+        expect.objectContaining({ task: expect.objectContaining({ status: "in_progress" }) })
+      )
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it("handleStart uses task.title only when description is absent", async () => {
+    const project = makeProject({ id: "p2", path: "/p2" });
+    useWorkbench.setState({
+      ...initial,
+      projects: [project],
+      backends: [makeBackend({ id: "claude-code", active: true })],
+    });
+    const task = makeKanbanTask({
+      id: "t2",
+      projectId: "p2",
+      title: "No-desc task",
+      description: undefined,
+      branch: "main",
+      agentBackend: "claude-code",
+      status: "todo",
+    });
+
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [task];
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws2", projectId: "p2", branch: "main" });
+      if (cmd === "kanban_upsert") return { ...task, status: "in_progress" };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("kanban-start"));
+
+    const appendCall = dispatchSpy.mock.calls.find(
+      (c) => (c[0] as CustomEvent).type === "maverick:input-append"
+    );
+    expect(appendCall).toBeDefined();
+    expect((appendCall![0] as CustomEvent).detail.text).toBe("No-desc task");
+    dispatchSpy.mockRestore();
+  });
+
+  it("handleStart falls back to 'main' branch when task.branch is empty", async () => {
+    const project = makeProject({ id: "p3", path: "/p3" });
+    useWorkbench.setState({
+      ...initial,
+      projects: [project],
+      backends: [makeBackend({ id: "claude-code", active: true })],
+    });
+    const task = makeKanbanTask({
+      id: "t3",
+      projectId: "p3",
+      title: "No-branch task",
+      branch: "",
+      status: "todo",
+    });
+
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [task];
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws3", projectId: "p3", branch: "main" });
+      if (cmd === "kanban_upsert") return { ...task, status: "in_progress" };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+
+    await userEvent.click(screen.getByTestId("kanban-start"));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "workspace_create",
+        expect.objectContaining({ branch: "main" })
+      )
+    );
+  });
+
+  it("handleStart falls back through active → first → 'claude-code' for the backend", async () => {
+    const project = makeProject({ id: "p4", path: "/p4" });
+    useWorkbench.setState({
+      ...initial,
+      projects: [project],
+      backends: [], // no active, no first → final "claude-code" fallback
+    });
+    const task = makeKanbanTask({
+      id: "t4",
+      projectId: "p4",
+      title: "No-backend task",
+      agentBackend: "",
+      status: "todo",
+    });
+
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [task];
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws4", projectId: "p4", branch: "main" });
+      if (cmd === "kanban_upsert") return { ...task, status: "in_progress" };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+    await userEvent.click(screen.getByTestId("kanban-start"));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "workspace_create",
+        expect.objectContaining({ backend: "claude-code" })
+      )
     );
   });
 

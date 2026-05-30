@@ -147,6 +147,39 @@ export class GitModule {
     return { ok: true };
   }
 
+  async prCreate(params: {
+    worktreePath: string;
+    title?: string;
+    body?: string;
+    base?: string;
+  }): Promise<{ url: string }> {
+    const branch = (
+      await this.shell.text(
+        ["git", "-C", params.worktreePath, "rev-parse", "--abbrev-ref", "HEAD"],
+        undefined
+      )
+    ).trim();
+
+    // gh needs the branch on the remote before it can open a PR.
+    const push = await this.shell.run(
+      ["git", "-C", params.worktreePath, "push", "-u", "origin", branch],
+      undefined
+    );
+    if (push.exitCode !== 0) throw new Error(push.stderr || "git push failed");
+
+    const cmd = ["gh", "pr", "create", "--head", branch];
+    if (params.base) cmd.push("--base", params.base);
+    if (params.title) {
+      cmd.push("--title", params.title);
+      cmd.push("--body", params.body ?? "");
+    } else {
+      cmd.push("--fill");
+    }
+    const { exitCode, stdout, stderr } = await this.shell.run(cmd, params.worktreePath);
+    if (exitCode !== 0) throw new Error(stderr || "gh pr create failed");
+    return { url: stdout.trim() };
+  }
+
   static parseLog(output: string): Commit[] {
     if (!output.trim()) return [];
     const lines = output.split("\n");

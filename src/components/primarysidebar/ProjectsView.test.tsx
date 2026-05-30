@@ -54,16 +54,22 @@ describe("ProjectsView", () => {
     errSpy.mockRestore();
   });
 
-  it("onAddWorkspace creates workspace with hardcoded defaults", async () => {
+  it("onAddWorkspace creates workspace with the project path forwarded", async () => {
     useWorkbench.setState({
       ...initial,
-      projects: [makeProject({ id: "p1", name: "demo" })],
+      projects: [makeProject({ id: "p1", name: "demo", path: "/tmp/demo" })],
       backends: [makeBackend({ id: "claude", name: "claude" })],
     });
     vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s" } as never);
     renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", { projectId: "p1", branch: "main", backend: "claude-code" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", {
+      projectId: "p1",
+      projectPath: "/tmp/demo",
+      branch: "main",
+      backend: "claude-code",
+      baseBranch: undefined,
+    }));
   });
 
   it("logs an error when workspace creation fails", async () => {

@@ -226,6 +226,7 @@ vi.mock("@xterm/xterm", () => {
     options: Record<string, unknown> = {};
     open = vi.fn();
     write = vi.fn();
+    onData = vi.fn((_cb: (d: string) => void) => ({ dispose: vi.fn() }));
     resize = vi.fn();
     focus = vi.fn();
     dispose = vi.fn();
@@ -281,6 +282,7 @@ vi.mock("tinykeys", () => ({
 import { TerminalRegistry, type TerminalHandle } from "@/lib/terminal-provider";
 const fakeHandle = (): TerminalHandle => ({
   write: () => {},
+  onData: () => () => {}, onResize: () => () => {},
   resize: () => {},
   setTheme: () => {},
   focus: () => {},

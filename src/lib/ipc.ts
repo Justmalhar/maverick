@@ -309,6 +309,25 @@ export interface MaverickSettings {
 
 export type NotificationPermission = "granted" | "denied" | "default" | "unavailable";
 
+export interface Notification {
+  id: string;
+  workspaceId: string | null;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: number;
+}
+
+export interface ResolvedInstructions {
+  /** Project-local instructions (MAVERICK.md → CLAUDE.md → AGENTS.md), comments stripped. */
+  project: string;
+  /** Which project file matched, or null if none. */
+  projectSource: string | null;
+  /** Global ~/.maverick/MAVERICK.md instructions, comments stripped. */
+  global: string;
+}
+
 export interface BootstrapPaths {
   configRoot: string;
   dbPath: string;

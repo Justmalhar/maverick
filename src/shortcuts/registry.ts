@@ -11,12 +11,21 @@ export interface KeybindingDef {
   display?: string;
 }
 
+const WORKSPACE_INDEX_JUMPS: readonly KeybindingDef[] = Array.from({ length: 9 }, (_, i) => ({
+  id: `workspace.jump.${i + 1}`,
+  label: `Jump to workspace #${i + 1}`,
+  category: "Workspace" as const,
+  keys: `$mod+${i + 1}`,
+  display: `⌘${i + 1}`,
+}));
+
 export const KEYBINDINGS: readonly KeybindingDef[] = [
   // Workspace & Navigation
   { id: "workspace.next", label: "Next workspace", category: "Workspace", keys: "$mod+]", display: "⌘]" },
   { id: "workspace.prev", label: "Previous workspace", category: "Workspace", keys: "$mod+[", display: "⌘[" },
   { id: "workspace.new", label: "New workspace", category: "Workspace", keys: "$mod+n", display: "⌘N" },
   { id: "workspace.close", label: "Close active workspace", category: "Workspace", keys: "$mod+w", display: "⌘W" },
+  ...WORKSPACE_INDEX_JUMPS,
   { id: "project.new", label: "Add project", category: "Workspace", keys: "$mod+Shift+n", display: "⌘⇧N" },
   { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+,", display: "⌘⇧," },
   { id: "project-settings.edit-file", label: "Project Settings: Edit maverick.json", category: "Workspace", keys: "" },
@@ -24,13 +33,21 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   // Editor modes
   { id: "editor.toggleMode", label: "Toggle Agent ↔ Terminal", category: "Editor", keys: "$mod+t", display: "⌘T" },
   { id: "editor.focusInput", label: "Focus input bar", category: "Editor", keys: "$mod+l", display: "⌘L" },
-  { id: "editor.retry", label: "Retry last prompt", category: "Editor", keys: "$mod+Shift+r", display: "⌘⇧R" },
+  { id: "ai.review", label: "AI Code Review of working changes", category: "Editor", keys: "$mod+Shift+r", display: "⌘⇧R" },
+
+  // Browser
+  { id: "browser.toggleInspect", label: "Toggle element inspector", category: "Global", keys: "$mod+Shift+i", display: "⌘⇧I" },
 
   // Terminal mode splits
   { id: "terminal.splitH", label: "Split horizontally", category: "Terminal", keys: "$mod+d", display: "⌘D" },
   { id: "terminal.splitV", label: "Split vertically", category: "Terminal", keys: "$mod+Shift+d", display: "⌘⇧D" },
   { id: "terminal.closePane", label: "Close terminal pane", category: "Terminal", keys: "$mod+Shift+w", display: "⌘⇧W" },
   { id: "terminal.clear", label: "Clear terminal", category: "Terminal", keys: "$mod+k", display: "⌘K" },
+  { id: "terminal.openBottomTerminal", label: "Open bottom terminal", category: "Terminal", keys: "$mod+Shift+t", display: "⌘⇧T" },
+  { id: "terminal.focusLeft", label: "Focus pane left", category: "Terminal", keys: "$mod+Alt+ArrowLeft", display: "⌘⌥←" },
+  { id: "terminal.focusRight", label: "Focus pane right", category: "Terminal", keys: "$mod+Alt+ArrowRight", display: "⌘⌥→" },
+  { id: "terminal.focusUp", label: "Focus pane up", category: "Terminal", keys: "$mod+Alt+ArrowUp", display: "⌘⌥↑" },
+  { id: "terminal.focusDown", label: "Focus pane down", category: "Terminal", keys: "$mod+Alt+ArrowDown", display: "⌘⌥↓" },
 
   // Panel toggles
   { id: "layout.toggleSidebar", label: "Toggle primary sidebar", category: "Panel", keys: "$mod+b", display: "⌘B" },

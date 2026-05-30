@@ -7,7 +7,7 @@ const BUFFER_CAP = 256 * 1024;
 
 export function useScriptRunner(
   workspaceId: string | null,
-  _cwd: string | null,
+  cwd: string | null,
   script: string
 ) {
   const [state, setState] = useState<ScriptState>("idle");
@@ -51,10 +51,10 @@ export function useScriptRunner(
     setOutput("");
     setExitCode(null);
     setStartedAt(Date.now());
-    const { ptyId } = await ptySpawn(workspaceId, "/bin/sh", ["-c", script]);
+    const { ptyId } = await ptySpawn("/bin/sh", ["-c", script], cwd ?? undefined);
     ptyIdRef.current = ptyId;
     setState("running");
-  }, [workspaceId, script]);
+  }, [workspaceId, cwd, script]);
 
   const stop = useCallback(async () => {
     if (!ptyIdRef.current) return;

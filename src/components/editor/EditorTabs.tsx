@@ -7,6 +7,7 @@ import {
   Zap,
   Plug,
   X,
+  SquareTerminal,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -44,6 +45,13 @@ export function EditorTabs() {
   const closeSystemTab = useWorkbench((s) => s.closeSystemTab);
   const setActiveSystemTab = useWorkbench((s) => s.setActiveSystemTab);
   const setCommandPaletteOpen = useWorkbench((s) => s.setCommandPaletteOpen);
+  const layout = useWorkbench((s) => s.layout);
+  const togglePanel = useWorkbench((s) => s.togglePanel);
+
+  const openTerminal = () => {
+    if (!layout.panelVisible) togglePanel();
+    window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+  };
 
   return (
     <div
@@ -141,6 +149,15 @@ export function EditorTabs() {
                 </DropdownMenuItem>
               );
             })}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={openTerminal}
+              data-testid="editor-tabs-open-terminal"
+            >
+              <SquareTerminal className="h-3.5 w-3.5" />
+              <span className="flex-1">New Terminal</span>
+              <kbd className="text-[10px] text-muted-foreground">⌘⇧T</kbd>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
               <span className="flex-1">All commands…</span>

@@ -17,14 +17,23 @@ import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { ProjectSettingsStore } from "./project-settings-store";
+import { Caffeinate } from "./caffeinate";
+import { InstructionsResolver } from "./instructions-resolver";
 import { stdoutNotifier } from "./deps";
 import type { Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
 const StringParam = z.object({}).passthrough();
 
+// Rust forwards omitted optional command args as JSON `null` (serde serializes
+// Option::None as null), but z.optional() only accepts `undefined`. Use this for
+// any field fed by a Rust `Option<T>` so `null` is accepted and normalized away.
+function nullishOptional<T extends z.ZodTypeAny>(schema: T) {
+  return schema.nullish().transform((v) => (v == null ? undefined : v));
+}
+
 const Schemas = {
-  projectAdd: z.object({ path: z.string(), name: z.string().optional() }),
+  projectAdd: z.object({ path: z.string(), name: nullishOptional(z.string()) }),
   projectSettingsGet: z.object({ projectId: z.string() }),
   projectSettingsUpdate: z.object({
     projectId: z.string(),
@@ -36,16 +45,16 @@ const Schemas = {
     projectPath: z.string(),
     branch: z.string(),
     backend: z.string(),
-    baseBranch: z.string().optional(),
+    baseBranch: nullishOptional(z.string()),
   }),
   workspaceDestroy: z.object({ workspaceId: z.string() }),
-  workspaceList: z.object({ projectId: z.string().optional() }),
+  workspaceList: z.object({ projectId: nullishOptional(z.string()) }),
   ptySpawn: z.object({
     workspaceId: z.string(),
     command: z.string(),
     args: z.array(z.string()).default([]),
-    cwd: z.string().optional(),
-    env: z.record(z.string(), z.string()).optional(),
+    cwd: nullishOptional(z.string()),
+    env: nullishOptional(z.record(z.string(), z.string())),
   }),
   ptyWrite: z.object({ ptyId: z.string(), data: z.string() }),
   ptyResize: z.object({ ptyId: z.string(), cols: z.number(), rows: z.number() }),
@@ -53,14 +62,14 @@ const Schemas = {
   configLoad: z.object({ projectPath: z.string() }),
   messagesList: z.object({
     sessionId: z.string(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
+    limit: nullishOptional(z.number()),
+    offset: nullishOptional(z.number()),
   }),
   messageAppend: z.object({
     sessionId: z.string(),
     role: RoleSchema,
     content: z.string(),
-    toolCallsJson: z.string().optional(),
+    toolCallsJson: nullishOptional(z.string()),
   }),
   skillsList: z.object({ projectPath: z.string() }),
   skillsRun: z.object({
@@ -68,47 +77,65 @@ const Schemas = {
     skillName: z.string(),
     vars: z.record(z.string(), z.string()).default({}),
   }),
-  diffGet: z.object({ worktreePath: z.string(), filePath: z.string().optional() }),
+  diffGet: z.object({ worktreePath: z.string(), filePath: nullishOptional(z.string()) }),
   diffStageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
   diffUnstageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
-  gitLog: z.object({ worktreePath: z.string(), limit: z.number().optional() }),
+  gitLog: z.object({ worktreePath: z.string(), limit: nullishOptional(z.number()) }),
   gitStashList: z.object({ worktreePath: z.string() }),
   gitCommit: z.object({
     worktreePath: z.string(),
     message: z.string(),
-    files: z.array(z.string()).optional(),
+    files: nullishOptional(z.array(z.string())),
   }),
   gitBranches: z.object({ projectPath: z.string() }),
   gitDiffStat: z.object({ worktreePath: z.string() }),
-  fileTree: z.object({ worktreePath: z.string(), maxDepth: z.number().optional() }),
+  fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
   kanbanList: z.object({ projectId: z.string() }),
   kanbanUpsert: StringParam,
-  presetList: z.object({ projectPath: z.string().optional() }),
+  presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
     projectPath: z.string(),
-    branch: z.string().optional(),
+    branch: nullishOptional(z.string()),
   }),
   presetSaveCurrent: z.object({
     workspaceId: z.string(),
     name: z.string(),
     layout: z.record(z.string(), z.unknown()),
-    description: z.string().optional(),
+    description: nullishOptional(z.string()),
   }),
-  mcpStart: z.object({ name: z.string(), projectPath: z.string().optional() }),
+  mcpStart: z.object({ name: z.string(), projectPath: nullishOptional(z.string()) }),
   mcpStop: z.object({ name: z.string() }),
   contextUsage: z.object({ sessionId: z.string() }),
+  contextRecord: z.object({
+    sessionId: z.string(),
+    tokensUsed: z.number().int().nonnegative(),
+    costEstimate: z.number().nonnegative(),
+  }),
   attachmentCreate: z.object({ worktreePath: z.string(), text: z.string() }),
   automationRun: z.object({
     automationName: z.string(),
     projectPath: z.string(),
     worktreePath: z.string(),
-    vars: z.record(z.string(), z.string()).optional(),
+    vars: nullishOptional(z.record(z.string(), z.string())),
   }),
   notifySend: z.object({
     title: z.string(),
     body: z.string(),
-    workspaceId: z.string().optional(),
+    workspaceId: nullishOptional(z.string()),
+    type: nullishOptional(z.string()),
+  }),
+  notifyList: z.object({
+    limit: nullishOptional(z.number().int().positive()),
+    unreadOnly: nullishOptional(z.boolean()),
+  }),
+  notifyMarkRead: z.object({ id: z.string() }),
+  instructionsResolve: z.object({ worktreePath: z.string() }),
+  prCreate: z.object({
+    worktreePath: z.string(),
+    title: nullishOptional(z.string()),
+    body: nullishOptional(z.string()),
+    base: nullishOptional(z.string()),
   }),
 };
 
@@ -129,6 +156,8 @@ export interface RpcHandlersOptions {
   attachments?: AttachmentStore;
   fileTree?: FileTree;
   projectSettings?: ProjectSettingsStore;
+  caffeinate?: Caffeinate;
+  instructions?: InstructionsResolver;
   notifier?: Notifier;
 }
 
@@ -149,6 +178,8 @@ export class RpcHandlers {
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
   readonly projectSettings: ProjectSettingsStore;
+  readonly caffeinate: Caffeinate;
+  readonly instructions: InstructionsResolver;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -167,11 +198,14 @@ export class RpcHandlers {
     this.automations =
       opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
-    this.notifications = opts.notifications ?? new NotificationService();
+    this.notifications =
+      opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
     this.context = opts.context ?? new ContextTracker(this.store);
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
     this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
+    this.caffeinate = opts.caffeinate ?? new Caffeinate();
+    this.instructions = opts.instructions ?? new InstructionsResolver();
     this.notifier = opts.notifier ?? stdoutNotifier;
   }
 
@@ -305,6 +339,10 @@ export class RpcHandlers {
       }
       case "pty.spawn": {
         const p = Schemas.ptySpawn.parse(params);
+        if (!p.cwd) {
+          const ws = this.store.workspaceGet(p.workspaceId);
+          if (ws) p.cwd = ws.worktreePath;
+        }
         return this.process.spawn(p);
       }
       case "pty.write": {
@@ -371,6 +409,10 @@ export class RpcHandlers {
         const p = Schemas.gitDiffStat.parse(params);
         return this.git.diffStat({ worktreePath: p.worktreePath });
       }
+      case "pr.create": {
+        const p = Schemas.prCreate.parse(params);
+        return this.git.prCreate(p);
+      }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);
         return this.fileTree.tree(p);
@@ -422,6 +464,10 @@ export class RpcHandlers {
         const p = Schemas.contextUsage.parse(params);
         return this.context.usage(p.sessionId);
       }
+      case "context.record": {
+        const p = Schemas.contextRecord.parse(params);
+        return this.context.record(p.sessionId, p.tokensUsed, p.costEstimate);
+      }
       case "attachment.create": {
         const p = Schemas.attachmentCreate.parse(params);
         return this.attachments.create(p);
@@ -433,6 +479,35 @@ export class RpcHandlers {
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);
         return this.notifications.send(p);
+      }
+      case "notify.list": {
+        const p = Schemas.notifyList.parse(params);
+        return this.notifications.list(p);
+      }
+      case "notify.markRead": {
+        const p = Schemas.notifyMarkRead.parse(params);
+        return this.notifications.markRead(p);
+      }
+      case "notify.markAllRead": {
+        return this.notifications.markAllRead();
+      }
+      case "notify.unreadCount": {
+        return { count: this.notifications.unreadCount() };
+      }
+      case "caffeinate.start": {
+        const r = this.caffeinate.start();
+        return { ...r, active: this.caffeinate.active() };
+      }
+      case "caffeinate.stop": {
+        const r = this.caffeinate.stop();
+        return { ...r, active: this.caffeinate.active() };
+      }
+      case "caffeinate.status": {
+        return { active: this.caffeinate.active() };
+      }
+      case "instructions.resolve": {
+        const p = Schemas.instructionsResolve.parse(params);
+        return this.instructions.resolve(p);
       }
       default:
         throw new Error(`Unknown method: ${method}`);

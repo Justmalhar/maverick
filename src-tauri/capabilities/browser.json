@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "browser-webview",
+  "description": "Lets the embedded Browser webview emit element-capture events back to the main window.",
+  "webviews": ["maverick-browser"],
+  "permissions": ["core:event:default"]
+}

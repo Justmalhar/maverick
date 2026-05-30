@@ -24,18 +24,22 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("workspace_list", { projectId: "p1" });
     await api.workspaceList();
     expect(invoke).toHaveBeenLastCalledWith("workspace_list", { projectId: undefined });
-    await api.workspaceCreate("p1", "main", "claude");
+    await api.workspaceCreate("p1", "/tmp/p1", "main", "claude");
     expect(invoke).toHaveBeenLastCalledWith("workspace_create", {
-      projectId: "p1", branch: "main", backend: "claude",
+      projectId: "p1", projectPath: "/tmp/p1", branch: "main", backend: "claude", baseBranch: undefined,
+    });
+    await api.workspaceCreate("p1", "/tmp/p1", "feat", "claude", "develop");
+    expect(invoke).toHaveBeenLastCalledWith("workspace_create", {
+      projectId: "p1", projectPath: "/tmp/p1", branch: "feat", backend: "claude", baseBranch: "develop",
     });
     await api.workspaceDestroy("w1");
     expect(invoke).toHaveBeenLastCalledWith("workspace_destroy", { workspaceId: "w1" });
   });
 
   it("pty commands", async () => {
-    await api.ptySpawn("w1", "bash", ["-l"]);
+    await api.ptySpawn("bash", ["-l"], "/wt");
     expect(invoke).toHaveBeenLastCalledWith("pty_spawn", {
-      workspaceId: "w1", command: "bash", args: ["-l"],
+      command: "bash", args: ["-l"], cwd: "/wt", env: undefined,
     });
     await api.ptyWrite("pty1", "data");
     expect(invoke).toHaveBeenLastCalledWith("pty_write", { ptyId: "pty1", data: "data" });
@@ -118,14 +122,69 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("mcp_list");
     await api.contextUsage("s1");
     expect(invoke).toHaveBeenLastCalledWith("context_usage", { sessionId: "s1" });
+    await api.contextRecord("s1", 1234, 0.05);
+    expect(invoke).toHaveBeenLastCalledWith("context_record", {
+      sessionId: "s1", tokensUsed: 1234, costEstimate: 0.05,
+    });
     await api.attachmentCreate("/wt", "txt");
     expect(invoke).toHaveBeenLastCalledWith("attachment_create", { worktreePath: "/wt", text: "txt" });
     await api.automationRun("build", "w1");
     expect(invoke).toHaveBeenLastCalledWith("automation_run", { automationName: "build", workspaceId: "w1" });
-    await api.notifySend("t", "b", "w1");
-    expect(invoke).toHaveBeenLastCalledWith("notify_send", { title: "t", body: "b", workspaceId: "w1" });
+    await api.notifySend("t", "b", "w1", "agent.complete");
+    expect(invoke).toHaveBeenLastCalledWith("notify_send", {
+      title: "t", body: "b", workspaceId: "w1", type: "agent.complete",
+    });
     await api.notifySend("t", "b");
-    expect(invoke).toHaveBeenLastCalledWith("notify_send", { title: "t", body: "b", workspaceId: undefined });
+    expect(invoke).toHaveBeenLastCalledWith("notify_send", {
+      title: "t", body: "b", workspaceId: undefined, type: undefined,
+    });
+
+    await api.notifyList();
+    expect(invoke).toHaveBeenLastCalledWith("notify_list", { limit: undefined, unreadOnly: undefined });
+    await api.notifyList(10, true);
+    expect(invoke).toHaveBeenLastCalledWith("notify_list", { limit: 10, unreadOnly: true });
+    await api.notifyMarkRead("n1");
+    expect(invoke).toHaveBeenLastCalledWith("notify_mark_read", { id: "n1" });
+    await api.notifyMarkAllRead();
+    expect(invoke).toHaveBeenLastCalledWith("notify_mark_all_read");
+    vi.mocked(invoke).mockResolvedValueOnce({ count: 4 } as never);
+    await expect(api.notifyUnreadCount()).resolves.toBe(4);
+
+    await api.caffeinateStart();
+    expect(invoke).toHaveBeenLastCalledWith("caffeinate_start");
+    await api.caffeinateStop();
+    expect(invoke).toHaveBeenLastCalledWith("caffeinate_stop");
+    await api.caffeinateStatus();
+    expect(invoke).toHaveBeenLastCalledWith("caffeinate_status");
+
+    await api.instructionsResolve("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("instructions_resolve", { worktreePath: "/wt" });
+
+    await api.prCreate("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("pr_create", {
+      worktreePath: "/wt", title: undefined, body: undefined, base: undefined,
+    });
+    await api.prCreate("/wt", "T", "B", "main");
+    expect(invoke).toHaveBeenLastCalledWith("pr_create", {
+      worktreePath: "/wt", title: "T", body: "B", base: "main",
+    });
+
+    await api.browserOpen("https://x.dev", { x: 1, y: 2, width: 300, height: 400 });
+    expect(invoke).toHaveBeenLastCalledWith("browser_open", {
+      url: "https://x.dev", x: 1, y: 2, width: 300, height: 400,
+    });
+    await api.browserNavigate("https://y.dev");
+    expect(invoke).toHaveBeenLastCalledWith("browser_navigate", { url: "https://y.dev" });
+    await api.browserSetBounds({ x: 5, y: 6, width: 7, height: 8 });
+    expect(invoke).toHaveBeenLastCalledWith("browser_set_bounds", { x: 5, y: 6, width: 7, height: 8 });
+    await api.browserShow();
+    expect(invoke).toHaveBeenLastCalledWith("browser_show");
+    await api.browserHide();
+    expect(invoke).toHaveBeenLastCalledWith("browser_hide");
+    await api.browserClose();
+    expect(invoke).toHaveBeenLastCalledWith("browser_close");
+    await api.browserEval("location.reload()");
+    expect(invoke).toHaveBeenLastCalledWith("browser_eval", { script: "location.reload()" });
   });
 
   it("event subscriptions register handlers and forward payloads", async () => {

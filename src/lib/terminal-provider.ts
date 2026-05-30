@@ -6,10 +6,20 @@ export interface TerminalOptions {
   fontFamily: string;
   ligatures: boolean;
   scrollback: number;
+  /** Cell-height multiplier. ~1.2 reads like a native terminal; 1.0 feels cramped. */
+  lineHeight?: number;
 }
 
 export interface TerminalHandle {
   write(data: string | Uint8Array): void;
+  /** Subscribe to user keystrokes/paste from the terminal. Returns an unsubscribe fn. */
+  onData(callback: (data: string) => void): () => void;
+  /**
+   * Subscribe to the renderer's fitted grid size (fires after the terminal
+   * fits its container). Consumers must keep the backing PTY at these exact
+   * cols/rows or the program's TUI will render misaligned. Returns unsubscribe.
+   */
+  onResize(callback: (cols: number, rows: number) => void): () => void;
   resize(cols: number, rows: number): void;
   setTheme(theme: TerminalTheme): void;
   focus(): void;

@@ -5,6 +5,8 @@ import { useEffect } from "react";
 import { tinykeys } from "tinykeys";
 import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { runAiReview } from "@/lib/ai-review";
 
 export function useShortcuts() {
   const store = useWorkbench();
@@ -38,21 +40,50 @@ export function useShortcuts() {
       "editor.focusInput": () => {
         document.querySelector<HTMLElement>("[data-input-bar]")?.focus();
       },
-      "editor.retry": () => {
-        /* delegated to InputBar */
+      "ai.review": () => {
+        const { activeWorkspaceId, workspaces, setEditorMode } = useWorkbench.getState();
+        const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+        if (!ws) return;
+        const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
+        void runAiReview({
+          workspaceId: ws.id,
+          worktreePath: ws.worktreePath,
+          reviewPref,
+          onAgentFocus: () => setEditorMode(ws.id, "agent"),
+        }).catch((e) => console.error("AI review failed", e));
+      },
+      "browser.toggleInspect": () => {
+        window.dispatchEvent(new CustomEvent("maverick:browser:toggleInspect"));
       },
       "terminal.splitH": () => {
-        /* delegated to TerminalView */
+        window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
       },
       "terminal.splitV": () => {
-        /* delegated to TerminalView */
+        window.dispatchEvent(new CustomEvent("maverick:terminal:splitV"));
       },
       "terminal.closePane": () => {
-        /* delegated to TerminalView */
+        window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
       },
       "terminal.clear": () => {
         /* delegated to TerminalView via custom event */
         window.dispatchEvent(new CustomEvent("maverick:terminal:clear"));
+      },
+      "terminal.focusLeft": () => {
+        window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "left" }));
+      },
+      "terminal.focusRight": () => {
+        window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" }));
+      },
+      "terminal.focusUp": () => {
+        window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "up" }));
+      },
+      "terminal.focusDown": () => {
+        window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" }));
+      },
+      "terminal.openBottomTerminal": () => {
+        const { layout, togglePanel } = useWorkbench.getState();
+        if (!layout.panelVisible) togglePanel();
+        window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
       },
       "layout.toggleSidebar": () => useWorkbench.getState().togglePrimarySideBar(),
       "layout.toggleAuxBar": () => useWorkbench.getState().toggleAuxiliaryBar(),
@@ -74,19 +105,16 @@ export function useShortcuts() {
       },
     };
 
-    // Workspace index jump 1-9
-    const indexJumps = Object.fromEntries(
-      Array.from({ length: 9 }, (_, i) => [
-        `$mod+${i + 1}`,
-        () => {
-          const { workspaces, setActiveWorkspace } = useWorkbench.getState();
-          const ws = workspaces[i];
-          if (ws) setActiveWorkspace(ws.id);
-        },
-      ])
-    );
+    for (let i = 0; i < 9; i++) {
+      const idx = i;
+      handlers[`workspace.jump.${idx + 1}` as ActionId] = () => {
+        const { workspaces, setActiveWorkspace } = useWorkbench.getState();
+        const ws = workspaces[idx];
+        if (ws) setActiveWorkspace(ws.id);
+      };
+    }
 
-    const bindings: Record<string, (e: KeyboardEvent) => void> = { ...indexJumps };
+    const bindings: Record<string, (e: KeyboardEvent) => void> = {};
     for (const kb of KEYBINDINGS) {
       if (!kb.keys) continue;
       bindings[kb.keys] = (e: KeyboardEvent) => {

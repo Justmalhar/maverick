@@ -1,64 +1,58 @@
-use serde_json::{json, Value};
-use tauri::State;
+use std::collections::HashMap;
 
-use crate::state::AppState;
+use serde_json::{json, Value};
+use tauri::{AppHandle, Runtime, State};
+
+use crate::pty::{PtyManager, SpawnParams};
 
 #[tauri::command]
-pub async fn pty_spawn(
-    state: State<'_, AppState>,
-    workspace_id: String,
+pub async fn pty_spawn<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, PtyManager>,
     command: String,
     args: Vec<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    cols: Option<u16>,
+    rows: Option<u16>,
 ) -> Result<Value, String> {
-    state
-        .sidecar
-        .request(
-            "pty.spawn",
-            json!({
-                "workspaceId": workspace_id,
-                "command": command,
-                "args": args,
-            }),
-        )
-        .await
-        .map_err(|e| e.to_string())
+    let pty_id = manager.spawn(
+        &app,
+        SpawnParams {
+            command,
+            args,
+            cwd,
+            env,
+            cols: cols.unwrap_or(80),
+            rows: rows.unwrap_or(24),
+        },
+    )?;
+    Ok(json!({ "ptyId": pty_id }))
 }
 
 #[tauri::command]
 pub async fn pty_write(
-    state: State<'_, AppState>,
+    manager: State<'_, PtyManager>,
     pty_id: String,
     data: String,
 ) -> Result<Value, String> {
-    state
-        .sidecar
-        .request("pty.write", json!({ "ptyId": pty_id, "data": data }))
-        .await
-        .map_err(|e| e.to_string())
+    manager.write(&pty_id, &data)?;
+    Ok(json!({ "ok": true }))
 }
 
 #[tauri::command]
 pub async fn pty_resize(
-    state: State<'_, AppState>,
+    manager: State<'_, PtyManager>,
     pty_id: String,
     cols: u16,
     rows: u16,
 ) -> Result<Value, String> {
-    state
-        .sidecar
-        .request(
-            "pty.resize",
-            json!({ "ptyId": pty_id, "cols": cols, "rows": rows }),
-        )
-        .await
-        .map_err(|e| e.to_string())
+    manager.resize(&pty_id, cols, rows)?;
+    Ok(json!({ "ok": true }))
 }
 
 #[tauri::command]
-pub async fn pty_kill(state: State<'_, AppState>, pty_id: String) -> Result<Value, String> {
-    state
-        .sidecar
-        .request("pty.kill", json!({ "ptyId": pty_id }))
-        .await
-        .map_err(|e| e.to_string())
+pub async fn pty_kill(manager: State<'_, PtyManager>, pty_id: String) -> Result<Value, String> {
+    manager.kill(&pty_id)?;
+    Ok(json!({ "ok": true }))
 }

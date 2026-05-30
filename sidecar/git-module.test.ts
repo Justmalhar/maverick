@@ -127,6 +127,54 @@ describe("GitModule methods", () => {
     await expect(new GitModule({ shell }).push({ worktreePath: "/w" })).rejects.toThrow(/rejected/);
   });
 
+  test("prCreate pushes the branch then runs gh pr create --fill", async () => {
+    const { shell, calls } = transcript([
+      { stdout: "feature-x\n" }, // rev-parse --abbrev-ref HEAD
+      {}, // git push -u origin feature-x
+      { stdout: "https://github.com/o/r/pull/3\n" }, // gh pr create
+    ]);
+    const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "rev-parse", "--abbrev-ref", "HEAD"]);
+    expect(calls[1]).toEqual(["git", "-C", "/w", "push", "-u", "origin", "feature-x"]);
+    expect(calls[2]).toEqual(["gh", "pr", "create", "--head", "feature-x", "--fill"]);
+    expect(result.url).toBe("https://github.com/o/r/pull/3");
+  });
+
+  test("prCreate passes title/body/base when provided", async () => {
+    const { shell, calls } = transcript([
+      { stdout: "feature-y\n" },
+      {},
+      { stdout: "https://github.com/o/r/pull/4\n" },
+    ]);
+    await new GitModule({ shell }).prCreate({
+      worktreePath: "/w",
+      title: "My PR",
+      body: "Details",
+      base: "develop",
+    });
+    expect(calls[2]).toEqual([
+      "gh", "pr", "create", "--head", "feature-y",
+      "--base", "develop", "--title", "My PR", "--body", "Details",
+    ]);
+  });
+
+  test("prCreate throws when the push fails", async () => {
+    const { shell } = transcript([
+      { stdout: "feature-z\n" },
+      { exitCode: 1, stderr: "push rejected" },
+    ]);
+    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/push rejected/);
+  });
+
+  test("prCreate throws when gh fails", async () => {
+    const { shell } = transcript([
+      { stdout: "feature-q\n" },
+      {},
+      { exitCode: 1, stderr: "gh: not authenticated" },
+    ]);
+    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/not authenticated/);
+  });
+
   test("pull runs git pull", async () => {
     const { shell, calls } = transcript([{}]);
     await new GitModule({ shell }).pull({ worktreePath: "/w" });

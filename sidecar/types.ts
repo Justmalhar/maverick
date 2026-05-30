@@ -186,6 +186,16 @@ export interface ContextUsage {
   sessionCostEstimate: number;
 }
 
+export interface Notification {
+  id: string;
+  workspaceId: string | null;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: number;
+}
+
 export interface FileEntry {
   path: string;
   name: string;

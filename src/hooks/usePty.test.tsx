@@ -26,7 +26,7 @@ describe("usePty", () => {
 
     const { result } = renderHook(() => usePty("p1"));
     const handle = {
-      write: vi.fn(), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(),
+      write: vi.fn(), onData: vi.fn(() => () => {}), onResize: vi.fn(() => () => {}), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(),
       dispose: vi.fn(), dimensions: { cols: 0, rows: 0 },
     };
     act(() => result.current.attach(handle));

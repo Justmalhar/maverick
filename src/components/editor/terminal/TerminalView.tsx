@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
 import type { Workspace, SplitNode } from "@/lib/ipc";
-import { splitNode, removeNode, canSplit } from "@/lib/splitnode";
+import { splitNode, removeNode, canSplit, findNeighbor, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
 
 interface Props {
@@ -60,6 +60,20 @@ export function TerminalView({ workspace }: Props) {
       window.removeEventListener("maverick:terminal:closePane", onClose);
     };
   }, [focusedPaneId, workspace, setSplitTree]);
+
+  useEffect(() => {
+    function onFocusDirection(e: Event) {
+      const direction = (e as CustomEvent<FocusDirection>).detail;
+      const current = useWorkbench.getState().splitTrees[workspace.id];
+      if (!current || !focusedPaneId) return;
+      const neighbour = findNeighbor(current, focusedPaneId, direction);
+      if (neighbour) setFocusedPaneId(neighbour);
+    }
+    window.addEventListener("maverick:terminal:focusDirection", onFocusDirection);
+    return () => {
+      window.removeEventListener("maverick:terminal:focusDirection", onFocusDirection);
+    };
+  }, [focusedPaneId, workspace.id]);
 
   if (!tree) {
     return (

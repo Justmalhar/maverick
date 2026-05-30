@@ -16,6 +16,7 @@ function theme(): TerminalTheme {
 interface Stub {
   cols: number; rows: number; options: Record<string, unknown>;
   open: ReturnType<typeof vi.fn>; write: ReturnType<typeof vi.fn>;
+  onData: ReturnType<typeof vi.fn>;
   resize: ReturnType<typeof vi.fn>; focus: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>; loadAddon: ReturnType<typeof vi.fn>;
 }
@@ -45,11 +46,35 @@ describe("XtermProvider.mount", () => {
     });
     const term = (globalThis as Record<string, unknown>).__xtermLast as Stub;
     expect(term.open).toHaveBeenCalledWith(container);
+    // fit, web-links, search
     expect(term.loadAddon).toHaveBeenCalledTimes(3);
     expect(handle.dimensions).toEqual({ cols: 80, rows: 24 });
 
     handle.write("hi");
     expect(term.write).toHaveBeenCalledWith("hi");
+
+    // Input subscription bridges xterm.onData and returns a disposer.
+    const cb = vi.fn();
+    const off = handle.onData(cb);
+    expect(term.onData).toHaveBeenCalledWith(cb);
+    off();
+
+    // onResize emits the current fitted size immediately and on container resize.
+    const sizeCb = vi.fn();
+    const offResize = handle.onResize(sizeCb);
+    expect(sizeCb).toHaveBeenCalledWith(80, 24);
+    sizeCb.mockClear();
+    for (const rc of resizeCallbacks) {
+      rc([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
+    }
+    expect(sizeCb).toHaveBeenCalledWith(80, 24);
+    offResize();
+    sizeCb.mockClear();
+    for (const rc of resizeCallbacks) {
+      rc([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
+    }
+    expect(sizeCb).not.toHaveBeenCalled();
+
     handle.resize(40, 12);
     expect(term.resize).toHaveBeenCalledWith(40, 12);
     handle.setTheme(theme());

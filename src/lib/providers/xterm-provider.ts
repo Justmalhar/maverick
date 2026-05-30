@@ -45,6 +45,7 @@ export class XtermProvider implements TerminalProvider {
     const term = new Terminal({
       fontFamily: options.fontFamily,
       fontSize: options.fontSize,
+      lineHeight: options.lineHeight ?? 1.2,
       scrollback: options.scrollback,
       cursorBlink: true,
       cursorStyle: "block",
@@ -57,25 +58,40 @@ export class XtermProvider implements TerminalProvider {
     term.loadAddon(new WebLinksAddon());
     term.loadAddon(new SearchAddon());
 
-    term.open(container);
-    try {
-      fit.fit();
-    } catch {
-      // Container may not be sized yet; ResizeObserver will refit.
-    }
-
-    const ro = new ResizeObserver(() => {
+    // Subscribers want the actual fitted grid size so the PTY can match it
+    // exactly — guessing from pixel math misaligns the program's TUI.
+    const resizeListeners = new Set<(cols: number, rows: number) => void>();
+    const notifyResize = () => {
+      for (const cb of resizeListeners) cb(term.cols, term.rows);
+    };
+    const safeFit = () => {
       try {
         fit.fit();
+        notifyResize();
       } catch {
-        // ignore intermittent fit errors during teardown
+        // Container may not be sized yet; ResizeObserver will refit.
       }
-    });
+    };
+
+    term.open(container);
+    safeFit();
+
+    const ro = new ResizeObserver(safeFit);
     ro.observe(container);
 
     const handle: TerminalHandle = {
       write(data) {
         term.write(data as string);
+      },
+      onData(callback) {
+        const sub = term.onData(callback);
+        return () => sub.dispose();
+      },
+      onResize(callback) {
+        resizeListeners.add(callback);
+        // Emit the current size immediately so a late subscriber syncs at once.
+        callback(term.cols, term.rows);
+        return () => resizeListeners.delete(callback);
       },
       resize(cols, rows) {
         term.resize(cols, rows);

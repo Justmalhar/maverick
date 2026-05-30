@@ -36,6 +36,21 @@ describe("EditorTabs", () => {
     expect(screen.getByTestId("editor-tabs-open-browser")).toBeInTheDocument();
   });
 
+  it("clicking a workspace tab while a system tab is active switches to the workspace", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      systemTabs: ["kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorTabs />);
+    await userEvent.click(screen.getByTestId("editor-tab-w1"));
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
+    // The system tab must be deactivated so the workspace editor shows.
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
+  });
+
   it("inactive system tab click activates it", async () => {
     useWorkbench.setState({
       ...initial,
@@ -99,5 +114,30 @@ describe("EditorTabs", () => {
     await userEvent.click(screen.getByTestId("editor-tabs-new"));
     await userEvent.click(screen.getByText(/All commands/i));
     expect(useWorkbench.getState().commandPaletteOpen).toBe(true);
+  });
+
+  it("New Terminal item shows panel and dispatches maverick:panel:tab terminal", async () => {
+    renderWithProviders(<EditorTabs />);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("editor-tabs-new"));
+    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:panel:tab", detail: "terminal" })
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it("New Terminal item does not double-toggle panel when already visible", async () => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      layout: { ...useWorkbench.getState().layout, panelVisible: true },
+    });
+    renderWithProviders(<EditorTabs />);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("editor-tabs-new"));
+    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    dispatchSpy.mockRestore();
   });
 });

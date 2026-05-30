@@ -5,7 +5,7 @@ function makeProvider(): TerminalProvider {
   return {
     mount(_c: HTMLElement, _o: TerminalOptions): TerminalHandle {
       return {
-        write() {}, resize() {}, setTheme() {}, focus() {}, dispose() {},
+        write() {}, onData() { return () => {}; }, onResize() { return () => {}; }, resize() {}, setTheme() {}, focus() {}, dispose() {},
         get dimensions() { return { cols: 80, rows: 24 }; },
       };
     },

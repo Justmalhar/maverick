@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { fireEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { Panel } from "./Panel";
+import { __testing__ as bottomTerminalTesting } from "./BottomTerminal";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 
 vi.mock("@/hooks/useScriptRunner");
@@ -20,6 +22,7 @@ const BASE_SETTINGS = (overrides: object = {}) => ({
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  bottomTerminalTesting.ptyCache.clear();
   vi.mocked(useScriptRunner).mockReturnValue({
     state: "idle", exitCode: null, startedAt: null, output: "",
     start: vi.fn(), stop: vi.fn(),
@@ -122,5 +125,33 @@ describe("Panel", () => {
     useWorkbench.setState({ ...useWorkbench.getState(), activeWorkspaceId: null });
     renderWithProviders(<Panel />);
     await userEvent.click(screen.getByRole("button", { name: /Open Project Settings/i }));
+  });
+
+  it("maverick:panel:tab event switches to terminal tab", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-bottom" } as never);
+    renderWithProviders(<Panel />);
+    fireEvent(window, new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_spawn", expect.objectContaining({ command: "/bin/zsh" }))
+    );
+  });
+
+  it("maverick:panel:tab event ignores unknown tab values", () => {
+    renderWithProviders(<Panel />);
+    fireEvent(window, new CustomEvent("maverick:panel:tab", { detail: "unknown" }));
+    expect(screen.getByTestId("panel-tab-setup")).toBeInTheDocument();
+  });
+
+  it("Terminal tab renders the bottom terminal", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-bottom" } as never);
+    renderWithProviders(<Panel />);
+    await userEvent.click(screen.getByTestId("panel-tab-terminal"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_spawn", expect.objectContaining({
+        command: "/bin/zsh",
+        args: ["-l"],
+        cwd: "/p/w",
+      }))
+    );
   });
 });

@@ -40,6 +40,27 @@ export class ContextTracker {
     };
   }
 
+  /** Set the absolute token + cost figures for a session (upsert). */
+  record(sessionId: string, tokensUsed: number, costEstimate: number): ContextUsage {
+    const id = this.ids.uuid("ctx");
+    const updatedAt = Math.floor(this.ids.now() / 1000);
+    const existing = this.store.db
+      .query<{ id: string }, [string]>("SELECT id FROM context_usage WHERE session_id = ?")
+      .get(sessionId);
+    if (existing) {
+      this.store.db
+        .query("UPDATE context_usage SET tokens_used = ?, cost_estimate = ?, updated_at = ? WHERE id = ?")
+        .run(tokensUsed, costEstimate, updatedAt, existing.id);
+    } else {
+      this.store.db
+        .query(
+          "INSERT INTO context_usage (id, session_id, tokens_used, context_window, cost_estimate, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .run(id, sessionId, tokensUsed, this.defaultWindow, costEstimate, updatedAt);
+    }
+    return this.usage(sessionId);
+  }
+
   update(sessionId: string, tokensUsed: number, costDelta: number): void {
     const id = this.ids.uuid("ctx");
     const updatedAt = Math.floor(this.ids.now() / 1000);

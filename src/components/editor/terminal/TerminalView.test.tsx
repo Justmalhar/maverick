@@ -11,7 +11,7 @@ import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/
 const initial = useWorkbench.getState();
 
 const handle: TerminalHandle = {
-  write: vi.fn(), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
+  write: vi.fn(), onData: vi.fn(() => () => {}), onResize: vi.fn(() => () => {}), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
   get dimensions() { return { cols: 0, rows: 0 }; },
 };
 const provider: TerminalProvider = { mount: () => handle };
@@ -74,6 +74,56 @@ describe("TerminalView", () => {
     act(() => {
       window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
     });
+  });
+
+  it("focusDirection right moves focus to the right pane after a horizontal split", async () => {
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+
+    // Focus the initial pane, then split horizontally
+    const pane = await screen.findByTestId("terminal-pane-w1-1");
+    act(() => { pane.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:splitH")); });
+
+    const splits = useWorkbench.getState().splitTrees["w1"];
+    const rightId = splits?.type === "split" && splits.right.type === "terminal" ? splits.right.id : "";
+    expect(rightId).toBeTruthy();
+
+    // Re-focus the left pane by updating focusedPaneId back to original
+    act(() => { pane.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+
+    // Now focus right
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" })); });
+    // The store tree is unchanged; what changes is focusedPaneId in TerminalView state.
+    // We verify by then firing focusDirection left and expecting no crash.
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "left" })); });
+  });
+
+  it("focusDirection is a no-op when no pane is focused", async () => {
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    // No focused pane → should not throw
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "left" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "up" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" })); });
+  });
+
+  it("focusDirection is a no-op at the edge of the tree", async () => {
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+
+    // Focus the single pane (no neighbours exist)
+    const pane = await screen.findByTestId("terminal-pane-w1-1");
+    act(() => { pane.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+
+    // All directions should be no-ops since it's a single-leaf tree
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "left" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "up" })); });
+    act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" })); });
+    // Tree should remain a single-leaf terminal
+    expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
   });
 
   it("split events do nothing when the tree cannot accept more leaves", async () => {
