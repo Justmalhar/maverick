@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { XtermProvider } from "./xterm-provider";
 import type { TerminalTheme } from "../ipc";
+import type { PtyBridge } from "../terminal-provider";
+import { __resetPoolForTests } from "./renderer-pool";
+import { __resetSessionsForTests } from "./terminal-session";
 
 function theme(): TerminalTheme {
   return {
@@ -21,96 +24,128 @@ interface Stub {
   dispose: ReturnType<typeof vi.fn>; loadAddon: ReturnType<typeof vi.fn>;
 }
 
-let resizeCallbacks: ResizeObserverCallback[] = [];
+function sizedContainer(w = 800, h = 340): HTMLDivElement {
+  const el = document.createElement("div");
+  Object.defineProperty(el, "clientWidth", { value: w, configurable: true });
+  Object.defineProperty(el, "clientHeight", { value: h, configurable: true });
+  return el;
+}
 
 beforeEach(() => {
-  resizeCallbacks = [];
   vi.stubGlobal("ResizeObserver", class {
-    callback: ResizeObserverCallback;
-    constructor(cb: ResizeObserverCallback) {
-      this.callback = cb;
-      resizeCallbacks.push(cb);
-    }
     observe = vi.fn();
     unobserve = vi.fn();
     disconnect = vi.fn();
   });
 });
 
+afterEach(() => {
+  // Reset the pool first (it nulls the adapter), then sessions which re-install
+  // the adapter, so the next test starts wired up.
+  __resetPoolForTests();
+  __resetSessionsForTests();
+  vi.useRealTimers();
+});
+
 describe("XtermProvider.mount", () => {
-  it("wires xterm + addons and returns a handle", () => {
+  it("is unimplemented: production uses the pooled acquireLeaf path", () => {
+    // mount exists only to satisfy the TerminalProvider interface. Reaching it
+    // is a bug, so it throws rather than duplicating the pool's xterm imports.
     const provider = new XtermProvider();
-    const container = document.createElement("div");
-    const handle = provider.mount(container, {
+    expect(() => provider.mount(sizedContainer(), {
       theme: theme(), fontSize: 13, fontFamily: "mono", ligatures: false, scrollback: 100,
-    });
+    })).toThrow(/not implemented/);
+  });
+});
+
+describe("XtermProvider.acquireLeaf", () => {
+  function bridge(): PtyBridge {
+    return { writeToPty: vi.fn(), resizePty: vi.fn(), kickPty: vi.fn() };
+  }
+
+  it("returns a pooled handle that binds a slot on acquire and serializes on release", () => {
+    const provider = new XtermProvider();
+    const pooled = provider.acquireLeaf(
+      "leaf-1",
+      { theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, ligatures: false, scrollback: 5000 },
+      bridge()
+    );
+    expect(pooled.bound).toBe(false);
+
+    const container = sizedContainer();
+    pooled.acquire(container);
+    expect(pooled.bound).toBe(true);
+
+    // pty:data feeds the bound slot's xterm.
     const term = (globalThis as Record<string, unknown>).__xtermLast as Stub;
-    expect(term.open).toHaveBeenCalledWith(container);
-    // fit, web-links, search
-    expect(term.loadAddon).toHaveBeenCalledTimes(3);
-    expect(handle.dimensions).toEqual({ cols: 80, rows: 24 });
+    pooled.feed("hello");
+    expect(term.write).toHaveBeenCalledWith("hello");
 
-    handle.write("hi");
-    expect(term.write).toHaveBeenCalledWith("hi");
-
-    // Input subscription bridges xterm.onData and returns a disposer.
-    const cb = vi.fn();
-    const off = handle.onData(cb);
-    expect(term.onData).toHaveBeenCalledWith(cb);
-    off();
-
-    // onResize emits the current fitted size immediately and on container resize.
-    const sizeCb = vi.fn();
-    const offResize = handle.onResize(sizeCb);
-    expect(sizeCb).toHaveBeenCalledWith(80, 24);
-    sizeCb.mockClear();
-    for (const rc of resizeCallbacks) {
-      rc([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
-    }
-    expect(sizeCb).toHaveBeenCalledWith(80, 24);
-    offResize();
-    sizeCb.mockClear();
-    for (const rc of resizeCallbacks) {
-      rc([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
-    }
-    expect(sizeCb).not.toHaveBeenCalled();
-
-    handle.resize(40, 12);
-    expect(term.resize).toHaveBeenCalledWith(40, 12);
-    handle.setTheme(theme());
-    expect((term.options as { theme?: unknown }).theme).toBeDefined();
-    handle.focus();
+    pooled.setTheme(theme());
+    pooled.focus();
     expect(term.focus).toHaveBeenCalled();
-    handle.dispose();
-    expect(term.dispose).toHaveBeenCalled();
+
+    pooled.release();
+    expect(pooled.bound).toBe(false);
+
+    // While dormant, feed lands in the ring (no slot write).
+    term.write.mockClear();
+    pooled.feed("dormant-bytes");
+    expect(term.write).not.toHaveBeenCalled();
+
+    // Re-acquire drains the ring onto the slot.
+    pooled.acquire(container);
+    expect(term.write).toHaveBeenCalledWith("dormant-bytes");
+
+    pooled.dispose();
+    expect(pooled.bound).toBe(false);
   });
 
-  it("accepts ligatures flag and ignores it", () => {
+  it("onData is a no-op disposer (pooled slots forward keystrokes via the bridge)", () => {
     const provider = new XtermProvider();
-    provider.mount(document.createElement("div"), {
-      theme: theme(), fontSize: 13, fontFamily: "mono", ligatures: true, scrollback: 0,
-    });
-    // No throw means the void options.ligatures branch executed.
-    expect(true).toBe(true);
+    const pooled = provider.acquireLeaf(
+      "leaf-2",
+      { theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, ligatures: false, scrollback: 5000 },
+      bridge()
+    );
+    const off = pooled.onData(() => {});
+    expect(() => off()).not.toThrow();
+    pooled.dispose();
   });
 
-  it("swallows fit errors during initial mount and on resize", async () => {
-    const FitMod = await import("@xterm/addon-fit");
-    const original = (FitMod as { FitAddon: unknown }).FitAddon;
-    (FitMod as unknown as { FitAddon: unknown }).FitAddon = class {
-      fit = vi.fn(() => {
-        throw new Error("not sized");
-      });
-    };
+  it("onResize subscribes through the session and emits the current size", () => {
     const provider = new XtermProvider();
-    expect(() =>
-      provider.mount(document.createElement("div"), {
-        theme: theme(), fontSize: 13, fontFamily: "mono", ligatures: false, scrollback: 100,
-      })
-    ).not.toThrow();
+    const b = bridge();
+    const pooled = provider.acquireLeaf(
+      "leaf-3",
+      { theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, ligatures: false, scrollback: 5000 },
+      b
+    );
+    pooled.acquire(sizedContainer());
+    const cb = vi.fn();
+    const off = pooled.onResize(cb);
+    expect(cb).toHaveBeenCalled();
+    off();
+    pooled.dispose();
+  });
 
-    // Trigger the ResizeObserver callback so the second try/catch fires.
-    for (const cb of resizeCallbacks) cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
-    (FitMod as unknown as { FitAddon: unknown }).FitAddon = original;
+  it("reuses the existing pool config across leaves (does not reconfigure)", () => {
+    const provider = new XtermProvider();
+    const a = provider.acquireLeaf(
+      "leaf-a",
+      { theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, ligatures: false, scrollback: 5000 },
+      bridge()
+    );
+    const b = provider.acquireLeaf(
+      "leaf-b",
+      { theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, ligatures: false, scrollback: 5000 },
+      bridge()
+    );
+    a.acquire(sizedContainer());
+    b.acquire(sizedContainer());
+    expect(a.bound).toBe(true);
+    expect(b.bound).toBe(true);
+    a.dispose();
+    b.dispose();
   });
 });

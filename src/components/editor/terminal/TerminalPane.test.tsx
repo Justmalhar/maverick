@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, fireEvent } from "@/test/utils";
 import { TerminalPane } from "./TerminalPane";
-import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
+import {
+  TerminalRegistry,
+  type TerminalProvider,
+  type TerminalHandle,
+  type PooledTerminalHandle,
+  type PtyBridge,
+} from "@/lib/terminal-provider";
 
 interface Handle extends TerminalHandle {
   write: ReturnType<typeof vi.fn>;
@@ -125,5 +131,146 @@ describe("TerminalPane", () => {
     TerminalRegistry.register(provider);
     renderWithProviders(<TerminalPane ptyId="p1" paneId="pane-2" isFocused onFocus={() => {}} />);
     expect(screen.getByTestId("terminal-pane-pane-2").className).toMatch(/ring-primary/);
+  });
+});
+
+interface PooledStub extends PooledTerminalHandle {
+  acquire: ReturnType<typeof vi.fn>;
+  release: ReturnType<typeof vi.fn>;
+  feed: ReturnType<typeof vi.fn>;
+  onResize: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+}
+
+function makePooledProvider(): {
+  provider: TerminalProvider;
+  pooled: PooledStub;
+  acquireLeaf: ReturnType<typeof vi.fn>;
+  lastBridge: () => PtyBridge | undefined;
+} {
+  let bound = false;
+  const pooled: PooledStub = {
+    acquire: vi.fn(() => {
+      bound = true;
+    }),
+    release: vi.fn(() => {
+      bound = false;
+    }),
+    feed: vi.fn(),
+    onData: vi.fn(() => () => {}),
+    // Invoke the subscriber immediately so the pane's resize→PTY wiring runs.
+    onResize: vi.fn((cb: (c: number, r: number) => void) => {
+      cb(100, 30);
+      return () => {};
+    }),
+    setTheme: vi.fn(),
+    focus: vi.fn(),
+    dispose: vi.fn(),
+    get bound() {
+      return bound;
+    },
+  };
+  let captured: PtyBridge | undefined;
+  const acquireLeaf = vi.fn((_leafId: string, _opts: unknown, bridge: PtyBridge) => {
+    captured = bridge;
+    return pooled;
+  });
+  const provider: TerminalProvider = {
+    mount: () => {
+      throw new Error("pooled provider should not call mount");
+    },
+    acquireLeaf,
+  };
+  return { provider, pooled, acquireLeaf, lastBridge: () => captured };
+}
+
+describe("TerminalPane (pooled renderer path)", () => {
+  const previous = TerminalRegistry.get();
+  afterEach(() => {
+    TerminalRegistry.register(previous);
+  });
+
+  it("acquires a pooled slot when visible and routes pty:data to feed", async () => {
+    const callbacks: Record<string, (e: { payload: unknown }) => void> = {};
+    vi.mocked(listen).mockImplementation((async (event: string, cb: (e: { payload: unknown }) => void) => {
+      callbacks[event] = cb;
+      return () => {};
+    }) as unknown as typeof listen);
+
+    const { provider, pooled, acquireLeaf } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(
+      <TerminalPane ptyId="p1" paneId="leaf-1" isFocused onFocus={() => {}} visible />
+    );
+    expect(acquireLeaf).toHaveBeenCalledWith("leaf-1", expect.any(Object), expect.any(Object));
+    expect(pooled.acquire).toHaveBeenCalled();
+    expect(pooled.focus).toHaveBeenCalled();
+
+    await Promise.resolve();
+    callbacks["pty:data"]({ payload: { ptyId: "p1", data: "out" } });
+    expect(pooled.feed).toHaveBeenCalledWith("out");
+  });
+
+  it("the bridge forwards keystrokes, resizes, and SIGWINCH kicks to the PTY", async () => {
+    const { provider, lastBridge } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(
+      <TerminalPane ptyId="p2" paneId="leaf-2" isFocused onFocus={() => {}} visible />
+    );
+    const bridge = lastBridge()!;
+    bridge.writeToPty("ls\r");
+    bridge.resizePty(120, 40);
+    bridge.kickPty(120, 40);
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "p2", data: "ls\r" });
+      expect(invoke).toHaveBeenCalledWith("pty_resize", { ptyId: "p2", cols: 120, rows: 40 });
+      expect(invoke).toHaveBeenCalledWith("pty_resize", { ptyId: "p2", cols: 120, rows: 41 });
+    });
+  });
+
+  it("clear event feeds the reset sequence to the pooled slot", () => {
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(
+      <TerminalPane ptyId="p3" paneId="leaf-3" isFocused onFocus={() => {}} visible />
+    );
+    window.dispatchEvent(new CustomEvent("maverick:terminal:clear"));
+    expect(pooled.feed).toHaveBeenCalledWith("\x1b[2J\x1b[H");
+  });
+
+  it("releases the slot when scrolled out of the live window and re-acquires on return", () => {
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    const { rerender } = renderWithProviders(
+      <TerminalPane ptyId="p4" paneId="leaf-4" isFocused={false} onFocus={() => {}} visible />
+    );
+    pooled.acquire.mockClear();
+    rerender(<TerminalPane ptyId="p4" paneId="leaf-4" isFocused={false} onFocus={() => {}} visible={false} />);
+    expect(pooled.release).toHaveBeenCalled();
+    rerender(<TerminalPane ptyId="p4" paneId="leaf-4" isFocused={false} onFocus={() => {}} visible />);
+    expect(pooled.acquire).toHaveBeenCalled();
+  });
+
+  it("does not acquire on mount while hidden, and disposes the session on unmount", () => {
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    const { unmount } = renderWithProviders(
+      <TerminalPane ptyId="p5" paneId="leaf-5" isFocused={false} onFocus={() => {}} visible={false} />
+    );
+    expect(pooled.acquire).not.toHaveBeenCalled();
+    unmount();
+    expect(pooled.dispose).toHaveBeenCalled();
+  });
+
+  it("refocuses the pooled slot when it becomes the active pane", () => {
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    const { rerender } = renderWithProviders(
+      <TerminalPane ptyId="p6" paneId="leaf-6" isFocused={false} onFocus={() => {}} visible />
+    );
+    pooled.focus.mockClear();
+    rerender(<TerminalPane ptyId="p6" paneId="leaf-6" isFocused onFocus={() => {}} visible />);
+    expect(pooled.focus).toHaveBeenCalled();
   });
 });

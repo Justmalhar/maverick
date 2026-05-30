@@ -7,6 +7,9 @@ import { killLeaf } from "./TerminalLeaf";
 
 interface Props {
   workspace: Workspace;
+  // False when the owning workspace editor is keep-alive-hidden. Forwarded to
+  // every leaf so dormant panes release their pooled xterm slot.
+  visible?: boolean;
 }
 
 function singlePane(workspace: Workspace): SplitNode {
@@ -18,7 +21,7 @@ function singlePane(workspace: Workspace): SplitNode {
   };
 }
 
-export function TerminalView({ workspace }: Props) {
+export function TerminalView({ workspace, visible = true }: Props) {
   const tree = useWorkbench((s) => s.splitTrees[workspace.id]);
   const setSplitTree = useWorkbench((s) => s.setSplitTree);
   const [focusedPaneId, setFocusedPaneId] = useState<string | null>(null);
@@ -95,6 +98,7 @@ export function TerminalView({ workspace }: Props) {
         workspace={workspace}
         focusedPaneId={focusedPaneId}
         onFocus={setFocusedPaneId}
+        visible={visible}
       />
     </section>
   );

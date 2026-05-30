@@ -1,18 +1,38 @@
 // xterm.js v5 implementation of TerminalProvider (default renderer).
 // Consumers go through TerminalRegistry — never import xterm.js directly.
-import { Terminal, type ITheme } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { SearchAddon } from "@xterm/addon-search";
-import "@xterm/xterm/css/xterm.css";
+//
+// The production path is acquireLeaf → the bounded renderer pool; the heavy
+// xterm/addon imports + css live in renderer-pool.ts. mount() exists only to
+// satisfy the TerminalProvider interface and is never reached in production
+// (TerminalPane uses acquireLeaf whenever it is present), so it is intentionally
+// unimplemented rather than duplicating the pool's xterm imports (CLAUDE.md
+// rule 8 — bundle budget).
+import type { ITheme } from "@xterm/xterm";
 import type {
   TerminalProvider,
   TerminalHandle,
   TerminalOptions,
+  PooledTerminalHandle,
+  PtyBridge,
 } from "../terminal-provider";
 import type { TerminalTheme } from "../ipc";
+import {
+  setPoolConfig,
+  poolConfigured,
+} from "./renderer-pool";
+import {
+  ensureSession,
+  bind,
+  releaseSession,
+  feedSession,
+  focusSession,
+  setSessionTheme,
+  onSessionResize,
+  sessionBound,
+  disposeSession,
+} from "./terminal-session";
 
-function toXtermTheme(t: TerminalTheme): ITheme {
+export function toXtermTheme(t: TerminalTheme): ITheme {
   return {
     background: t.background,
     foreground: t.foreground,
@@ -37,80 +57,67 @@ function toXtermTheme(t: TerminalTheme): ITheme {
 }
 
 export class XtermProvider implements TerminalProvider {
-  mount(container: HTMLElement, options: TerminalOptions): TerminalHandle {
-    // Ligatures require the @xterm/addon-ligatures package — pluggable later.
-    // For v0.1 the option is accepted but inert; we drop it here.
-    void options.ligatures;
+  // Required by the TerminalProvider interface but unreachable in production:
+  // TerminalPane always takes the acquireLeaf (pooled) path when it is present.
+  // Implementing it would re-import the heavy xterm core/addons that
+  // renderer-pool.ts already owns, breaking the bundle budget (CLAUDE.md rule 8).
+  mount(_container: HTMLElement, _options: TerminalOptions): TerminalHandle {
+    void _container;
+    void _options;
+    throw new Error(
+      "XtermProvider.mount is not implemented; use acquireLeaf (pooled renderer)."
+    );
+  }
 
-    const term = new Terminal({
-      fontFamily: options.fontFamily,
-      fontSize: options.fontSize,
-      lineHeight: options.lineHeight ?? 1.2,
-      scrollback: options.scrollback,
-      cursorBlink: true,
-      cursorStyle: "block",
-      allowProposedApi: true,
-      theme: toXtermTheme(options.theme),
-    });
+  acquireLeaf(
+    leafId: string,
+    options: TerminalOptions,
+    bridge: PtyBridge
+  ): PooledTerminalHandle {
+    if (!poolConfigured()) {
+      setPoolConfig({
+        theme: toXtermTheme(options.theme),
+        fontSize: options.fontSize,
+        fontFamily: options.fontFamily,
+        lineHeight: options.lineHeight ?? 1.2,
+        scrollback: options.scrollback,
+      });
+    }
+    const session = ensureSession(leafId, bridge, toXtermTheme(options.theme));
+    void session;
 
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
-    term.loadAddon(new SearchAddon());
-
-    // Subscribers want the actual fitted grid size so the PTY can match it
-    // exactly — guessing from pixel math misaligns the program's TUI.
-    const resizeListeners = new Set<(cols: number, rows: number) => void>();
-    const notifyResize = () => {
-      for (const cb of resizeListeners) cb(term.cols, term.rows);
-    };
-    const safeFit = () => {
-      try {
-        fit.fit();
-        notifyResize();
-      } catch {
-        // Container may not be sized yet; ResizeObserver will refit.
-      }
-    };
-
-    term.open(container);
-    safeFit();
-
-    const ro = new ResizeObserver(safeFit);
-    ro.observe(container);
-
-    const handle: TerminalHandle = {
-      write(data) {
-        term.write(data as string);
+    return {
+      acquire(container) {
+        const s = ensureSession(leafId, bridge, toXtermTheme(options.theme));
+        bind(s, container);
       },
-      onData(callback) {
-        const sub = term.onData(callback);
-        return () => sub.dispose();
+      release() {
+        releaseSession(leafId);
+      },
+      feed(data) {
+        feedSession(leafId, data);
+      },
+      onData() {
+        // Pooled slots forward keystrokes straight to the PTY through the
+        // bridge (see renderer-pool's term.onData). The session needs no
+        // per-handle data subscription, so this is a no-op disposer.
+        return () => {};
       },
       onResize(callback) {
-        resizeListeners.add(callback);
-        // Emit the current size immediately so a late subscriber syncs at once.
-        callback(term.cols, term.rows);
-        return () => resizeListeners.delete(callback);
-      },
-      resize(cols, rows) {
-        term.resize(cols, rows);
+        return onSessionResize(leafId, callback);
       },
       setTheme(theme) {
-        term.options.theme = toXtermTheme(theme);
+        setSessionTheme(leafId, toXtermTheme(theme));
       },
       focus() {
-        term.focus();
+        focusSession(leafId);
       },
       dispose() {
-        ro.disconnect();
-        term.dispose();
+        disposeSession(leafId);
       },
-      get dimensions() {
-        return { cols: term.cols, rows: term.rows };
+      get bound() {
+        return sessionBound(leafId);
       },
     };
-
-    return handle;
   }
 }

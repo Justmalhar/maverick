@@ -11,9 +11,18 @@ interface Props {
   workspace: Workspace;
   focusedPaneId: string | null;
   onFocus: (paneId: string) => void;
+  // Propagates the owning editor's live-window state to every leaf so dormant
+  // panes release their pooled xterm slot (PTY stays alive).
+  visible?: boolean;
 }
 
-export function SplitGrid({ tree, workspace, focusedPaneId, onFocus }: Props) {
+export function SplitGrid({
+  tree,
+  workspace,
+  focusedPaneId,
+  onFocus,
+  visible = true,
+}: Props) {
   if (tree.type === "terminal") {
     return (
       <div className="h-full w-full p-1">
@@ -22,6 +31,7 @@ export function SplitGrid({ tree, workspace, focusedPaneId, onFocus }: Props) {
           workspace={workspace}
           isFocused={focusedPaneId === tree.id}
           onFocus={onFocus}
+          visible={visible}
         />
       </div>
     );
@@ -38,6 +48,7 @@ export function SplitGrid({ tree, workspace, focusedPaneId, onFocus }: Props) {
           workspace={workspace}
           focusedPaneId={focusedPaneId}
           onFocus={onFocus}
+          visible={visible}
         />
       </ResizablePanel>
       <ResizableHandle />
@@ -47,6 +58,7 @@ export function SplitGrid({ tree, workspace, focusedPaneId, onFocus }: Props) {
           workspace={workspace}
           focusedPaneId={focusedPaneId}
           onFocus={onFocus}
+          visible={visible}
         />
       </ResizablePanel>
     </ResizablePanelGroup>

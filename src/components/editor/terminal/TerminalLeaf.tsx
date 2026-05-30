@@ -41,10 +41,19 @@ interface Props {
   workspace: Workspace;
   isFocused: boolean;
   onFocus: (paneId: string) => void;
+  // False when the owning workspace editor is keep-alive-hidden — the pane
+  // releases its xterm slot but keeps its shell PTY alive.
+  visible?: boolean;
 }
 
 /** A single Terminal-Mode pane: a login shell scoped to the workspace worktree. */
-export function TerminalLeaf({ leafId, workspace, isFocused, onFocus }: Props) {
+export function TerminalLeaf({
+  leafId,
+  workspace,
+  isFocused,
+  onFocus,
+  visible = true,
+}: Props) {
   const [state, setState] = useState<SpawnState>(() => {
     const cached = leafPtyCache.get(leafId);
     return cached ? { status: "ready", ptyId: cached } : { status: "spawning" };
@@ -101,6 +110,7 @@ export function TerminalLeaf({ leafId, workspace, isFocused, onFocus }: Props) {
       paneId={leafId}
       isFocused={isFocused}
       onFocus={onFocus}
+      visible={visible}
     />
   );
 }
