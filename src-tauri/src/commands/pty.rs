@@ -56,3 +56,9 @@ pub async fn pty_kill(manager: State<'_, PtyManager>, pty_id: String) -> Result<
     manager.kill(&pty_id)?;
     Ok(json!({ "ok": true }))
 }
+
+#[tauri::command]
+pub async fn pty_close_all(manager: State<'_, PtyManager>) -> Result<Value, String> {
+    manager.close_all()?;
+    Ok(json!({ "ok": true }))
+}
