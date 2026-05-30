@@ -9,6 +9,8 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { TitleBar } from "@/components/titlebar/TitleBar";
+import { ActivityBar } from "@/components/activitybar/ActivityBar";
+import { StatusBar } from "@/components/statusbar/StatusBar";
 import { PrimarySideBar } from "@/components/primarysidebar/PrimarySideBar";
 import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
@@ -77,7 +79,12 @@ export function Workbench() {
       <TitleBar />
 
       <div className="flex flex-1 overflow-hidden" style={{ borderTop: "1px solid hsl(var(--border))" }}>
-        <ResizablePanelGroup direction="horizontal" className="h-full flex-1">
+        <ActivityBar />
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="h-full flex-1"
+          style={{ borderLeft: "1px solid hsl(var(--border))" }}
+        >
           {layout.primarySideBarVisible && (
             <>
               <ResizablePanel
@@ -114,6 +121,8 @@ export function Workbench() {
           )}
         </ResizablePanelGroup>
       </div>
+
+      <StatusBar />
 
       <QuickOpen />
       <CommandPalette />
