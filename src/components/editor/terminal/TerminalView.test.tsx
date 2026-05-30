@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { act } from "@testing-library/react";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { TerminalView } from "./TerminalView";
+import { __testing__ } from "./TerminalLeaf";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
@@ -17,9 +18,12 @@ const handle: TerminalHandle = {
 const provider: TerminalProvider = { mount: () => handle };
 
 beforeEach(() => {
-  vi.mocked(invoke).mockReset().mockResolvedValue(undefined as never);
+  // Terminal-mode leaves spawn a shell PTY via ptySpawn -> invoke("pty_spawn"),
+  // which resolves { ptyId }. Resolve it so leaves reach the "ready" pane state.
+  vi.mocked(invoke).mockReset().mockResolvedValue({ ptyId: "pty-x" } as never);
   vi.mocked(listen).mockReset().mockResolvedValue(() => {});
   TerminalRegistry.register(provider);
+  __testing__.leafPtyCache.clear();
   useWorkbench.setState({ ...initial, splitTrees: {} });
 });
 

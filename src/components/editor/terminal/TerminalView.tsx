@@ -3,6 +3,7 @@ import { useWorkbench } from "@/state/store";
 import type { Workspace, SplitNode } from "@/lib/ipc";
 import { splitNode, removeNode, canSplit, findNeighbor, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
+import { killLeaf } from "./TerminalLeaf";
 
 interface Props {
   workspace: Workspace;
@@ -46,6 +47,7 @@ export function TerminalView({ workspace }: Props) {
     function onClose() {
       const current = useWorkbench.getState().splitTrees[workspace.id];
       if (!current || !focusedPaneId) return;
+      killLeaf(focusedPaneId);
       const next = removeNode(current, focusedPaneId);
       setSplitTree(workspace.id, next ?? singlePane(workspace));
     }
@@ -90,6 +92,7 @@ export function TerminalView({ workspace }: Props) {
     >
       <SplitGrid
         tree={tree}
+        workspace={workspace}
         focusedPaneId={focusedPaneId}
         onFocus={setFocusedPaneId}
       />
