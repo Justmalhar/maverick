@@ -76,9 +76,11 @@ describe("tauri command wrappers", () => {
       workspaceId: "w1", skillName: "review", vars: { a: "b" },
     });
     await api.diffGet("/wt");
-    expect(invoke).toHaveBeenLastCalledWith("diff_get", { worktreePath: "/wt", filePath: undefined });
+    expect(invoke).toHaveBeenLastCalledWith("diff_get", { worktreePath: "/wt", filePath: undefined, staged: undefined });
     await api.diffGet("/wt", "f.ts");
-    expect(invoke).toHaveBeenLastCalledWith("diff_get", { worktreePath: "/wt", filePath: "f.ts" });
+    expect(invoke).toHaveBeenLastCalledWith("diff_get", { worktreePath: "/wt", filePath: "f.ts", staged: undefined });
+    await api.diffGet("/wt", undefined, true);
+    expect(invoke).toHaveBeenLastCalledWith("diff_get", { worktreePath: "/wt", filePath: undefined, staged: true });
     await api.diffStageHunk("/wt", "patch");
     expect(invoke).toHaveBeenLastCalledWith("diff_stage_hunk", { worktreePath: "/wt", patch: "patch" });
     await api.diffUnstageHunk("/wt", "patch");
@@ -185,6 +187,47 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("browser_close");
     await api.browserEval("location.reload()");
     expect(invoke).toHaveBeenLastCalledWith("browser_eval", { script: "location.reload()" });
+  });
+
+  it("new git command wrappers (P1-A + P1-B)", async () => {
+    await api.gitBranches("/p");
+    expect(invoke).toHaveBeenLastCalledWith("git_branches", { projectPath: "/p" });
+    await api.gitDiffStat("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_diff_stat", { worktreePath: "/wt" });
+
+    await api.gitBranchList("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_branch_list", { worktreePath: "/wt" });
+    await api.gitCheckout("/wt", "feat");
+    expect(invoke).toHaveBeenLastCalledWith("git_checkout", { worktreePath: "/wt", branch: "feat" });
+    await api.gitBlame("/wt", "f.ts");
+    expect(invoke).toHaveBeenLastCalledWith("git_blame", { worktreePath: "/wt", filePath: "f.ts" });
+    await api.gitCherryPick("/wt", "abc123");
+    expect(invoke).toHaveBeenLastCalledWith("git_cherry_pick", { worktreePath: "/wt", sha: "abc123" });
+
+    await api.gitStashApply("/wt", 0);
+    expect(invoke).toHaveBeenLastCalledWith("git_stash_apply", { worktreePath: "/wt", index: 0 });
+    await api.gitStashPop("/wt", 1);
+    expect(invoke).toHaveBeenLastCalledWith("git_stash_pop", { worktreePath: "/wt", index: 1 });
+    await api.gitStashDrop("/wt", 2);
+    expect(invoke).toHaveBeenLastCalledWith("git_stash_drop", { worktreePath: "/wt", index: 2 });
+
+    await api.gitConflicts("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_conflicts", { worktreePath: "/wt" });
+    await api.gitResolveConflict("/wt", "f.ts", 0, "ours");
+    expect(invoke).toHaveBeenLastCalledWith("git_resolve_conflict", {
+      worktreePath: "/wt", filePath: "f.ts", hunkIndex: 0, resolution: "ours",
+    });
+
+    await api.gitFetch("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_fetch", { worktreePath: "/wt", remote: undefined });
+    await api.gitFetch("/wt", "origin");
+    expect(invoke).toHaveBeenLastCalledWith("git_fetch", { worktreePath: "/wt", remote: "origin" });
+    await api.gitPull("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_pull", { worktreePath: "/wt" });
+    await api.gitPush("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("git_push", { worktreePath: "/wt", remote: undefined, branch: undefined });
+    await api.gitPush("/wt", "origin", "feat");
+    expect(invoke).toHaveBeenLastCalledWith("git_push", { worktreePath: "/wt", remote: "origin", branch: "feat" });
   });
 
   it("event subscriptions register handlers and forward payloads", async () => {

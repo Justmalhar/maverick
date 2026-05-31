@@ -151,6 +151,33 @@ export interface Stash {
   timestamp: number;
 }
 
+export interface Branch {
+  name: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface BlameLine {
+  sha: string;
+  author: string;
+  timestamp: number;
+  lineNumber: number;
+  content: string;
+}
+
+export interface ConflictHunk {
+  filePath: string;
+  hunkIndex: number;
+  ours: string[];
+  theirs: string[];
+  base?: string[];
+}
+
+export type ConflictResolution = "ours" | "theirs" | "both";
+
 export interface Attachment {
   name: string;
   content: string;
@@ -219,7 +246,11 @@ export interface Notifier {
 
 export interface Shell {
   text(cmd: string[], cwd?: string): Promise<string>;
-  run(cmd: string[], cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  run(
+    cmd: string[],
+    cwd?: string,
+    stdin?: string
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 export interface IdProvider {

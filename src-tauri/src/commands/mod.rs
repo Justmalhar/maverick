@@ -36,7 +36,11 @@ pub use config::config_load;
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
 pub use file_tree::file_tree;
-pub use git::{git_branches, git_commit, git_diff_stat, git_log, git_stash_list};
+pub use git::{
+    git_blame, git_branch_list, git_branches, git_checkout, git_cherry_pick, git_commit,
+    git_conflicts, git_diff_stat, git_fetch, git_log, git_pull, git_push, git_resolve_conflict,
+    git_stash_apply, git_stash_drop, git_stash_list, git_stash_pop,
+};
 pub use instructions::instructions_resolve;
 pub use kanban::{kanban_list, kanban_upsert};
 pub use mcp::{mcp_list, mcp_start, mcp_stop};

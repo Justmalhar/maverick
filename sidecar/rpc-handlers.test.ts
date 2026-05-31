@@ -291,6 +291,74 @@ describe("RpcHandlers", () => {
     expect(result).toHaveProperty("removed");
   });
 
+  test("git.branch_list dispatches and returns rich branches", async () => {
+    const handlers = buildHandlers([
+      { stdout: "*\trefs/heads/main\torigin/main\tahead 1, behind 0" },
+    ]);
+    const result = (await handlers.dispatch("git.branch_list", { worktreePath: "/wt" })) as Array<{
+      name: string;
+      isCurrent: boolean;
+    }>;
+    expect(result[0]).toMatchObject({ name: "main", isCurrent: true });
+  });
+
+  test("git.checkout routes the {branch} param to checkoutBranch", async () => {
+    const result = await h.dispatch("git.checkout", { worktreePath: "/wt", branch: "feat" });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("git.blame dispatches with filePath", async () => {
+    const handlers = buildHandlers([
+      { stdout: "abc1234 1 1 1\nauthor A\nauthor-time 1\n\tcode" },
+    ]);
+    const result = (await handlers.dispatch("git.blame", {
+      worktreePath: "/wt",
+      filePath: "a.ts",
+    })) as Array<{ sha: string }>;
+    expect(result[0].sha).toBe("abc1234");
+  });
+
+  test("git.cherry_pick dispatches with sha", async () => {
+    const result = await h.dispatch("git.cherry_pick", { worktreePath: "/wt", sha: "abc" });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("git.stash_apply/pop/drop dispatch with numeric index", async () => {
+    expect(await h.dispatch("git.stash_apply", { worktreePath: "/wt", index: 0 })).toEqual({ ok: true });
+    expect(await h.dispatch("git.stash_pop", { worktreePath: "/wt", index: 1 })).toEqual({ ok: true });
+    expect(await h.dispatch("git.stash_drop", { worktreePath: "/wt", index: 2 })).toEqual({ ok: true });
+  });
+
+  test("git.conflicts returns [] for a clean tree", async () => {
+    const result = await h.dispatch("git.conflicts", { worktreePath: "/wt" });
+    expect(result).toEqual([]);
+  });
+
+  test("git.resolve_conflict dispatches with full param shape", async () => {
+    const result = await h.dispatch("git.resolve_conflict", {
+      worktreePath: "/wt",
+      filePath: "f.ts",
+      hunkIndex: 0,
+      resolution: "ours",
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("git.fetch/pull/push dispatch and return ok", async () => {
+    expect(await h.dispatch("git.fetch", { worktreePath: "/wt" })).toEqual({ ok: true });
+    expect(await h.dispatch("git.pull", { worktreePath: "/wt" })).toEqual({ ok: true });
+    expect(await h.dispatch("git.push", { worktreePath: "/wt", remote: "origin", branch: "main" })).toEqual({
+      ok: true,
+    });
+  });
+
+  test("diff.get forwards staged flag for the staged pane", async () => {
+    const result = (await h.dispatch("diff.get", { worktreePath: "/wt", staged: true })) as {
+      files: unknown[];
+    };
+    expect(result).toHaveProperty("files");
+  });
+
   test("kanban.list with empty projectId returns all tasks", async () => {
     const p1 = (await h.dispatch("project.add", { path: "/tmp/p1" })) as { id: string };
     const p2 = (await h.dispatch("project.add", { path: "/tmp/p2" })) as { id: string };

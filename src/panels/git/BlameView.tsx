@@ -1,21 +1,14 @@
 // Per-file git blame — line-level commit metadata.
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { gitBlame } from "@/lib/tauri";
+import type { BlameLine } from "@/lib/ipc";
 
 interface Props {
   worktreePath: string;
   initialFile?: string;
-}
-
-interface BlameLine {
-  sha: string;
-  author: string;
-  timestamp: number;
-  lineNumber: number;
-  content: string;
 }
 
 export default function BlameView({ worktreePath, initialFile = "" }: Props) {
@@ -29,10 +22,7 @@ export default function BlameView({ worktreePath, initialFile = "" }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<BlameLine[]>("git_blame", {
-        worktreePath,
-        filePath,
-      });
+      const result = await gitBlame(worktreePath, filePath);
       setLines(result);
     } catch (e) {
       setError(String(e));

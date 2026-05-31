@@ -7,6 +7,10 @@ import {
 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { useContextUsage } from "@/hooks/useContextUsage";
+import {
+  useSourceControl,
+  getSourceControlRemoteIndicator,
+} from "@/hooks/useSourceControl";
 import { formatTokens } from "@/lib/context-usage";
 import { StatusBarItem } from "./StatusBarItem";
 import { NotificationBell } from "./NotificationBell";
@@ -18,6 +22,8 @@ export function StatusBar() {
   const workspaceCount = useWorkbench((s) => s.workspaces.length);
   const activeBackend = backends.find((b) => b.active);
   const usage = useContextUsage(active?.sessionId);
+  const sourceControl = useSourceControl(active?.worktreePath, Boolean(active));
+  const indicator = getSourceControlRemoteIndicator(sourceControl);
 
   return (
     <footer
@@ -36,14 +42,27 @@ export function StatusBar() {
         ) : (
           <StatusBarItem testId="statusbar-no-folder">No folder</StatusBarItem>
         )}
-        {active && (
+        {active && indicator.visible ? (
+          <StatusBarItem
+            icon={<RefreshCw className="h-3 w-3" />}
+            testId="statusbar-sync"
+            title={indicator.title}
+            onClick={
+              indicator.disabled
+                ? undefined
+                : () => void sourceControl.runRemoteAction("contextual")
+            }
+          >
+            {indicator.label}
+          </StatusBarItem>
+        ) : active ? (
           <StatusBarItem
             icon={<RefreshCw className="h-3 w-3" />}
             testId="statusbar-sync"
           >
             sync
           </StatusBarItem>
-        )}
+        ) : null}
         <StatusBarItem
           icon={<AlertCircle className="h-3 w-3" />}
           testId="statusbar-errors"

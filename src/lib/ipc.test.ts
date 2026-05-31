@@ -11,6 +11,7 @@ import type {
   SplitNode, ContextUsage, Automation, AutomationStep, ActivityView,
   AuxiliaryView, ThemeDefinition, TerminalTheme, EditorMode, KeybindingMap,
   PresetNode, DiffFile, DiffHunk,
+  Branch, BlameLine, ConflictHunk, ConflictResolution,
 } from "./ipc";
 
 describe("ipc types", () => {
@@ -60,6 +61,15 @@ describe("ipc types", () => {
     const df: DiffFile = { path: "p", status: "M", additions: 0, deletions: 0, hunks: [] };
     const dh: DiffHunk = { header: "@", lines: [], patch: "" };
     const td: ThemeDefinition = { name: "n", type: "dark", ui: {}, terminal: {} as TerminalTheme, syntax: {} };
+    const br: Branch = { name: "main", isRemote: false, isCurrent: true, upstream: "origin/main", ahead: 1, behind: 0 };
+    const bl: BlameLine = { sha: "s", author: "a", timestamp: 0, lineNumber: 1, content: "x" };
+    const ch: ConflictHunk = { filePath: "f", hunkIndex: 0, ours: [], theirs: [], base: [] };
+    const cr: ConflictResolution = "both";
+    expectTypeOf(br).toMatchTypeOf<Branch>();
+    expectTypeOf(bl).toMatchTypeOf<BlameLine>();
+    expectTypeOf(ch).toMatchTypeOf<ConflictHunk>();
+    expectTypeOf(cr).toMatchTypeOf<ConflictResolution>();
+    expect(cr).toBe("both");
     expectTypeOf(backend).toMatchTypeOf<Backend>();
     expectTypeOf(skill).toMatchTypeOf<Skill>();
     expectTypeOf(msg).toMatchTypeOf<Message>();

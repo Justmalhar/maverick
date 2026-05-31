@@ -77,7 +77,11 @@ const Schemas = {
     skillName: z.string(),
     vars: z.record(z.string(), z.string()).default({}),
   }),
-  diffGet: z.object({ worktreePath: z.string(), filePath: nullishOptional(z.string()) }),
+  diffGet: z.object({
+    worktreePath: z.string(),
+    filePath: nullishOptional(z.string()),
+    staged: nullishOptional(z.boolean()),
+  }),
   diffStageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
   diffUnstageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
   gitLog: z.object({ worktreePath: z.string(), limit: nullishOptional(z.number()) }),
@@ -89,6 +93,25 @@ const Schemas = {
   }),
   gitBranches: z.object({ projectPath: z.string() }),
   gitDiffStat: z.object({ worktreePath: z.string() }),
+  gitBranchList: z.object({ worktreePath: z.string() }),
+  gitCheckout: z.object({ worktreePath: z.string(), branch: z.string() }),
+  gitBlame: z.object({ worktreePath: z.string(), filePath: z.string() }),
+  gitCherryPick: z.object({ worktreePath: z.string(), sha: z.string() }),
+  gitStashIndex: z.object({ worktreePath: z.string(), index: z.number().int().nonnegative() }),
+  gitConflicts: z.object({ worktreePath: z.string() }),
+  gitResolveConflict: z.object({
+    worktreePath: z.string(),
+    filePath: z.string(),
+    hunkIndex: z.number().int().nonnegative(),
+    resolution: z.enum(["ours", "theirs", "both"]),
+  }),
+  gitFetch: z.object({ worktreePath: z.string(), remote: nullishOptional(z.string()) }),
+  gitPull: z.object({ worktreePath: z.string() }),
+  gitPush: z.object({
+    worktreePath: z.string(),
+    remote: nullishOptional(z.string()),
+    branch: nullishOptional(z.string()),
+  }),
   fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
   kanbanList: z.object({ projectId: z.string() }),
   kanbanUpsert: StringParam,
@@ -408,6 +431,54 @@ export class RpcHandlers {
       case "git.diffStat": {
         const p = Schemas.gitDiffStat.parse(params);
         return this.git.diffStat({ worktreePath: p.worktreePath });
+      }
+      case "git.branch_list": {
+        const p = Schemas.gitBranchList.parse(params);
+        return this.git.branchList({ worktreePath: p.worktreePath });
+      }
+      case "git.checkout": {
+        const p = Schemas.gitCheckout.parse(params);
+        return this.git.checkoutBranch(p);
+      }
+      case "git.blame": {
+        const p = Schemas.gitBlame.parse(params);
+        return this.git.blame(p);
+      }
+      case "git.cherry_pick": {
+        const p = Schemas.gitCherryPick.parse(params);
+        return this.git.cherryPick(p);
+      }
+      case "git.stash_apply": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashApply(p);
+      }
+      case "git.stash_pop": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashPop(p);
+      }
+      case "git.stash_drop": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashDrop(p);
+      }
+      case "git.conflicts": {
+        const p = Schemas.gitConflicts.parse(params);
+        return this.git.conflicts({ worktreePath: p.worktreePath });
+      }
+      case "git.resolve_conflict": {
+        const p = Schemas.gitResolveConflict.parse(params);
+        return this.git.resolveConflict(p);
+      }
+      case "git.fetch": {
+        const p = Schemas.gitFetch.parse(params);
+        return this.git.fetch(p);
+      }
+      case "git.pull": {
+        const p = Schemas.gitPull.parse(params);
+        return this.git.pull(p);
+      }
+      case "git.push": {
+        const p = Schemas.gitPush.parse(params);
+        return this.git.push(p);
       }
       case "pr.create": {
         const p = Schemas.prCreate.parse(params);

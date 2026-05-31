@@ -194,6 +194,33 @@ export interface Stash {
   timestamp: number;
 }
 
+export interface Branch {
+  name: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface BlameLine {
+  sha: string;
+  author: string;
+  timestamp: number;
+  lineNumber: number;
+  content: string;
+}
+
+export interface ConflictHunk {
+  filePath: string;
+  hunkIndex: number;
+  ours: string[];
+  theirs: string[];
+  base?: string[];
+}
+
+export type ConflictResolution = "ours" | "theirs" | "both";
+
 export interface FileEntry {
   path: string;
   name: string;

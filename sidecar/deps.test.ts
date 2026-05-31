@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { defaultIds, emit, stdoutNotifier, defaultShell } from "./deps";
+import { defaultIds, emit, stdoutNotifier, defaultShell, HARDENED_ENV } from "./deps";
 
 describe("defaultIds", () => {
   test("uuid returns prefixed unique string", () => {
@@ -56,5 +56,26 @@ describe("defaultShell", () => {
     expect(r.stdout.trim()).toBe("ok");
     expect(r.stderr.trim()).toBe("err");
     expect(r.exitCode).toBe(3);
+  });
+
+  test("run pipes stdin bytes to the child process", async () => {
+    // `cat` echoes its stdin to stdout — proves the bytes actually reach the shell.
+    const payload = "patch-payload-é\nsecond line\n";
+    const r = await defaultShell.run(["cat"], undefined, payload);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe(payload);
+  });
+
+  test("run without stdin still works (stdin ignored)", async () => {
+    const r = await defaultShell.run(["echo", "no-stdin"]);
+    expect(r.stdout.trim()).toBe("no-stdin");
+  });
+
+  test("hardened env disables interactive git prompts and pins the locale", async () => {
+    expect(HARDENED_ENV.GIT_TERMINAL_PROMPT).toBe("0");
+    expect(HARDENED_ENV.LC_ALL).toBe("C");
+    // Spawned children must actually inherit the hardened locale.
+    const out = await defaultShell.text(["sh", "-c", "echo $LC_ALL"]);
+    expect(out.trim()).toBe("C");
   });
 });

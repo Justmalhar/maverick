@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { GitModule } from "./git-module";
+import { GitModule, GitError } from "./git-module";
 import type { Shell } from "./types";
 
 interface Step {
@@ -197,10 +197,31 @@ describe("GitModule methods", () => {
     await expect(new GitModule({ shell }).fetch({ worktreePath: "/w" })).rejects.toThrow();
   });
 
-  test("branchList parses output", async () => {
-    const { shell } = transcript([{ stdout: "main\nfeat\n" }]);
+  test("branchList parses rich branches via for-each-ref", async () => {
+    const { shell, calls } = transcript([
+      {
+        stdout: [
+          "*\trefs/heads/main\torigin/main\tahead 2, behind 1",
+          " \trefs/heads/feat\t\t",
+          " \trefs/remotes/origin/main\t\t",
+          " \trefs/remotes/origin/HEAD\t\t",
+        ].join("\n"),
+      },
+    ]);
     const list = await new GitModule({ shell }).branchList({ worktreePath: "/w" });
-    expect(list).toEqual(["main", "feat"]);
+    expect(calls[0]).toContain("for-each-ref");
+    // origin/HEAD alias is dropped.
+    expect(list).toHaveLength(3);
+    expect(list[0]).toEqual({
+      name: "main",
+      isRemote: false,
+      isCurrent: true,
+      upstream: "origin/main",
+      ahead: 2,
+      behind: 1,
+    });
+    expect(list[1]).toEqual({ name: "feat", isRemote: false, isCurrent: false });
+    expect(list[2]).toEqual({ name: "origin/main", isRemote: true, isCurrent: false });
   });
 
   test("branchCreate runs git branch", async () => {
@@ -255,8 +276,334 @@ describe("GitModule methods", () => {
     ).rejects.toThrow();
   });
 
+  test("checkoutBranch checks out a local branch by name", async () => {
+    const { shell, calls } = transcript([{}]);
+    await new GitModule({ shell }).checkoutBranch({ worktreePath: "/w", branch: "feat" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "checkout", "feat"]);
+  });
+
+  test("checkoutBranch strips remotes/ prefix so git auto-tracks", async () => {
+    const { shell, calls } = transcript([{}]);
+    await new GitModule({ shell }).checkoutBranch({
+      worktreePath: "/w",
+      branch: "remotes/origin/feat",
+    });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "checkout", "origin/feat"]);
+  });
+
+  test("checkoutBranch throws on failure", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "would be overwritten" }]);
+    await expect(
+      new GitModule({ shell }).checkoutBranch({ worktreePath: "/w", branch: "x" })
+    ).rejects.toThrow(/overwritten/);
+  });
+
+  test("blame delegates to git blame --line-porcelain and parses", async () => {
+    const { shell, calls } = transcript([
+      {
+        stdout: [
+          "abc1234 1 1 1",
+          "author Alice",
+          "author-time 1700000000",
+          "\tconst x = 1;",
+        ].join("\n"),
+      },
+    ]);
+    const lines = await new GitModule({ shell }).blame({ worktreePath: "/w", filePath: "a.ts" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "blame", "--line-porcelain", "--", "a.ts"]);
+    expect(lines[0]).toEqual({
+      sha: "abc1234",
+      author: "Alice",
+      timestamp: 1700000000,
+      lineNumber: 1,
+      content: "const x = 1;",
+    });
+  });
+
+  test("stashApply/Pop/Drop target the indexed stash ref", async () => {
+    const { shell, calls } = transcript([{}, {}, {}]);
+    const git = new GitModule({ shell });
+    await git.stashApply({ worktreePath: "/w", index: 0 });
+    await git.stashPop({ worktreePath: "/w", index: 1 });
+    await git.stashDrop({ worktreePath: "/w", index: 2 });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "stash", "apply", "stash@{0}"]);
+    expect(calls[1]).toEqual(["git", "-C", "/w", "stash", "pop", "stash@{1}"]);
+    expect(calls[2]).toEqual(["git", "-C", "/w", "stash", "drop", "stash@{2}"]);
+  });
+
+  test("stashApply throws on failure", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "no stash entries" }]);
+    await expect(
+      new GitModule({ shell }).stashApply({ worktreePath: "/w", index: 0 })
+    ).rejects.toThrow(/no stash entries/);
+  });
+
+  test("conflicts lists unmerged files and parses their markers", async () => {
+    const conflicted = [
+      "ok line",
+      "<<<<<<< HEAD",
+      "ours line",
+      "=======",
+      "theirs line",
+      ">>>>>>> feat",
+    ].join("\n");
+    const { shell, calls } = transcript([
+      { stdout: "file.ts\n" }, // diff --name-only --diff-filter=U
+      { stdout: "base line" }, // git show :1:file.ts
+      { stdout: conflicted }, // cat working tree
+    ]);
+    const hunks = await new GitModule({ shell }).conflicts({ worktreePath: "/w" });
+    expect(calls[0]).toContain("--diff-filter=U");
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].filePath).toBe("file.ts");
+    expect(hunks[0].ours).toEqual(["ours line"]);
+    expect(hunks[0].theirs).toEqual(["theirs line"]);
+    expect(hunks[0].base).toEqual(["base line"]);
+  });
+
+  test("conflicts returns empty when working tree is clean", async () => {
+    const { shell } = transcript([{ stdout: "\n" }]);
+    const hunks = await new GitModule({ shell }).conflicts({ worktreePath: "/w" });
+    expect(hunks).toEqual([]);
+  });
+
+  test("conflicts tolerates git show / cat failures", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text(cmd) {
+        calls.push(cmd);
+        if (cmd.includes("--diff-filter=U")) return "file.ts\n";
+        throw new Error("boom"); // both git show and cat fail
+      },
+      async run(cmd) {
+        calls.push(cmd);
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+    };
+    const hunks = await new GitModule({ shell }).conflicts({ worktreePath: "/w" });
+    // No markers in empty working content -> no hunks, but no throw either.
+    expect(hunks).toEqual([]);
+  });
+
+  test("resolveConflict ours checks out --ours and stages the file", async () => {
+    const { shell, calls } = transcript([{}, {}]);
+    await new GitModule({ shell }).resolveConflict({
+      worktreePath: "/w",
+      filePath: "f.ts",
+      hunkIndex: 0,
+      resolution: "ours",
+    });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "checkout", "--ours", "--", "f.ts"]);
+    expect(calls[1]).toEqual(["git", "-C", "/w", "add", "--", "f.ts"]);
+  });
+
+  test("resolveConflict theirs checks out --theirs", async () => {
+    const { shell, calls } = transcript([{}, {}]);
+    await new GitModule({ shell }).resolveConflict({
+      worktreePath: "/w",
+      filePath: "f.ts",
+      hunkIndex: 0,
+      resolution: "theirs",
+    });
+    expect(calls[0]).toContain("--theirs");
+  });
+
+  test("resolveConflict both uses --merge and skips staging", async () => {
+    const { shell, calls } = transcript([{}]);
+    await new GitModule({ shell }).resolveConflict({
+      worktreePath: "/w",
+      filePath: "f.ts",
+      hunkIndex: 0,
+      resolution: "both",
+    });
+    expect(calls[0]).toContain("--merge");
+    expect(calls).toHaveLength(1); // no `add`
+  });
+
+  test("resolveConflict throws when checkout fails", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "pathspec error" }]);
+    await expect(
+      new GitModule({ shell }).resolveConflict({
+        worktreePath: "/w",
+        filePath: "f.ts",
+        hunkIndex: 0,
+        resolution: "ours",
+      })
+    ).rejects.toThrow(/pathspec error/);
+  });
+
+  test("resolveConflict throws when staging fails", async () => {
+    const { shell } = transcript([{}, { exitCode: 1, stderr: "add failed" }]);
+    await expect(
+      new GitModule({ shell }).resolveConflict({
+        worktreePath: "/w",
+        filePath: "f.ts",
+        hunkIndex: 0,
+        resolution: "ours",
+      })
+    ).rejects.toThrow(/add failed/);
+  });
+
+  test("push surfaces a typed auth error from stderr", async () => {
+    const { shell } = transcript([
+      { exitCode: 128, stderr: "fatal: Authentication failed for 'https://github.com/o/r'" },
+    ]);
+    await expect(
+      new GitModule({ shell }).push({ worktreePath: "/w" })
+    ).rejects.toThrow(/authentication required/i);
+  });
+
+  test("push surfaces a typed no-upstream error", async () => {
+    const { shell } = transcript([
+      { exitCode: 128, stderr: "fatal: The current branch feat has no upstream branch." },
+    ]);
+    const err = await new GitModule({ shell })
+      .push({ worktreePath: "/w" })
+      .catch((e: GitError) => e);
+    expect(err).toBeInstanceOf(GitError);
+    expect((err as GitError).kind).toBe("no_upstream");
+  });
+
+  test("pull classifies host key verification as auth", async () => {
+    const { shell } = transcript([
+      { exitCode: 128, stderr: "Host key verification failed." },
+    ]);
+    const err = await new GitModule({ shell })
+      .pull({ worktreePath: "/w" })
+      .catch((e: GitError) => e);
+    expect((err as GitError).kind).toBe("auth");
+  });
+
+  test("fetch failure with generic stderr yields kind=failed", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "could not resolve host" }]);
+    const err = await new GitModule({ shell })
+      .fetch({ worktreePath: "/w" })
+      .catch((e: GitError) => e);
+    expect((err as GitError).kind).toBe("failed");
+    expect((err as GitError).message).toContain("could not resolve host");
+  });
+
   test("default constructor builds without DI", () => {
     expect(new GitModule()).toBeInstanceOf(GitModule);
+  });
+});
+
+describe("GitModule.classifyError", () => {
+  test("maps each auth signature to kind=auth", () => {
+    const signatures = [
+      "could not read Username for 'https://...'",
+      "could not read Password",
+      "Authentication failed",
+      "Permission denied (publickey).",
+      "Invalid credentials",
+      "Host key verification failed.",
+      "terminal prompts disabled",
+    ];
+    for (const s of signatures) {
+      expect(GitModule.classifyError(s, "git push").kind).toBe("auth");
+    }
+  });
+
+  test("maps no-upstream variants to kind=no_upstream", () => {
+    expect(GitModule.classifyError("has no upstream branch", "git push").kind).toBe("no_upstream");
+    expect(
+      GitModule.classifyError("no configured push destination", "git push").kind
+    ).toBe("no_upstream");
+  });
+
+  test("falls back to context label when stderr is empty", () => {
+    const e = GitModule.classifyError("", "git push");
+    expect(e.kind).toBe("failed");
+    expect(e.message).toBe("git push failed");
+  });
+});
+
+describe("GitModule.parseBranches", () => {
+  test("returns empty array on empty input", () => {
+    expect(GitModule.parseBranches("")).toEqual([]);
+  });
+
+  test("skips lines without tabs", () => {
+    expect(GitModule.parseBranches("garbage-no-tabs\n")).toEqual([]);
+  });
+
+  test("parses ahead-only and behind-only tracking", () => {
+    const out = [
+      " \trefs/heads/a\torigin/a\tahead 3",
+      " \trefs/heads/b\torigin/b\tbehind 4",
+    ].join("\n");
+    const parsed = GitModule.parseBranches(out);
+    expect(parsed[0].ahead).toBe(3);
+    expect(parsed[0].behind).toBeUndefined();
+    expect(parsed[1].behind).toBe(4);
+    expect(parsed[1].ahead).toBeUndefined();
+  });
+});
+
+describe("GitModule.parseBlame", () => {
+  test("returns empty array on empty input", () => {
+    expect(GitModule.parseBlame("")).toEqual([]);
+  });
+
+  test("parses multiple lines and skips non-header noise", () => {
+    const out = [
+      "deadbeef 1 1 2",
+      "author Bob",
+      "author-time 1600000000",
+      "summary first",
+      "\tfirst line",
+      "deadbeef 2 2",
+      "\tsecond line",
+    ].join("\n");
+    const lines = GitModule.parseBlame(out);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].author).toBe("Bob");
+    expect(lines[1].lineNumber).toBe(2);
+    expect(lines[1].author).toBe(""); // header-without-author repeat block
+  });
+});
+
+describe("GitModule.parseConflictMarkers", () => {
+  test("returns empty when there are no markers", () => {
+    expect(GitModule.parseConflictMarkers("f.ts", "plain\ncontent", "")).toEqual([]);
+  });
+
+  test("parses diff3-style base block", () => {
+    const content = [
+      "<<<<<<< HEAD",
+      "ours",
+      "||||||| base",
+      "common",
+      "=======",
+      "theirs",
+      ">>>>>>> branch",
+    ].join("\n");
+    const hunks = GitModule.parseConflictMarkers("f.ts", content, "ignored-fallback");
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].ours).toEqual(["ours"]);
+    expect(hunks[0].theirs).toEqual(["theirs"]);
+    expect(hunks[0].base).toEqual(["common"]);
+  });
+
+  test("parses two hunks and increments hunkIndex", () => {
+    const content = [
+      "<<<<<<< HEAD",
+      "a1",
+      "=======",
+      "b1",
+      ">>>>>>> x",
+      "context",
+      "<<<<<<< HEAD",
+      "a2",
+      "=======",
+      "b2",
+      ">>>>>>> y",
+    ].join("\n");
+    const hunks = GitModule.parseConflictMarkers("f.ts", content, "");
+    expect(hunks).toHaveLength(2);
+    expect(hunks[0].hunkIndex).toBe(0);
+    expect(hunks[1].hunkIndex).toBe(1);
+    expect(hunks[1].ours).toEqual(["a2"]);
   });
 });
 

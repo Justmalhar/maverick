@@ -2,8 +2,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  BlameLine,
   BootstrapStatus,
+  Branch,
   Commit,
+  ConflictHunk,
+  ConflictResolution,
   ContextUsage,
   DetectedBackend,
   DiffResult,
@@ -112,8 +116,12 @@ export async function skillsRun(
   return invoke("skills_run", { workspaceId, skillName, vars });
 }
 
-export async function diffGet(worktreePath: string, filePath?: string): Promise<DiffResult> {
-  return invoke("diff_get", { worktreePath, filePath });
+export async function diffGet(
+  worktreePath: string,
+  filePath?: string,
+  staged?: boolean
+): Promise<DiffResult> {
+  return invoke("diff_get", { worktreePath, filePath, staged });
 }
 
 export async function diffStageHunk(worktreePath: string, patch: string): Promise<void> {
@@ -336,6 +344,63 @@ export async function gitBranches(projectPath: string): Promise<string[]> {
 
 export async function gitDiffStat(worktreePath: string): Promise<DiffStat> {
   return invoke("git_diff_stat", { worktreePath });
+}
+
+export async function gitBranchList(worktreePath: string): Promise<Branch[]> {
+  return invoke("git_branch_list", { worktreePath });
+}
+
+export async function gitCheckout(worktreePath: string, branch: string): Promise<{ ok: true }> {
+  return invoke("git_checkout", { worktreePath, branch });
+}
+
+export async function gitBlame(worktreePath: string, filePath: string): Promise<BlameLine[]> {
+  return invoke("git_blame", { worktreePath, filePath });
+}
+
+export async function gitCherryPick(worktreePath: string, sha: string): Promise<{ ok: true }> {
+  return invoke("git_cherry_pick", { worktreePath, sha });
+}
+
+export async function gitStashApply(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_apply", { worktreePath, index });
+}
+
+export async function gitStashPop(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_pop", { worktreePath, index });
+}
+
+export async function gitStashDrop(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_drop", { worktreePath, index });
+}
+
+export async function gitConflicts(worktreePath: string): Promise<ConflictHunk[]> {
+  return invoke("git_conflicts", { worktreePath });
+}
+
+export async function gitResolveConflict(
+  worktreePath: string,
+  filePath: string,
+  hunkIndex: number,
+  resolution: ConflictResolution
+): Promise<{ ok: true }> {
+  return invoke("git_resolve_conflict", { worktreePath, filePath, hunkIndex, resolution });
+}
+
+export async function gitFetch(worktreePath: string, remote?: string): Promise<{ ok: true }> {
+  return invoke("git_fetch", { worktreePath, remote });
+}
+
+export async function gitPull(worktreePath: string): Promise<{ ok: true }> {
+  return invoke("git_pull", { worktreePath });
+}
+
+export async function gitPush(
+  worktreePath: string,
+  remote?: string,
+  branch?: string
+): Promise<{ ok: true }> {
+  return invoke("git_push", { worktreePath, remote, branch });
 }
 
 // Event subscriptions

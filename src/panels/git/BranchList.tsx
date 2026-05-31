@@ -1,23 +1,15 @@
 // Tree of local + remote branches with checkout action.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { GitBranch as GitBranchIcon, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { gitBranchList, gitCheckout } from "@/lib/tauri";
+import type { Branch } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 
 interface Props {
   worktreePath: string;
-}
-
-interface Branch {
-  name: string;
-  isRemote: boolean;
-  isCurrent: boolean;
-  upstream?: string;
-  ahead?: number;
-  behind?: number;
 }
 
 export default function BranchList({ worktreePath }: Props) {
@@ -32,7 +24,7 @@ export default function BranchList({ worktreePath }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<Branch[]>("git_branch_list", { worktreePath });
+      const result = await gitBranchList(worktreePath);
       setBranches(result);
     } catch (e) {
       setError(String(e));
@@ -49,7 +41,7 @@ export default function BranchList({ worktreePath }: Props) {
     async (branch: Branch) => {
       try {
         setBusy(branch.name);
-        await invoke("git_checkout", { worktreePath, branch: branch.name });
+        await gitCheckout(worktreePath, branch.name);
         await refresh();
       } catch (e) {
         setError(String(e));
