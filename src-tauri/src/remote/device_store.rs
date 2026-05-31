@@ -21,7 +21,9 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::remote::pairing::{b64url, b64url_decode, short_fingerprint, KEY_LEN};
+use crate::remote::pairing::{
+    b64url, b64url_decode, constant_time_eq, short_fingerprint, KEY_LEN,
+};
 
 /// A persisted paired device: its stable id (base64url SHA-256 of the static
 /// key), the pinned client static public key (base64url), a human label, and the
@@ -155,8 +157,12 @@ impl DeviceStore {
         let key_b64 = b64url(static_key);
         let mut guard = self.devices.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(existing) = guard.iter().find(|d| d.device_id == device_id) {
-            // Constant-time-ish exact-string compare of the pinned key.
-            if existing.static_key != key_b64 {
+            // Constant-time compare on the decoded 32-byte key bytes — a plain
+            // `String` `!=` on the base64url leaks how many prefix bytes match via
+            // its early-return timing, a usable oracle against the pinned key.
+            // A malformed stored row (undecodable) can never match.
+            let pinned = b64url_decode(&existing.static_key).unwrap_or_default();
+            if !constant_time_eq(&pinned, static_key) {
                 return Err(DeviceStoreError::TofuMismatch);
             }
             return Ok(PinOutcome::AlreadyPinned);
@@ -233,21 +239,56 @@ fn now_ms() -> i64 {
 }
 
 /// Atomically write `bytes` to `path` via a sibling temp file + rename so a
-/// concurrent reader never sees a half-written store.
+/// concurrent reader never sees a half-written store. The temp name carries a
+/// fresh UUID so two concurrent persists never collide on the same `.tmp` file
+/// (matches `hook_server::atomic_write`).
 fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let tmp = path.with_extension("tmp");
+    let tmp = temp_sibling(path);
     fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, path)
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
 }
 
-/// Write a secret file with owner-only (0600) permissions on Unix. On non-Unix
-/// the mode bits are a no-op; the file still lands in the user's private app dir.
+/// A unique sibling temp path for `path`: `.<filename>.tmp-<uuid>` in the same
+/// directory, so the subsequent rename stays on the same filesystem.
+fn temp_sibling(path: &Path) -> PathBuf {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("store");
+    dir.join(format!(".{name}.tmp-{}", uuid::Uuid::new_v4()))
+}
+
+/// Write a secret file with owner-only (0600) permissions on Unix. The temp file
+/// is *created* with mode 0600 (so the secret is never even briefly group/world
+/// readable between write and a later `chmod`), then atomically renamed over the
+/// target — the rename preserves the temp's mode. On non-Unix the mode bits are a
+/// no-op; the file still lands in the user's private app dir.
 fn write_private_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    atomic_write(path, bytes)?;
+    let tmp = temp_sibling(path);
+
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    let write_result = {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp)
+            .and_then(|mut f| f.write_all(bytes).and_then(|_| f.sync_all()))
+    };
+    #[cfg(not(unix))]
+    let write_result = fs::write(&tmp, bytes);
+
+    if let Err(e) = write_result {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
     }
     Ok(())
 }
@@ -365,5 +406,102 @@ mod tests {
     fn pinned_key_none_for_unknown_device() {
         let (_tmp, store) = store();
         assert!(store.pinned_key("nope").is_none());
+    }
+
+    // ---- Finding 1: constant-time pin compare on decoded key bytes ----
+
+    #[test]
+    fn repin_matches_via_constant_time_byte_compare() {
+        // A re-pair presenting the exact same key bytes is `AlreadyPinned`, and a
+        // single differing byte (even sharing a long base64url prefix) is rejected
+        // as a TOFU mismatch. The decode+ct_eq path must agree with the old logic
+        // on outcomes while being timing-safe.
+        let (_tmp, store) = store();
+        let mut key = [0u8; KEY_LEN];
+        store.pin("dev-1", &key, "Phone").unwrap();
+        assert_eq!(store.pin("dev-1", &key, "Phone").unwrap(), PinOutcome::AlreadyPinned);
+
+        // Flip only the LAST byte — shares the entire prefix, so a prefix-timing
+        // string compare would be the slowest possible mismatch. Still rejected.
+        key[KEY_LEN - 1] = 1;
+        assert_eq!(store.pin("dev-1", &key, "Phone").unwrap_err(), DeviceStoreError::TofuMismatch);
+    }
+
+    #[test]
+    fn malformed_pinned_key_never_matches() {
+        // A stored row whose base64url is undecodable must NEVER compare equal to
+        // a presented key (decode-failure → empty bytes → ct_eq false), so a
+        // corrupt store can't be coerced into an AlreadyPinned no-op.
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("companion");
+        fs::create_dir_all(&dir).unwrap();
+        let file = DeviceFile {
+            version: 1,
+            devices: vec![PairedDevice {
+                device_id: "dev-1".into(),
+                static_key: "!!!not-base64!!!".into(),
+                name: "corrupt".into(),
+                fingerprint: "x".into(),
+                paired_at: 0,
+            }],
+        };
+        fs::write(dir.join("devices.json"), serde_json::to_string(&file).unwrap()).unwrap();
+        let store = DeviceStore::open(dir).unwrap();
+        assert_eq!(
+            store.pin("dev-1", &[7u8; KEY_LEN], "Phone").unwrap_err(),
+            DeviceStoreError::TofuMismatch
+        );
+    }
+
+    // ---- Finding 4: concurrent persists use UUID-suffixed temp files ----
+
+    #[test]
+    fn concurrent_persists_do_not_collide() {
+        use std::sync::Arc;
+        use std::thread;
+        let tmp = TempDir::new().unwrap();
+        let store = Arc::new(DeviceStore::open(tmp.path().join("companion")).unwrap());
+        let mut handles = Vec::new();
+        for i in 0..16u8 {
+            let s = store.clone();
+            handles.push(thread::spawn(move || {
+                let mut key = [0u8; KEY_LEN];
+                key[0] = i;
+                s.pin(&format!("dev-{i}"), &key, "X").unwrap();
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(store.list().len(), 16);
+        // No leftover temp files in the companion dir.
+        let dir = tmp.path().join("companion");
+        let leftover: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp-"))
+            .collect();
+        assert!(leftover.is_empty(), "temp files leaked: {leftover:?}");
+    }
+
+    // ---- Finding 7: identity.key is never world-readable, even momentarily ----
+
+    #[cfg(unix)]
+    #[test]
+    fn identity_temp_is_created_0600_then_renamed() {
+        use std::os::unix::fs::PermissionsExt;
+        let (tmp, store) = store();
+        store.save_identity_private(&[9u8; KEY_LEN]).unwrap();
+        let dir = tmp.path().join("companion");
+        // Final file is 0600.
+        let path = dir.join("identity.key");
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        // No world-readable temp residue left behind.
+        let leftover: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp-"))
+            .collect();
+        assert!(leftover.is_empty(), "secret temp leaked: {leftover:?}");
     }
 }

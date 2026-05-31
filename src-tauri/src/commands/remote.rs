@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tauri::{AppHandle, Runtime, State};
 
 use crate::remote::auth_session::PairingTicket;
@@ -13,7 +15,7 @@ use crate::remote::{PairedDevice, RemoteServer, RemoteStatus};
 #[tauri::command]
 pub async fn remote_start<R: Runtime>(
     app: AppHandle<R>,
-    server: State<'_, RemoteServer>,
+    server: State<'_, Arc<RemoteServer>>,
     port: Option<u16>,
 ) -> Result<RemoteStatus, String> {
     server.start(app, port).await
@@ -39,7 +41,7 @@ pub async fn remote_status(server: State<'_, RemoteServer>) -> Result<RemoteStat
 #[tauri::command]
 pub async fn remote_pair<R: Runtime>(
     app: AppHandle<R>,
-    server: State<'_, RemoteServer>,
+    server: State<'_, Arc<RemoteServer>>,
     rendezvous: Option<String>,
     name: Option<String>,
 ) -> Result<PairingTicket, String> {
@@ -50,7 +52,7 @@ pub async fn remote_pair<R: Runtime>(
 #[tauri::command]
 pub async fn remote_devices<R: Runtime>(
     app: AppHandle<R>,
-    server: State<'_, RemoteServer>,
+    server: State<'_, Arc<RemoteServer>>,
 ) -> Result<Vec<PairedDevice>, String> {
     server.devices(app).await
 }
@@ -61,7 +63,7 @@ pub async fn remote_devices<R: Runtime>(
 #[tauri::command]
 pub async fn remote_revoke<R: Runtime>(
     app: AppHandle<R>,
-    server: State<'_, RemoteServer>,
+    server: State<'_, Arc<RemoteServer>>,
     device_id: String,
 ) -> Result<bool, String> {
     server.revoke(app, device_id).await

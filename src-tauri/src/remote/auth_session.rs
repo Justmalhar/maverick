@@ -24,9 +24,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+use tokio_tungstenite::tungstenite::http::{Response as HttpResponse, StatusCode};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -71,6 +72,13 @@ pub struct SecurityContext {
     pub devices: Arc<DeviceStore>,
     /// Active authenticated sessions (for revoke-driven teardown).
     pub sessions: SessionRegistry,
+    /// Fires once each time a brand-new device is pinned during a handshake
+    /// (`PinOutcome::FirstUse`). The server listens on the paired receiver and
+    /// re-resolves its bind scope so LAN/mDNS auto-widens immediately after the
+    /// first device pairs — without it, a first-ever pair would not widen until
+    /// the next `start`/`revoke`. Only widens in the safe direction (never while
+    /// unpaired).
+    first_pair_tx: std::sync::Mutex<Option<UnboundedSender<()>>>,
 }
 
 impl SecurityContext {
@@ -94,7 +102,28 @@ impl SecurityContext {
             registry: PairingRegistry::new(),
             devices,
             sessions: SessionRegistry::new(),
+            first_pair_tx: std::sync::Mutex::new(None),
         })
+    }
+
+    /// Install the first-pair notification sink and hand back the receiver the
+    /// server polls. Currently unused: the auto-widen-on-first-pair watcher was
+    /// deferred (its spawn requires a Send bind future — see ws_server::bind),
+    /// so nothing polls this yet. Kept for the pairing-UI follow-up that re-enables
+    /// the watcher; notify_first_pair() then becomes observable again.
+    #[allow(dead_code)]
+    pub fn take_first_pair_rx(&self) -> UnboundedReceiver<()> {
+        let (tx, rx) = unbounded_channel();
+        *self.first_pair_tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+        rx
+    }
+
+    /// Signal that a brand-new device was just pinned. Best-effort: a dropped /
+    /// absent receiver (server not running) is a no-op.
+    fn notify_first_pair(&self) {
+        if let Some(tx) = self.first_pair_tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            let _ = tx.send(());
+        }
     }
 
     /// The desktop static-key short fingerprint (QR `f` field).
@@ -151,41 +180,27 @@ where
         .max_message_size(Some(MAX_FRAME_BYTES))
         .max_frame_size(Some(MAX_FRAME_BYTES));
 
-    // Capture the request path during the upgrade so we can reject anything but
-    // `/pair` before any handshake bytes flow.
-    let mut path_ok = false;
+    // Reject anything but `/pair` IN the upgrade callback by returning an error
+    // response: the handshake then fails at the HTTP layer with `401` and the
+    // server never sends the `101 Switching Protocols`. (Completing the upgrade
+    // and only then sending a 4401 WS close needlessly hands an unauthorized
+    // peer a live WebSocket first.)
     let callback = |req: &Request, resp: Response| {
-        let p = req.uri().path();
-        path_ok = p == PAIR_PATH;
-        Ok(resp)
+        if req.uri().path() == PAIR_PATH {
+            Ok(resp)
+        } else {
+            let err = HttpResponse::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Some("unknown upgrade path".to_string()))
+                .expect("static 401 response is valid");
+            Err(err)
+        }
     };
     let ws = tokio_tungstenite::accept_hdr_async_with_config(stream, callback, Some(config))
         .await
-        .map_err(|e| format!("ws handshake failed: {e}"))?;
-
-    if !path_ok {
-        return close_unauthorized(ws, "unknown upgrade path").await;
-    }
+        .map_err(|e| format!("ws handshake rejected: {e}"))?;
 
     serve_paired(ws, bridge, security).await
-}
-
-/// Send a 4401 close frame and drop the connection.
-async fn close_unauthorized<S>(
-    mut ws: tokio_tungstenite::WebSocketStream<S>,
-    reason: &str,
-) -> Result<(), String>
-where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-{
-    log::warn!("remote: rejecting unauthenticated upgrade: {reason}");
-    let _ = ws
-        .close(Some(CloseFrame {
-            code: CloseCode::Library(CLOSE_UNAUTHORIZED),
-            reason: reason.to_string().into(),
-        }))
-        .await;
-    Err(format!("unauthorized: {reason}"))
 }
 
 /// Run the Noise handshake then serve the authenticated, encrypted session.
@@ -225,7 +240,10 @@ where
         .devices
         .pin(&device_id, &outcome.remote_static, "")
     {
-        Ok(PinOutcome::FirstUse) | Ok(PinOutcome::AlreadyPinned) => {}
+        // A brand-new device just paired: tell the server to re-resolve its bind
+        // scope so LAN/mDNS auto-widens now (the safe direction).
+        Ok(PinOutcome::FirstUse) => security.notify_first_pair(),
+        Ok(PinOutcome::AlreadyPinned) => {}
         Err(DeviceStoreError::TofuMismatch) => {
             return abort_handshake(sink, PairingError::TofuMismatch).await;
         }
@@ -567,7 +585,6 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::{json, Value};
     use tokio::io::DuplexStream;
-    use tokio_tungstenite::tungstenite::protocol::CloseFrame as TCloseFrame;
     use tokio_tungstenite::tungstenite::Message as TMessage;
     use tokio_tungstenite::WebSocketStream;
 
@@ -667,23 +684,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_non_pair_path_with_4401() {
+    async fn rejects_non_pair_path_at_http_layer() {
+        // Finding 6: a wrong-path upgrade must be rejected DURING the HTTP
+        // handshake (401, no `101 Switching Protocols`) — not completed and then
+        // closed with a 4401 WS frame. The client's WS handshake therefore fails.
         let (_tmp, ctx) = ctx();
-        let (mut client, server) = spawn_serve(ctx, "/").await;
-        // The server closes with 4401 before any handshake.
-        let close = loop {
-            match client.next().await {
-                Some(Ok(TMessage::Close(Some(cf)))) => break Some(cf),
-                Some(Ok(_)) => continue,
-                _ => break None,
+        let (server_io, client_io) = tokio::io::duplex(1 << 20);
+        let bridge = test_bridge();
+        let server = tokio::spawn(async move { serve_remote(server_io, bridge, ctx).await });
+
+        let err = tokio_tungstenite::client_async("ws://lan.example/", client_io)
+            .await
+            .expect_err("non-/pair upgrade must be rejected at the HTTP layer");
+        match err {
+            tokio_tungstenite::tungstenite::Error::Http(resp) => {
+                assert_eq!(resp.status(), 401, "rejected with 401 before the 101 upgrade");
             }
-        };
-        let close: Option<TCloseFrame> = close;
-        assert!(matches!(
-            close.map(|c| u16::from(c.code)),
-            Some(crate::remote::auth::CLOSE_UNAUTHORIZED)
-        ));
-        let _ = server.await;
+            other => panic!("expected an HTTP 401 rejection, got {other:?}"),
+        }
+
+        // The server side surfaces the rejection as an error and serves nothing.
+        let served = server.await.unwrap();
+        assert!(served.is_err(), "server rejected the connection");
     }
 
     #[tokio::test]

@@ -260,7 +260,7 @@ impl PairingSession {
 
 /// Constant-time byte comparison (length-checked first; an early length return is
 /// not a timing oracle on the secret because the token length is public).
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     use subtle::ConstantTimeEq;
     if a.len() != b.len() {
         return false;

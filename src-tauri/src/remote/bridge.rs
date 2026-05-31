@@ -279,9 +279,11 @@ impl RemoteBridge {
                 }
             }
 
-            ClientMessage::PermissionResponse { request_id, allowed, .. } => {
+            ClientMessage::PermissionResponse { session_id, request_id, allowed } => {
+                // Route on (session_id, request_id): a remote may only answer a
+                // prompt for the session it raised, never another session's.
                 self.hook_bridge
-                    .resolve_permission(&request_id.to_string(), allowed)
+                    .resolve_permission(session_id, &request_id.to_string(), allowed)
                     .await;
                 BridgeOutcome::none()
             }

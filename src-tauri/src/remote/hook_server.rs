@@ -45,10 +45,27 @@ const PERMISSION_TIMEOUT: Duration = Duration::from_secs(30);
 /// Max hook body we read (matches Swift's 64 KiB cap).
 const MAX_BODY: usize = 64 * 1024;
 
-/// Registry of in-flight permission waits: `request_id → oneshot sender`. The
-/// HTTP handler parks on the receiver; [`HookBridge::resolve_permission`]
-/// (driven by the client's WS `permission_response`) fires the sender.
-type PendingPermissions = Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>;
+/// Identifies an in-flight permission wait. Keying on `(session_id, request_id)`
+/// — not `request_id` alone — is a security boundary: a paired remote may only
+/// answer a prompt for the session it is attached to. Routing on `request_id`
+/// alone would let any remote resolve ANOTHER session's pending permission.
+type PendingKey = (Uuid, String);
+
+/// Registry of in-flight permission waits: `(session_id, request_id) → oneshot
+/// sender`. The HTTP handler parks on the receiver; [`HookBridge::resolve_permission`]
+/// (driven by the client's WS `permission_response`) fires the sender — but only
+/// when the response's `session_id` matches the session the prompt was raised for.
+type PendingPermissions = Arc<Mutex<HashMap<PendingKey, oneshot::Sender<bool>>>>;
+
+/// Result of parking on a held permission request.
+#[derive(Debug, PartialEq, Eq)]
+enum PermissionWait {
+    /// The remote decided (or we auto-denied on timeout): `true` = allow.
+    Decided(bool),
+    /// A wait was already in flight for this `(session_id, request_id)` → reject
+    /// the second hook with a `400` instead of clobbering the first.
+    Duplicate,
+}
 
 /// Shared hook-bridge state: the event bus, the session index, and the pending
 /// permission registry. Cloned into each accepted connection's task.
@@ -69,11 +86,13 @@ impl HookBridge {
     }
 
     /// Resolve a held PermissionRequest with the client's decision. No-op if the
-    /// request already timed out or is unknown. Called from the WS bridge when a
-    /// `permission_response` arrives. The key is canonicalized to match the form
-    /// the wait was registered under.
-    pub async fn resolve_permission(&self, request_id: &str, allowed: bool) {
-        let key = canonicalize_request_id(request_id);
+    /// request already timed out, is unknown, OR belongs to a different session
+    /// than `session_id` — a remote may only answer prompts for a session it is
+    /// attached to. Called from the WS bridge when a `permission_response`
+    /// arrives. `request_id` is canonicalized to match the form the wait was
+    /// registered under.
+    pub async fn resolve_permission(&self, session_id: Uuid, request_id: &str, allowed: bool) {
+        let key = (session_id, canonicalize_request_id(request_id));
         if let Some(tx) = self.pending.lock().await.remove(&key) {
             let _ = tx.send(allowed);
         }
@@ -133,6 +152,10 @@ impl HookBridge {
         let hook_name = body.get("hook_event_name").and_then(Value::as_str).unwrap_or("");
         let is_permission = hook_name == "PermissionRequest";
 
+        // Resolve the routed session UUID ONCE so the broadcast and the pending
+        // permission wait agree on which session this hook belongs to.
+        let session_id = self.resolve_session(&session_string);
+
         // The request_id we register the wait under MUST equal the string the
         // client will echo in `permission_response`. The protocol types that
         // field as a UUID, so the client round-trips it through `Uuid` →
@@ -158,44 +181,70 @@ impl HookBridge {
             {
                 permission_event.request_id = canon.clone();
             }
-            self.broadcast_hook_event(&session_string, event);
+            self.broadcast_event(session_id, event);
         }
 
-        if let Some(request_id) = canonical_request_id {
-            let allowed = self.wait_for_permission(&request_id).await;
-            permission_response(allowed)
-        } else {
-            ok_empty()
+        match (canonical_request_id, session_id) {
+            // A held permission request keyed on (session, request_id): only the
+            // attached session's remote can resolve it.
+            (Some(request_id), Some(sid)) => match self.wait_for_permission(sid, &request_id).await {
+                PermissionWait::Decided(allowed) => permission_response(allowed),
+                PermissionWait::Duplicate => bad_request(),
+            },
+            // A permission request whose session we can't resolve has no remote
+            // that may legitimately answer it → fail closed (deny) immediately.
+            (Some(_), None) => {
+                log::debug!("hook: permission for unknown session '{session_string}' — auto-denying");
+                permission_response(false)
+            }
+            _ => ok_empty(),
         }
     }
 
-    /// Route a hook-derived event to its session UUID via the claude-id index and
-    /// publish it on the bus. Drops the event if the session id is unknown
-    /// (mirrors Swift's `receiveHook` invalid-UUID drop).
-    fn broadcast_hook_event(&self, session_string: &str, event: crate::remote::AgentEvent) {
-        let session_id = self
-            .agent_host
+    /// Resolve a hook `session_id` string to its routed session UUID via the
+    /// claude-id index, falling back to a verbatim UUID. `None` if unknown.
+    fn resolve_session(&self, session_string: &str) -> Option<Uuid> {
+        self.agent_host
             .resolve_claude_id(session_string)
-            .or_else(|| Uuid::parse_str(session_string).ok());
+            .or_else(|| Uuid::parse_str(session_string).ok())
+    }
+
+    /// Publish a hook-derived event to its already-resolved session UUID on the
+    /// bus. Drops the event if the session id is unknown (mirrors Swift's
+    /// `receiveHook` invalid-UUID drop).
+    fn broadcast_event(&self, session_id: Option<Uuid>, event: crate::remote::AgentEvent) {
         if let Some(sid) = session_id {
             let _ = self.bus.send((sid, ServerMessage::AgentEvent { session_id: sid, event }));
         } else {
-            log::debug!("hook: dropping event — unknown session '{session_string}'");
+            log::debug!("hook: dropping event — unknown session");
         }
     }
 
-    /// Park until the client decides or 30 s elapses (then auto-deny).
-    async fn wait_for_permission(&self, request_id: &str) -> bool {
+    /// Park until the attached session's remote decides or 30 s elapses (then
+    /// auto-deny). The wait is keyed on `(session_id, request_id)`. A duplicate
+    /// `request_id` already in flight for the same session is rejected with
+    /// [`PermissionWait::Duplicate`] (→ HTTP 400) rather than silently replacing
+    /// (and leaking) the first wait's sender — the first request stays parked
+    /// until its own timeout/decision.
+    async fn wait_for_permission(&self, session_id: Uuid, request_id: &str) -> PermissionWait {
+        let key = (session_id, request_id.to_string());
         let (tx, rx) = oneshot::channel();
-        self.pending.lock().await.insert(request_id.to_string(), tx);
+        {
+            let mut pending = self.pending.lock().await;
+            if pending.contains_key(&key) {
+                log::warn!("hook: duplicate permission request_id {request_id} — rejecting");
+                return PermissionWait::Duplicate;
+            }
+            pending.insert(key.clone(), tx);
+        }
 
         match tokio::time::timeout(PERMISSION_TIMEOUT, rx).await {
-            Ok(Ok(allowed)) => allowed,
+            Ok(Ok(allowed)) => PermissionWait::Decided(allowed),
             // Timeout or sender dropped → fail closed (deny). Clean up the entry.
             _ => {
-                self.pending.lock().await.remove(request_id);
+                self.pending.lock().await.remove(&key);
                 log::info!("hook: permission {request_id} timed out — auto-denying");
-                false
+                PermissionWait::Decided(false)
             }
         }
     }
@@ -588,7 +637,7 @@ mod tests {
         // ...then sends its decision, which becomes the HTTP reply.
         // Small yield so the wait registers before we resolve.
         tokio::time::sleep(Duration::from_millis(20)).await;
-        b.resolve_permission("req-1", true).await;
+        b.resolve_permission(sid, "req-1", true).await;
 
         let resp = handle.await.unwrap();
         assert!(resp.contains("\"behavior\":\"allow\""));
@@ -605,7 +654,7 @@ mod tests {
         });
         let handle = tokio::spawn(async move { bridge_clone.process_body(&body).await });
         tokio::time::sleep(Duration::from_millis(20)).await;
-        b.resolve_permission("req-2", false).await;
+        b.resolve_permission(sid, "req-2", false).await;
         let resp = handle.await.unwrap();
         assert!(resp.contains("\"behavior\":\"deny\""));
     }
@@ -630,7 +679,90 @@ mod tests {
     async fn resolve_unknown_request_is_noop() {
         let (b, _host, _rx) = bridge();
         // Should not panic / hang.
-        b.resolve_permission("never-registered", true).await;
+        b.resolve_permission(Uuid::new_v4(), "never-registered", true).await;
+    }
+
+    // ---- Finding 2: a permission_response from the WRONG session is ignored ----
+
+    #[tokio::test]
+    async fn permission_response_from_wrong_session_is_rejected() {
+        let (b, host, _rx) = bridge();
+        // Two distinct sessions, each with a routable claude id.
+        let attacker = Uuid::new_v4();
+        let victim = Uuid::new_v4();
+        host.test_register_claude_id("victim", victim);
+        host.test_register_claude_id("attacker", attacker);
+
+        // The victim session raises a permission prompt and parks.
+        let bridge_clone = b.clone();
+        let body = json!({
+            "session_id": "victim",
+            "hook_event_name": "PermissionRequest",
+            "request_id": "shared-req",
+            "tool_name": "Bash"
+        });
+        let held = tokio::spawn(async move { bridge_clone.process_body(&body).await });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // The attacker's remote tries to answer the victim's prompt by request_id.
+        // It MUST NOT resolve — the key includes the session id.
+        b.resolve_permission(attacker, "shared-req", true).await;
+        // Give the (incorrectly-routed) resolve a chance to land, then confirm the
+        // held request is still parked.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(!held.is_finished(), "wrong-session resolve must not unblock the wait");
+
+        // The rightful (victim) session resolves it.
+        b.resolve_permission(victim, "shared-req", false).await;
+        let resp = held.await.unwrap();
+        assert!(resp.contains("\"behavior\":\"deny\""), "only the owning session resolves");
+    }
+
+    #[tokio::test]
+    async fn permission_for_unknown_session_auto_denies() {
+        let (b, _host, _rx) = bridge();
+        // No claude id registered and not a UUID → session unresolvable → fail
+        // closed immediately (no parking, no remote can answer it).
+        let body = json!({
+            "session_id": "ghost-session",
+            "hook_event_name": "PermissionRequest",
+            "request_id": "req-x",
+            "tool_name": "Bash"
+        });
+        let resp = b.process_body(&body).await;
+        assert!(resp.contains("\"behavior\":\"deny\""));
+    }
+
+    // ---- Finding 5: a duplicate request_id is rejected, not silently replaced ----
+
+    #[tokio::test]
+    async fn duplicate_request_id_is_rejected_and_first_wait_survives() {
+        let (b, host, _rx) = bridge();
+        let sid = Uuid::new_v4();
+        host.test_register_claude_id("c", sid);
+
+        // First request parks.
+        let b1 = b.clone();
+        let body1 = json!({
+            "session_id": "c", "hook_event_name": "PermissionRequest",
+            "request_id": "dupe", "tool_name": "Bash"
+        });
+        let first = tokio::spawn(async move { b1.process_body(&body1).await });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // Second request with the SAME (session, request_id) is rejected with 400.
+        let body2 = json!({
+            "session_id": "c", "hook_event_name": "PermissionRequest",
+            "request_id": "dupe", "tool_name": "Bash"
+        });
+        let resp2 = b.process_body(&body2).await;
+        assert!(resp2.contains("400 Bad Request"), "duplicate rejected: {resp2}");
+
+        // The FIRST wait must still be live (not clobbered) and resolvable.
+        assert!(!first.is_finished(), "first wait leaked / was replaced");
+        b.resolve_permission(sid, "dupe", true).await;
+        let resp1 = first.await.unwrap();
+        assert!(resp1.contains("\"behavior\":\"allow\""), "first request still resolves");
     }
 
     // ---- live listener binds loopback only ----

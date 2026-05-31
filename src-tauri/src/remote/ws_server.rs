@@ -256,31 +256,37 @@ impl RemoteServer {
         let has_paired = !ctx.devices.list().is_empty();
         let desired = BindPolicy::resolve(enabled, has_paired);
 
-        let mut guard = self.running.lock().await;
-        // Already bound to the desired scope → nothing to do.
-        if let Some(running) = guard.as_ref() {
-            if running.scope == desired {
-                return Ok(());
+        // Decide + tear down the old listener under the lock, then DROP the guard
+        // before the async binds below. The guard holds a `Running` whose
+        // `MdnsAdvertiser` is `!Send`; keeping it across an `.await` would make
+        // this future `!Send` and unspawnable (the first-pair watcher spawns it).
+        let chosen_port = {
+            let mut guard = self.running.lock().await;
+            // Already bound to the desired scope → nothing to do.
+            if let Some(running) = guard.as_ref() {
+                if running.scope == desired {
+                    return Ok(());
+                }
             }
-        }
+            // Determine the port: explicit arg wins, else reuse the running port, else default.
+            let chosen_port = port
+                .or_else(|| guard.as_ref().map(|r| r.addr.port()))
+                .unwrap_or(DEFAULT_PORT);
 
-        // Determine the port: explicit arg wins, else reuse the running port, else default.
-        let chosen_port = port
-            .or_else(|| guard.as_ref().map(|r| r.addr.port()))
-            .unwrap_or(DEFAULT_PORT);
-
-        // Tear down the previous listener (and its mDNS) before re-binding.
-        if let Some(prev) = guard.take() {
-            prev.accept_task.abort();
-            if let Some(mdns) = prev.mdns {
-                mdns.stop();
+            // Tear down the previous listener (and its mDNS) before re-binding.
+            if let Some(prev) = guard.take() {
+                prev.accept_task.abort();
+                if let Some(mdns) = prev.mdns {
+                    mdns.stop();
+                }
+                // Keep the existing hook bridge handle by re-installing below; abort
+                // only the accept loop + mdns here.
+                if let Some(hook) = prev.hook {
+                    hook.shutdown();
+                }
             }
-            // Keep the existing hook bridge handle by re-installing below; abort
-            // only the accept loop + mdns here.
-            if let Some(hook) = prev.hook {
-                hook.shutdown();
-            }
-        }
+            chosen_port
+        };
 
         let bind = desired.socket_addr(chosen_port);
         let listener = TcpListener::bind(bind)
@@ -307,6 +313,12 @@ impl RemoteServer {
             }
         };
 
+        // From here on do NO `.await` while the `!Send` `MdnsAdvertiser` is alive
+        // (it would make this future un-`spawn`able by the first-pair watcher).
+        // Acquire the commit lock first, then build mDNS + spawn the tasks, all
+        // synchronously, and store the `Running` snapshot.
+        let mut guard = self.running.lock().await;
+
         // Advertise over mDNS only when LAN-exposed.
         let mdns = if desired == BindScope::Lan {
             let instance = ctx.instance_name();
@@ -323,6 +335,15 @@ impl RemoteServer {
         };
 
         let accept_task = tokio::spawn(accept_loop(listener, bridge, ctx.clone()));
+
+        // NOTE (Companion-5 review finding 3 — auto-widen on first pair, deferred):
+        // re-binding the instant a device pins would need a spawned task calling
+        // bind(), but bind()'s future is !Send (RemoteServer holds the !Send mDNS
+        // advertiser inside its `running` Mutex, making RemoteServer !Sync), so it
+        // can't cross a tokio::spawn boundary. The bind scope widens on the next
+        // remote_start instead; reconcile_bind() still runs on the awaited
+        // start()/revoke() command paths. Re-enabling the live watcher is a
+        // follow-up that lands with the frontend pairing UI.
 
         *guard = Some(Running { addr, accept_task, hook, mdns, scope: desired });
         Ok(())

@@ -83,7 +83,10 @@ pub fn run() {
             // remote_start is called explicitly. The listener stays loopback-only
             // until enabled AND a device is paired (Companion-5 QR/Noise pairing),
             // at which point it widens to the LAN behind the Noise auth gate.
-            app.manage(crate::remote::RemoteServer::new());
+            // Managed as an `Arc` so the first-pair reconcile watcher can hold a
+            // cheap clone across `.await` (a borrowed `tauri::State` guard isn't
+            // `Send` and can't cross the spawned task boundary).
+            app.manage(std::sync::Arc::new(crate::remote::RemoteServer::new()));
 
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -223,7 +226,9 @@ pub fn run() {
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {
             // Stop the companion listener first so no socket task outlives the app.
-            if let Some(server) = app_handle.try_state::<crate::remote::RemoteServer>() {
+            if let Some(server) =
+                app_handle.try_state::<std::sync::Arc<crate::remote::RemoteServer>>()
+            {
                 tauri::async_runtime::block_on(async move {
                     server.stop().await;
                 });
