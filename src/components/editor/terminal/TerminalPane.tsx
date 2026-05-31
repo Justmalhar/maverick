@@ -28,6 +28,12 @@ interface Props {
   // reach the PTY). The agent path taps this to detect submitted prompts for
   // token-usage estimation; the regular terminal leaves it unset.
   onData?: (data: string) => void;
+  // Fires with raw PTY output bytes (pty:data) as they arrive. The agent path
+  // taps this to drive the activity-based per-workspace status pill.
+  onOutput?: (data: string) => void;
+  // Fires on pty:exit with the process exit code. Lets the agent path mark the
+  // workspace done/errored.
+  onExit?: (code: number) => void;
 }
 
 export function TerminalPane({
@@ -37,16 +43,29 @@ export function TerminalPane({
   onFocus,
   visible = true,
   onData,
+  onOutput,
+  onExit,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<TerminalHandle | null>(null);
   const pooledRef = useRef<PooledTerminalHandle | null>(null);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
+  const onOutputRef = useRef(onOutput);
+  onOutputRef.current = onOutput;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   const { theme } = useThemeContext();
-  // Pooled path routes pty:data through the session (slot or dormant ring).
+  // Pooled path routes pty:data through the session (slot or dormant ring). We
+  // also tee output to onOutput (status detection) and exit to onExit, while
+  // preserving the renderer feed so scrollback / dormant-ring behaviour is
+  // unchanged.
   const { write, resize, kick } = usePty(ptyId, {
-    feed: (data) => pooledRef.current?.feed(data),
+    feed: (data) => {
+      onOutputRef.current?.(data);
+      pooledRef.current?.feed(data);
+    },
+    onExit: onExitRef.current ? (code) => onExitRef.current?.(code) : undefined,
   });
 
   useEffect(() => {

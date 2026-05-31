@@ -2,13 +2,21 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
-import { Toaster } from "./Toaster";
+import { useWorkbench } from "@/state/store";
 import { dispatchOsNotification } from "@/lib/os-notify";
 import type { Notification } from "@/lib/ipc";
 
 vi.mock("@/lib/os-notify", () => ({
   dispatchOsNotification: vi.fn().mockResolvedValue(true),
 }));
+
+// useWindowFocus calls getCurrentWindow().onFocusChanged; mock it so the hook
+// doesn't touch Tauri internals. Focus state then seeds from document.hasFocus().
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onFocusChanged: async () => () => {} }),
+}));
+
+import { Toaster } from "./Toaster";
 
 function makeNotification(overrides: Partial<Notification> = {}): Notification {
   return {
@@ -24,6 +32,7 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
 }
 
 let sendHandlers: Array<(n: Notification) => void>;
+const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(dispatchOsNotification).mockClear();
@@ -34,18 +43,44 @@ beforeEach(() => {
     }
     return () => {};
   }) as unknown as typeof listen);
+  useWorkbench.setState({ ...initial, activeWorkspaceId: null });
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
 });
 
 describe("Toaster", () => {
-  it("renders a toast and fires an OS notification on notification:send", async () => {
+  it("fires an OS notification (no toast) when the window is unfocused", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
     renderWithProviders(<Toaster />);
     await waitFor(() => expect(sendHandlers.length).toBeGreaterThan(0));
 
     act(() => sendHandlers[0](makeNotification({ id: "n1", title: "Done", body: "ok" })));
 
+    expect(dispatchOsNotification).toHaveBeenCalledWith("Done", "ok");
+    expect(screen.queryByTestId("toast-n1")).not.toBeInTheDocument();
+  });
+
+  it("shows a toast (no OS notification) when focused on a different workspace", async () => {
+    useWorkbench.setState({ ...initial, activeWorkspaceId: "ws-active" });
+    renderWithProviders(<Toaster />);
+    await waitFor(() => expect(sendHandlers.length).toBeGreaterThan(0));
+
+    act(() => sendHandlers[0](makeNotification({ id: "n1", workspaceId: "ws-other", title: "Done", body: "ok" })));
+
     expect(await screen.findByTestId("toast-n1")).toBeInTheDocument();
     expect(screen.getByText("Done")).toBeInTheDocument();
-    expect(dispatchOsNotification).toHaveBeenCalledWith("Done", "ok");
+    expect(dispatchOsNotification).not.toHaveBeenCalled();
+  });
+
+  it("suppresses (no toast, no OS notification) when focused on the relevant workspace", async () => {
+    useWorkbench.setState({ ...initial, activeWorkspaceId: "ws-1" });
+    renderWithProviders(<Toaster />);
+    await waitFor(() => expect(sendHandlers.length).toBeGreaterThan(0));
+
+    act(() => sendHandlers[0](makeNotification({ id: "n1", workspaceId: "ws-1" })));
+
+    expect(screen.queryByTestId("toast-n1")).not.toBeInTheDocument();
+    expect(dispatchOsNotification).not.toHaveBeenCalled();
   });
 
   it("dismisses a toast when its close button is clicked", async () => {

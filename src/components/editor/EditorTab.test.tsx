@@ -1,15 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, within } from "@testing-library/react";
 import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTab } from "./EditorTab";
 import { useWorkbench } from "@/state/store";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { makeWorkspace } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
   useWorkbench.setState({ ...initial, editorModes: {} });
+  useAgentStatusStore.setState({ statuses: {} });
 });
 
 describe("EditorTab", () => {
@@ -28,21 +30,35 @@ describe("EditorTab", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("shows terminal icon when mode is terminal and error status dot", () => {
+  it("shows terminal icon when mode is terminal and reflects the agent status", () => {
     useWorkbench.setState({ ...initial, editorModes: { w1: "terminal" } });
+    useAgentStatusStore.setState({ statuses: { w1: "error" } });
     renderWithProviders(
       <EditorTab workspace={makeWorkspace({ id: "w1", status: "error", title: "T" })}
         active={false} onSelect={() => {}} onClose={() => {}} />
     );
-    expect(screen.getByTestId("editor-tab-w1")).toHaveAttribute("data-active", "false");
+    const tab = screen.getByTestId("editor-tab-w1");
+    expect(tab).toHaveAttribute("data-active", "false");
+    expect(within(tab).getByTestId("agent-status-pill")).toHaveAttribute("data-status", "error");
   });
 
-  it("idle status renders the idle dot variant", () => {
+  it("defaults to an idle agent-status pill when the workspace is untracked", () => {
     renderWithProviders(
       <EditorTab workspace={makeWorkspace({ id: "w1", status: "idle" })}
         active={false} onSelect={() => {}} onClose={() => {}} />
     );
-    expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
+    const tab = screen.getByTestId("editor-tab-w1");
+    expect(within(tab).getByTestId("agent-status-pill")).toHaveAttribute("data-status", "idle");
+  });
+
+  it("renders the working agent-status when output is flowing", () => {
+    useAgentStatusStore.setState({ statuses: { w1: "working" } });
+    renderWithProviders(
+      <EditorTab workspace={makeWorkspace({ id: "w1" })}
+        active={false} onSelect={() => {}} onClose={() => {}} />
+    );
+    const tab = screen.getByTestId("editor-tab-w1");
+    expect(within(tab).getByTestId("agent-status-pill")).toHaveAttribute("data-status", "working");
   });
 
   it("Enter key on tab triggers onSelect", () => {

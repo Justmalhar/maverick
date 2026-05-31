@@ -14,6 +14,16 @@ vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(),
 }));
 
+// useWindowFocus (mounted app-wide via Toaster/StatusBar) calls
+// getCurrentWindow().onFocusChanged; without a mock it reaches into
+// window.__TAURI_INTERNALS__.metadata and throws under jsdom. Focus-specific
+// tests provide their own richer mock that drives focus events.
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    onFocusChanged: vi.fn().mockResolvedValue(() => {}),
+  }),
+}));
+
 // The shell plugin reaches into `window.__TAURI_INTERNALS__` directly instead
 // of going through `@tauri-apps/api/core::invoke`, so our existing mock above
 // doesn't catch its `open(url)` calls. Provide a separate spy.

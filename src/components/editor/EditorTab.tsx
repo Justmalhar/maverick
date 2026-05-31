@@ -1,7 +1,8 @@
 import { X, Bot, TerminalSquare } from "lucide-react";
 import { useWorkbench, selectEditorMode } from "@/state/store";
 import type { Workspace } from "@/lib/ipc";
-import { StatusDot } from "@/components/ui/status-dot";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { AgentStatusPill } from "./AgentStatusPill";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 
 export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu }: Props) {
   const mode = useWorkbench(selectEditorMode(workspace.id));
+  const agentStatus = useAgentStatus(workspace.id);
   const ModeIcon = mode === "terminal" ? TerminalSquare : Bot;
 
   return (
@@ -43,16 +45,7 @@ export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu 
       <span className="max-w-[160px] truncate">
         {workspace.title ?? workspace.branch}
       </span>
-      <StatusDot
-        variant={
-          workspace.status === "active"
-            ? "active"
-            : workspace.status === "error"
-              ? "error"
-              : "idle"
-        }
-        size="sm"
-      />
+      <AgentStatusPill status={agentStatus} compact />
       <button
         type="button"
         onClick={(e) => {

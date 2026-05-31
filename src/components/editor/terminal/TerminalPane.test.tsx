@@ -216,6 +216,31 @@ describe("TerminalPane (pooled renderer path)", () => {
     expect(pooled.feed).toHaveBeenCalledWith("out");
   });
 
+  it("taps onOutput on pty:data and onExit on pty:exit (agent status path)", async () => {
+    const callbacks: Record<string, (e: { payload: unknown }) => void> = {};
+    vi.mocked(listen).mockImplementation((async (event: string, cb: (e: { payload: unknown }) => void) => {
+      callbacks[event] = cb;
+      return () => {};
+    }) as unknown as typeof listen);
+
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    const onOutput = vi.fn();
+    const onExit = vi.fn();
+    renderWithProviders(
+      <TerminalPane ptyId="p7" paneId="leaf-7" isFocused onFocus={() => {}} visible onOutput={onOutput} onExit={onExit} />
+    );
+
+    await Promise.resolve();
+    callbacks["pty:data"]({ payload: { ptyId: "p7", data: "chunk" } });
+    // onOutput tee fires AND the renderer feed is preserved.
+    expect(onOutput).toHaveBeenCalledWith("chunk");
+    expect(pooled.feed).toHaveBeenCalledWith("chunk");
+
+    callbacks["pty:exit"]({ payload: { ptyId: "p7", code: 0 } });
+    expect(onExit).toHaveBeenCalledWith(0);
+  });
+
   it("the bridge forwards keystrokes, resizes, and SIGWINCH kicks to the PTY", async () => {
     const { provider, lastBridge } = makePooledProvider();
     TerminalRegistry.register(provider);

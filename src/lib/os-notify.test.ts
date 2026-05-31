@@ -10,12 +10,13 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
   sendNotification: (arg: unknown) => sendNotification(arg),
 }));
 
-import { dispatchOsNotification } from "./os-notify";
+import { dispatchOsNotification, __resetOsNotifyCache } from "./os-notify";
 
 beforeEach(() => {
   isPermissionGranted.mockReset();
   requestPermission.mockReset();
   sendNotification.mockReset();
+  __resetOsNotifyCache();
 });
 
 describe("dispatchOsNotification", () => {
@@ -48,5 +49,26 @@ describe("dispatchOsNotification", () => {
     const ok = await dispatchOsNotification("T", "B");
     expect(ok).toBe(false);
     expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("caches a positive grant and skips re-checking on subsequent calls", async () => {
+    isPermissionGranted.mockResolvedValue(true);
+    await dispatchOsNotification("A", "1");
+    expect(isPermissionGranted).toHaveBeenCalledTimes(1);
+
+    await dispatchOsNotification("B", "2");
+    // Cached grant → no second permission check.
+    expect(isPermissionGranted).toHaveBeenCalledTimes(1);
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache a denial — re-checks until permission is granted", async () => {
+    isPermissionGranted.mockResolvedValue(false);
+    requestPermission.mockResolvedValueOnce("denied");
+    expect(await dispatchOsNotification("A", "1")).toBe(false);
+
+    requestPermission.mockResolvedValueOnce("granted");
+    expect(await dispatchOsNotification("B", "2")).toBe(true);
+    expect(isPermissionGranted).toHaveBeenCalledTimes(2);
   });
 });

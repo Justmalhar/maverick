@@ -3,6 +3,10 @@ import { useWorkbench } from "@/state/store";
 import { ptySpawn, ptyKill, messageAppend, messagesList } from "@/lib/tauri";
 import { getGlobalEnv } from "@/lib/stores/settings";
 import { recordUsageEstimate } from "@/hooks/useContextUsage";
+import {
+  useAgentStatusReporter,
+  useAgentStatusStore,
+} from "@/hooks/useAgentStatus";
 import type { Message, Workspace } from "@/lib/ipc";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
 
@@ -31,6 +35,7 @@ const agentPtyCache = new Map<string, string>();
 
 /** Kill and evict a workspace's agent-CLI PTY. Called when the workspace is destroyed. */
 export function killAgentPty(workspaceId: string): void {
+  useAgentStatusStore.getState().clearStatus(workspaceId);
   const ptyId = agentPtyCache.get(workspaceId);
   if (!ptyId) return;
   agentPtyCache.delete(workspaceId);
@@ -98,6 +103,7 @@ function useAgentUsageRecorder(workspace: Workspace): (data: string) => void {
 export function AgentTerminal({ workspace }: Props) {
   const backend = useWorkbench((s) => s.backends.find((b) => b.id === workspace.agentBackend));
   const recordInput = useAgentUsageRecorder(workspace);
+  const { reportOutput, markExit } = useAgentStatusReporter(workspace.id);
   const [state, setState] = useState<SpawnState>({ status: "idle" });
 
   useEffect(() => {
@@ -163,6 +169,8 @@ export function AgentTerminal({ workspace }: Props) {
         isFocused
         onFocus={() => {}}
         onData={recordInput}
+        onOutput={reportOutput}
+        onExit={markExit}
       />
     </div>
   );

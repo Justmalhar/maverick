@@ -7,11 +7,13 @@ import {
 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { useContextUsage } from "@/hooks/useContextUsage";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
 import {
   useSourceControl,
   getSourceControlRemoteIndicator,
 } from "@/hooks/useSourceControl";
 import { formatTokens } from "@/lib/context-usage";
+import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
 import { StatusBarItem } from "./StatusBarItem";
 import { NotificationBell } from "./NotificationBell";
 import { CaffeinateToggle } from "./CaffeinateToggle";
@@ -22,6 +24,7 @@ export function StatusBar() {
   const workspaceCount = useWorkbench((s) => s.workspaces.length);
   const activeBackend = backends.find((b) => b.active);
   const usage = useContextUsage(active?.sessionId);
+  const agentStatus = useAgentStatus(active?.id ?? "");
   const sourceControl = useSourceControl(active?.worktreePath, Boolean(active));
   const indicator = getSourceControlRemoteIndicator(sourceControl);
 
@@ -63,6 +66,11 @@ export function StatusBar() {
             sync
           </StatusBarItem>
         ) : null}
+        {active && (
+          <StatusBarItem testId="statusbar-agent-status">
+            <AgentStatusPill status={agentStatus} />
+          </StatusBarItem>
+        )}
         <StatusBarItem
           icon={<AlertCircle className="h-3 w-3" />}
           testId="statusbar-errors"
