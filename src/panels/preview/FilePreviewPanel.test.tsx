@@ -23,4 +23,16 @@ describe("FilePreviewPanel", () => {
     renderWithProviders(<FilePreviewPanel filePath="noext" content="text" />);
     expect(screen.getByTestId("raw-preview")).toBeInTheDocument();
   });
+
+  it("renders markdown as raw when raw flag is set (by extension)", () => {
+    renderWithProviders(<FilePreviewPanel filePath="a.md" content="# x" raw />);
+    expect(screen.getByTestId("raw-preview")).toBeInTheDocument();
+  });
+
+  it("renders markdown as raw when raw flag is set (by mime)", () => {
+    renderWithProviders(
+      <FilePreviewPanel filePath="a" mimeType="text/markdown" content="# x" raw />
+    );
+    expect(screen.getByTestId("raw-preview")).toBeInTheDocument();
+  });
 });

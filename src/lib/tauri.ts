@@ -13,7 +13,10 @@ import type {
   DiffResult,
   DiffStat,
   FileEntry,
+  FileReadResult,
+  FsChangedPayload,
   KanbanTask,
+  SearchResult,
   MaverickConfig,
   MaverickSettings,
   MCPServer,
@@ -157,6 +160,43 @@ export async function gitCommit(
 
 export async function fileTree(worktreePath: string): Promise<FileEntry[]> {
   return invoke("file_tree", { worktreePath });
+}
+
+export async function fileRead(filePath: string): Promise<FileReadResult> {
+  return invoke("file_read", { filePath });
+}
+
+export async function fileSearch(
+  worktreePath: string,
+  query: string,
+  limit?: number
+): Promise<SearchResult> {
+  return invoke("file_search", { worktreePath, query, limit });
+}
+
+export async function fsWatchStart(
+  root: string,
+  dirs?: string[]
+): Promise<{ watching: number }> {
+  return invoke("fs_watch_start", { root, dirs });
+}
+
+export async function fsWatchAdd(dirs: string[]): Promise<{ watching: number }> {
+  return invoke("fs_watch_add", { dirs });
+}
+
+export async function fsWatchRemove(dirs: string[]): Promise<{ watching: number }> {
+  return invoke("fs_watch_remove", { dirs });
+}
+
+export async function fsWatchStop(): Promise<{ ok: true }> {
+  return invoke("fs_watch_stop");
+}
+
+export function onFsChanged(
+  callback: (payload: FsChangedPayload) => void
+): Promise<UnlistenFn> {
+  return listen<FsChangedPayload>("fs:changed", (e) => callback(e.payload));
 }
 
 export async function kanbanList(projectId: string): Promise<KanbanTask[]> {

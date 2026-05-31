@@ -373,6 +373,75 @@ describe("RpcHandlers", () => {
     expect(t).toEqual([]);
   });
 
+  test("file.read delegates to FileReader", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const fileReader = {
+      read: (p: { filePath: string }) => ({
+        content: `body:${p.filePath}`,
+        size: 4,
+        binary: false,
+        unreadable: false,
+      }),
+    } as never;
+    const handlers = new RpcHandlers({ store, fileReader, notifier: { write: () => {} } });
+    const res = (await handlers.dispatch("file.read", { filePath: "/wt/a.md" })) as {
+      content: string;
+    };
+    expect(res.content).toBe("body:/wt/a.md");
+  });
+
+  test("file.search delegates to FileSearch", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    let received: unknown;
+    const fileSearch = {
+      async search(p: unknown) {
+        received = p;
+        return { hits: [{ rel: "a.ts", name: "a.ts", isDirectory: false }], truncated: true };
+      },
+    } as never;
+    const handlers = new RpcHandlers({ store, fileSearch, notifier: { write: () => {} } });
+    const res = (await handlers.dispatch("file.search", {
+      worktreePath: "/wt",
+      query: "a",
+      limit: 5,
+    })) as { hits: unknown[]; truncated: boolean };
+    expect(res.truncated).toBe(true);
+    expect(received).toEqual({ worktreePath: "/wt", query: "a", limit: 5 });
+  });
+
+  test("fs.watch.start/add/remove/stop delegate to FsWatcher", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const calls: string[] = [];
+    const fsWatcher = {
+      start: (p: { root: string }) => {
+        calls.push(`start:${p.root}`);
+        return { watching: 1 };
+      },
+      add: (p: { dirs: string[] }) => {
+        calls.push(`add:${p.dirs.join(",")}`);
+        return { watching: 2 };
+      },
+      remove: (p: { dirs: string[] }) => {
+        calls.push(`remove:${p.dirs.join(",")}`);
+        return { watching: 1 };
+      },
+      stop: () => {
+        calls.push("stop");
+        return { ok: true as const };
+      },
+    } as never;
+    const handlers = new RpcHandlers({ store, fsWatcher, notifier: { write: () => {} } });
+    expect(await handlers.dispatch("fs.watch.start", { root: "/wt", dirs: ["/wt/src"] })).toEqual({
+      watching: 1,
+    });
+    expect(await handlers.dispatch("fs.watch.add", { dirs: ["/wt/lib"] })).toEqual({ watching: 2 });
+    expect(await handlers.dispatch("fs.watch.remove", { dirs: ["/wt/lib"] })).toEqual({
+      watching: 1,
+    });
+    expect(await handlers.dispatch("fs.watch.stop", {})).toEqual({ ok: true });
+    expect(calls).toEqual(["start:/wt", "add:/wt/lib", "remove:/wt/lib", "stop"]);
+  });
+
   test("kanban.list/upsert", async () => {
     const proj = (await h.dispatch("project.add", { path: "/k" })) as { id: string };
     const t = (await h.dispatch("kanban.upsert", {

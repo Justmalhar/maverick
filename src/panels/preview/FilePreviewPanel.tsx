@@ -10,6 +10,8 @@ interface Props {
   filePath: string;
   mimeType?: string;
   content?: string;
+  /** When true, markdown files render as raw source instead of the rendered view. */
+  raw?: boolean;
 }
 
 const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"];
@@ -20,19 +22,19 @@ function ext(path: string): string {
   return idx >= 0 ? path.slice(idx + 1).toLowerCase() : "";
 }
 
-export default function FilePreviewPanel({ filePath, mimeType = "", content }: Props) {
+export default function FilePreviewPanel({ filePath, mimeType = "", content, raw = false }: Props) {
   const kind = useMemo<"markdown" | "pdf" | "image" | "video" | "raw">(() => {
-    if (mimeType === "text/markdown") return "markdown";
+    if (mimeType === "text/markdown") return raw ? "raw" : "markdown";
     if (mimeType === "application/pdf") return "pdf";
     if (mimeType.startsWith("image/")) return "image";
     if (mimeType.startsWith("video/")) return "video";
     const e = ext(filePath);
-    if (e === "md" || e === "markdown") return "markdown";
+    if (e === "md" || e === "markdown") return raw ? "raw" : "markdown";
     if (e === "pdf") return "pdf";
     if (IMAGE_EXT.includes(e)) return "image";
     if (VIDEO_EXT.includes(e)) return "video";
     return "raw";
-  }, [filePath, mimeType]);
+  }, [filePath, mimeType, raw]);
 
   return (
     <div

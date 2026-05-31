@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { File, FileText, FolderOpen, Folder, Files } from "lucide-react";
+import { useMemo } from "react";
+import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { File, FileText, FolderOpen, Folder, Files, ChevronRight, ChevronDown } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
-import { fileTree } from "@/lib/tauri";
+import { useFileTree, absPath } from "@/hooks/useFileTree";
 import type { FileEntry } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -13,41 +14,90 @@ const STATUS_COLOR: Record<NonNullable<FileEntry["status"]>, string> = {
   R: "text-info",
 };
 
-function FileNode({ entry, depth }: { entry: FileEntry; depth: number }) {
-  const Icon = entry.isDirectory
-    ? FolderOpen
+// Above this many visible rows we virtualize via react-window (CLAUDE.md: lists
+// >50 items). Below it the plain ScrollArea keeps the DOM simple and testable.
+const VIRTUALIZE_THRESHOLD = 50;
+const ROW_HEIGHT = 22;
+// Fixed viewport for the virtualized list; the panel scrolls internally. Any
+// list long enough to virtualize (>50 rows) overflows this, so react-window
+// only mounts the visible window.
+const VIRTUAL_VIEWPORT_HEIGHT = 600;
+
+export interface FlatNode {
+  entry: FileEntry;
+  depth: number;
+}
+
+// Depth-first flatten honoring the expanded set: collapsed directories hide
+// their subtree so the rendered list matches what the user sees.
+export function flattenTree(
+  entries: FileEntry[],
+  expanded: Set<string>,
+  depth = 0,
+  acc: FlatNode[] = []
+): FlatNode[] {
+  for (const entry of entries) {
+    acc.push({ entry, depth });
+    if (entry.isDirectory && entry.children && expanded.has(entry.path)) {
+      flattenTree(entry.children, expanded, depth + 1, acc);
+    }
+  }
+  return acc;
+}
+
+interface RowProps {
+  node: FlatNode;
+  expanded: boolean;
+  onToggle: (path: string) => void;
+  onOpen: (entry: FileEntry) => void;
+}
+
+function FileRow({ node, expanded, onToggle, onOpen }: RowProps) {
+  const { entry, depth } = node;
+  const isDir = entry.isDirectory;
+  const Icon = isDir
+    ? expanded
+      ? FolderOpen
+      : Folder
     : entry.name.endsWith(".md")
       ? FileText
       : File;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
   return (
-    <div>
-      <div
-        className={cn(
-          "group/row flex items-center gap-1.5 pr-2 text-xs text-sidebar-fg",
-          "cursor-pointer transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
-        )}
-        style={{
-          paddingLeft: `${depth * 12 + 8}px`,
-          height: "22px",
-        }}
-        data-testid={`file-node-${entry.path}`}
-      >
-        <Icon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate flex-1">{entry.name}</span>
-        {entry.status && (
-          <span
-            className={cn(
-              "text-[10px] font-semibold leading-none",
-              STATUS_COLOR[entry.status]
-            )}
-          >
-            {entry.status}
-          </span>
-        )}
-      </div>
-      {entry.children?.map((child) => (
-        <FileNode key={child.path} entry={child} depth={depth + 1} />
-      ))}
+    <div
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "group/row flex items-center gap-1 pr-2 text-xs text-sidebar-fg",
+        "cursor-pointer transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+      )}
+      style={{ paddingLeft: `${depth * 12 + 8}px`, height: `${ROW_HEIGHT}px` }}
+      data-testid={`file-node-${entry.path}`}
+      onClick={() => (isDir ? onToggle(entry.path) : onOpen(entry))}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          isDir ? onToggle(entry.path) : onOpen(entry);
+        }
+      }}
+    >
+      {isDir ? (
+        <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" />
+      ) : (
+        <span className="w-3 shrink-0" />
+      )}
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="flex-1 truncate">{entry.name}</span>
+      {entry.status && (
+        <span
+          className={cn(
+            "text-[10px] font-semibold leading-none",
+            STATUS_COLOR[entry.status]
+          )}
+        >
+          {entry.status}
+        </span>
+      )}
     </div>
   );
 }
@@ -72,25 +122,18 @@ function EmptyState({
 
 export function FilesView() {
   const active = useWorkbench(selectActiveWorkspace);
-  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const openPreview = useWorkbench((s) => s.openPreview);
+  const { entries, expanded, toggle } = useFileTree(active?.worktreePath ?? null);
 
-  useEffect(() => {
-    if (!active?.worktreePath) {
-      setEntries([]);
-      return;
-    }
-    let cancelled = false;
-    fileTree(active.worktreePath)
-      .then((list) => {
-        if (!cancelled) setEntries(list);
-      })
-      .catch(() => {
-        if (!cancelled) setEntries([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [active?.worktreePath]);
+  const flat = useMemo(() => flattenTree(entries, expanded), [entries, expanded]);
+
+  // entry.path is RELATIVE; PreviewView -> fileRead does an OS read, so resolve
+  // to an ABSOLUTE path against the active worktree root before storing it.
+  const onOpen = (entry: FileEntry) => {
+    const root = active?.worktreePath;
+    if (!root) return;
+    openPreview({ path: absPath(root, entry.path), name: entry.name });
+  };
 
   if (!active) {
     return (
@@ -112,11 +155,44 @@ export function FilesView() {
     );
   }
 
+  if (flat.length > VIRTUALIZE_THRESHOLD) {
+    return (
+      <div className="h-full" data-testid="files-view">
+        <FixedSizeList
+          height={VIRTUAL_VIEWPORT_HEIGHT}
+          itemCount={flat.length}
+          itemSize={ROW_HEIGHT}
+          width="100%"
+        >
+          {({ index, style }: ListChildComponentProps) => {
+            const node = flat[index];
+            return (
+              <div style={style}>
+                <FileRow
+                  node={node}
+                  expanded={expanded.has(node.entry.path)}
+                  onToggle={toggle}
+                  onOpen={onOpen}
+                />
+              </div>
+            );
+          }}
+        </FixedSizeList>
+      </div>
+    );
+  }
+
   return (
     <ScrollArea className="h-full" data-testid="files-view">
       <div className="py-1">
-        {entries.map((e) => (
-          <FileNode key={e.path} entry={e} depth={0} />
+        {flat.map((node) => (
+          <FileRow
+            key={node.entry.path}
+            node={node}
+            expanded={expanded.has(node.entry.path)}
+            onToggle={toggle}
+            onOpen={onOpen}
+          />
         ))}
       </div>
     </ScrollArea>

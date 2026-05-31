@@ -99,6 +99,29 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("file_tree", { worktreePath: "/wt" });
   });
 
+  it("file read / search and fs watch wrappers", async () => {
+    await api.fileRead("/wt/a.md");
+    expect(invoke).toHaveBeenLastCalledWith("file_read", { filePath: "/wt/a.md" });
+    await api.fileSearch("/wt", "query");
+    expect(invoke).toHaveBeenLastCalledWith("file_search", {
+      worktreePath: "/wt", query: "query", limit: undefined,
+    });
+    await api.fileSearch("/wt", "query", 50);
+    expect(invoke).toHaveBeenLastCalledWith("file_search", {
+      worktreePath: "/wt", query: "query", limit: 50,
+    });
+    await api.fsWatchStart("/wt", ["/wt/src"]);
+    expect(invoke).toHaveBeenLastCalledWith("fs_watch_start", { root: "/wt", dirs: ["/wt/src"] });
+    await api.fsWatchStart("/wt");
+    expect(invoke).toHaveBeenLastCalledWith("fs_watch_start", { root: "/wt", dirs: undefined });
+    await api.fsWatchAdd(["/wt/lib"]);
+    expect(invoke).toHaveBeenLastCalledWith("fs_watch_add", { dirs: ["/wt/lib"] });
+    await api.fsWatchRemove(["/wt/lib"]);
+    expect(invoke).toHaveBeenLastCalledWith("fs_watch_remove", { dirs: ["/wt/lib"] });
+    await api.fsWatchStop();
+    expect(invoke).toHaveBeenLastCalledWith("fs_watch_stop");
+  });
+
   it("kanban / presets / mcp / misc", async () => {
     await api.kanbanList("p1");
     expect(invoke).toHaveBeenLastCalledWith("kanban_list", { projectId: "p1" });
@@ -270,5 +293,10 @@ describe("tauri command wrappers", () => {
     expect(mcpStatusCb).toHaveBeenCalledWith({
       name: "fs", status: "restarting", restarts: 1, exitCode: 1,
     });
+
+    const fsChangedCb = vi.fn();
+    await api.onFsChanged(fsChangedCb);
+    captured["fs:changed"]({ payload: { root: "/wt", paths: ["/wt/a.ts"] } });
+    expect(fsChangedCb).toHaveBeenCalledWith({ root: "/wt", paths: ["/wt/a.ts"] });
   });
 });

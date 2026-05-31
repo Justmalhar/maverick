@@ -35,7 +35,10 @@ pub use caffeinate::{caffeinate_start, caffeinate_status, caffeinate_stop};
 pub use config::{config_load, config_save};
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
-pub use file_tree::file_tree;
+pub use file_tree::{
+    file_read, file_search, file_tree, fs_watch_add, fs_watch_remove, fs_watch_start,
+    fs_watch_stop,
+};
 pub use git::{
     git_blame, git_branch_list, git_branches, git_checkout, git_cherry_pick, git_commit,
     git_conflicts, git_diff_stat, git_fetch, git_log, git_pull, git_push, git_resolve_conflict,

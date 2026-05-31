@@ -162,6 +162,33 @@ describe("useShortcuts", () => {
     );
   });
 
+  it("preview.open shows the Preview aux view (revealing the bar if hidden)", () => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      layout: { ...useWorkbench.getState().layout, auxiliaryBarVisible: false },
+    });
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+v"));
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
+  });
+
+  it("preview.open keeps the bar visible when already shown", () => {
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+v"));
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
+  });
+
+  it("preview.toggleMarkdown flips the preview raw flag", () => {
+    useWorkbench.getState().openPreview({ path: "/wt/a.md", name: "a.md" });
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+m"));
+    expect(useWorkbench.getState().previewFile?.raw).toBe(true);
+    act(() => fire("$mod+Shift+m"));
+    expect(useWorkbench.getState().previewFile?.raw).toBe(false);
+  });
+
   it("browser.toggleInspect dispatches maverick:browser:toggleInspect", () => {
     renderHook(() => useShortcuts());
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");

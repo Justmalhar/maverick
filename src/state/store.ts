@@ -26,6 +26,15 @@ interface PanelLayout {
 
 export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps";
 
+export interface PreviewFile {
+  /** Absolute path of the file being previewed. */
+  path: string;
+  /** Display label (basename) for the preview tab. */
+  name: string;
+  /** When true, markdown renders as raw source instead of the rendered view. */
+  raw?: boolean;
+}
+
 interface WorkbenchState {
   // Data
   projects: Project[];
@@ -46,6 +55,9 @@ interface WorkbenchState {
 
   // Layout
   layout: PanelLayout;
+
+  // Active file preview shown in the AuxiliaryBar "preview" tab.
+  previewFile: PreviewFile | null;
 
   // Overlays
   commandPaletteOpen: boolean;
@@ -73,6 +85,11 @@ interface WorkbenchState {
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
+
+  // Preview
+  openPreview: (file: PreviewFile) => void;
+  closePreview: () => void;
+  togglePreviewRaw: () => void;
 
   // Layout actions
   setActivityView: (view: ActivityView) => void;
@@ -127,6 +144,8 @@ export const useWorkbench = create<WorkbenchState>()(
       activityView: "projects",
       auxiliaryView: "files",
     },
+
+    previewFile: null,
 
     commandPaletteOpen: false,
     quickOpenOpen: false,
@@ -185,6 +204,19 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({ splitTrees: { ...s.splitTrees, [workspaceId]: tree } })),
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
+
+    openPreview: (file) =>
+      set((s) => ({
+        previewFile: file,
+        layout: { ...s.layout, auxiliaryView: "preview", auxiliaryBarVisible: true },
+      })),
+    closePreview: () => set({ previewFile: null }),
+    togglePreviewRaw: () =>
+      set((s) => ({
+        previewFile: s.previewFile
+          ? { ...s.previewFile, raw: !s.previewFile.raw }
+          : s.previewFile,
+      })),
 
     setActivityView: (view) =>
       set((s) => ({

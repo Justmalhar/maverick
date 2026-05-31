@@ -258,6 +258,31 @@ export type ActivityView =
 
 export type AuxiliaryView = "files" | "diff" | "preview" | "none";
 
+export interface FileReadResult {
+  content: string;
+  size: number;
+  binary: boolean;
+  unreadable: boolean;
+}
+
+export interface SearchHit {
+  rel: string;
+  name: string;
+  // QuickOpen is a files-only finder; the sidecar never emits directory hits,
+  // so this is always false. Kept for IPC-type parity with FileEntry.
+  isDirectory: false;
+}
+
+export interface SearchResult {
+  hits: SearchHit[];
+  truncated: boolean;
+}
+
+export interface FsChangedPayload {
+  root: string;
+  paths: string[];
+}
+
 // ---------- Settings ----------
 
 export type SettingsKey =

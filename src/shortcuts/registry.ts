@@ -34,6 +34,8 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "editor.toggleMode", label: "Toggle Agent ↔ Terminal", category: "Editor", keys: "$mod+t", display: "⌘T" },
   { id: "editor.focusInput", label: "Focus input bar", category: "Editor", keys: "$mod+l", display: "⌘L" },
   { id: "ai.review", label: "AI Code Review of working changes", category: "Editor", keys: "$mod+Shift+r", display: "⌘⇧R" },
+  { id: "preview.open", label: "Open Preview tab", category: "Editor", keys: "$mod+Shift+v", display: "⌘⇧V" },
+  { id: "preview.toggleMarkdown", label: "Toggle Markdown raw ↔ preview", category: "Editor", keys: "$mod+Shift+m", display: "⌘⇧M" },
 
   // Browser
   { id: "browser.toggleInspect", label: "Toggle element inspector", category: "Global", keys: "$mod+Shift+i", display: "⌘⇧I" },

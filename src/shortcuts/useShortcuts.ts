@@ -52,6 +52,12 @@ export function useShortcuts() {
           onAgentFocus: () => setEditorMode(ws.id, "agent"),
         }).catch((e) => console.error("AI review failed", e));
       },
+      "preview.open": () => {
+        const { setAuxiliaryView, toggleAuxiliaryBar, layout } = useWorkbench.getState();
+        if (!layout.auxiliaryBarVisible) toggleAuxiliaryBar();
+        setAuxiliaryView("preview");
+      },
+      "preview.toggleMarkdown": () => useWorkbench.getState().togglePreviewRaw(),
       "browser.toggleInspect": () => {
         window.dispatchEvent(new CustomEvent("maverick:browser:toggleInspect"));
       },

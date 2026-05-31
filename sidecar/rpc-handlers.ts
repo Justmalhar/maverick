@@ -16,6 +16,9 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
+import { FsWatcher } from "./fs-watcher";
+import { FileSearch } from "./file-search";
+import { FileReader } from "./file-reader";
 import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
@@ -114,6 +117,17 @@ const Schemas = {
     branch: nullishOptional(z.string()),
   }),
   fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
+  fileRead: z.object({ filePath: z.string() }),
+  fileSearch: z.object({
+    worktreePath: z.string(),
+    query: z.string(),
+    limit: nullishOptional(z.number().int().positive()),
+  }),
+  fsWatchStart: z.object({
+    root: z.string(),
+    dirs: nullishOptional(z.array(z.string())),
+  }),
+  fsWatchDirs: z.object({ dirs: z.array(z.string()).default([]) }),
   kanbanList: z.object({ projectId: z.string() }),
   kanbanUpsert: StringParam,
   presetList: z.object({ projectPath: nullishOptional(z.string()) }),
@@ -197,6 +211,9 @@ export interface RpcHandlersOptions {
   context?: ContextTracker;
   attachments?: AttachmentStore;
   fileTree?: FileTree;
+  fsWatcher?: FsWatcher;
+  fileSearch?: FileSearch;
+  fileReader?: FileReader;
   projectSettings?: ProjectSettingsStore;
   caffeinate?: Caffeinate;
   instructions?: InstructionsResolver;
@@ -219,6 +236,9 @@ export class RpcHandlers {
   readonly context: ContextTracker;
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
+  readonly fsWatcher: FsWatcher;
+  readonly fileSearch: FileSearch;
+  readonly fileReader: FileReader;
   readonly projectSettings: ProjectSettingsStore;
   readonly caffeinate: Caffeinate;
   readonly instructions: InstructionsResolver;
@@ -245,10 +265,13 @@ export class RpcHandlers {
     this.context = opts.context ?? new ContextTracker(this.store);
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
+    this.notifier = opts.notifier ?? stdoutNotifier;
+    this.fsWatcher = opts.fsWatcher ?? new FsWatcher({ notifier: this.notifier });
+    this.fileSearch = opts.fileSearch ?? new FileSearch();
+    this.fileReader = opts.fileReader ?? new FileReader();
     this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
-    this.notifier = opts.notifier ?? stdoutNotifier;
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -557,6 +580,33 @@ export class RpcHandlers {
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);
         return this.fileTree.tree(p);
+      }
+      case "file.read": {
+        const p = Schemas.fileRead.parse(params);
+        return this.fileReader.read(p);
+      }
+      case "file.search": {
+        const p = Schemas.fileSearch.parse(params);
+        return this.fileSearch.search({
+          worktreePath: p.worktreePath,
+          query: p.query,
+          limit: p.limit,
+        });
+      }
+      case "fs.watch.start": {
+        const p = Schemas.fsWatchStart.parse(params);
+        return this.fsWatcher.start({ root: p.root, dirs: p.dirs });
+      }
+      case "fs.watch.add": {
+        const p = Schemas.fsWatchDirs.parse(params);
+        return this.fsWatcher.add({ dirs: p.dirs });
+      }
+      case "fs.watch.remove": {
+        const p = Schemas.fsWatchDirs.parse(params);
+        return this.fsWatcher.remove({ dirs: p.dirs });
+      }
+      case "fs.watch.stop": {
+        return this.fsWatcher.stop();
       }
       case "kanban.list": {
         const p = Schemas.kanbanList.parse(params);
