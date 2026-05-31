@@ -17,7 +17,10 @@
 //!   `Custom(String)`.
 
 mod agent_event;
+pub mod bridge;
+pub(crate) mod connection;
 mod protocol;
+pub mod ws_server;
 
 pub use agent_event::{
     AgentEvent, AgentProvider, BadgeKind, EffortLevel, ElicitationField, FileDiff, NotificationType,
@@ -27,6 +30,7 @@ pub use agent_event::{
 pub use protocol::{
     ClientMessage, DirectoryEntry, GitFileStatus, GitStatus, IndexEntry, ServerMessage, SessionInfo,
 };
+pub use ws_server::{RemoteServer, RemoteStatus, DEFAULT_PORT};
 
 /// Serde adapter that maps a `Vec<u8>` field to/from a base64 string, matching
 /// the Swift `Data(base64Encoded:)` / `base64EncodedString()` wire shape.
