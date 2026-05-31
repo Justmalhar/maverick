@@ -30,3 +30,7 @@ coverage/
 
 # Superpowers session artefacts
 .superpowers/
+
+# Claude Code runtime/scratch (git worktrees, locks, session state) — never commit.
+# A stray worktree gitlink under here was previously committed by accident.
+.claude/
