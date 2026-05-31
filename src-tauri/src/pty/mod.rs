@@ -1,4 +1,5 @@
 mod da_filter;
+mod ring;
 mod utf8_carry;
 
 use std::collections::HashMap;
@@ -13,7 +14,15 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use self::da_filter::DaFilter;
+use self::ring::Ring;
 use self::utf8_carry::Utf8Carry;
+
+// Re-exported so Companion-3's WS server (a sibling module in this crate) can
+// name the tee handle and the budget constants as `crate::pty::{...}` without
+// reaching into the private `ring` submodule. Consumer-less until Companion-3
+// lands; the re-export is part of the public surface that feature will call.
+#[allow(unused_imports)]
+pub use self::ring::{Subscription, REPLAY_CAP, RING_CAP};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -104,6 +113,12 @@ struct PtySession {
     pending: Pending,
     // Joined only by the waiter thread, never on the IPC worker.
     reader_handle: Option<JoinHandle<()>>,
+    // Second sink for coalesced output: bounded 1 MiB scrollback ring + tee
+    // fan-out. Additive to the `pty:data` emit — Companion-3's WS server attaches
+    // here for replay-then-live. Held on the session so an attach can reach it.
+    // Read only via PtyManager::subscribe/read_since, which Companion-3 calls.
+    #[allow(dead_code)]
+    ring: Ring,
 }
 
 impl Drop for PtySession {
@@ -187,6 +202,10 @@ impl PtyManager {
         let pending: Pending =
             Arc::new((Mutex::new(String::with_capacity(READ_BUF)), Condvar::new()));
         let done = Arc::new(AtomicBool::new(false));
+        // Second output sink: bounded scrollback ring + tee. The flusher and the
+        // waiter both append coalesced chunks here in addition to emitting
+        // `pty:data` — the webview contract is unchanged; this only adds history.
+        let ring = Ring::new();
 
         // Armed until all three threads spawn. If any spawn below returns Err, the
         // guard's Drop sets `done` + notifies so the already-running reader/flusher
@@ -247,6 +266,7 @@ impl PtyManager {
         let id_flush = id.clone();
         let pending_f = pending.clone();
         let done_f = done.clone();
+        let ring_f = ring.clone();
         let flusher_handle = std::thread::Builder::new()
             .name(format!("mv-pty-flusher-{id_flush}"))
             .spawn(move || {
@@ -268,6 +288,9 @@ impl PtyManager {
                     if chunk.is_empty() {
                         continue;
                     }
+                    // Second sink first: feed the ring before the emit so any
+                    // attach that races the emit still observes this chunk.
+                    ring_f.push(chunk.as_bytes());
                     let _ = app_flush.emit(
                         "pty:data",
                         PtyData {
@@ -291,6 +314,7 @@ impl PtyManager {
                     done: done.clone(),
                     pending: pending.clone(),
                     reader_handle: Some(reader_handle),
+                    ring: ring.clone(),
                 },
             );
 
@@ -299,6 +323,7 @@ impl PtyManager {
         let id_exit = id.clone();
         let pending_e = pending;
         let done_e = done;
+        let ring_e = ring;
         let waiter = std::thread::Builder::new()
             .name(format!("mv-pty-waiter-{id_exit}"))
             .spawn(move || {
@@ -341,6 +366,9 @@ impl PtyManager {
                 let _ = flusher_handle.join();
 
                 if !tail.is_empty() {
+                    // Mirror the flusher: ring before emit, so the final tail is
+                    // part of the scrollback a late attach can still replay.
+                    ring_e.push(tail.as_bytes());
                     let _ = app_exit.emit(
                         "pty:data",
                         PtyData {
@@ -442,6 +470,33 @@ impl PtyManager {
         Ok(())
     }
 
+    /// Attach to a live session's scrollback as a tee consumer: get the
+    /// most-recent up-to-256 KiB replay suffix plus a live receiver for all
+    /// subsequent output, gaplessly. `None` if the pty is unknown. This is the
+    /// entry point Companion-3's WS server uses to serve a phone/desktop
+    /// re-attach with history-then-live. The returned receiver lives independent
+    /// of the sessions lock, so a slow consumer never blocks PTY ops.
+    #[allow(dead_code)]
+    pub fn subscribe(&self, pty_id: &str) -> Option<ring::Subscription> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(pty_id)
+            .map(|s| s.ring.subscribe())
+    }
+
+    /// Page history by absolute offset for a session: returns
+    /// `(bytes_since_offset, next_offset, dropped)`. `None` if unknown. Lets a
+    /// consumer resume from a recorded cursor and detect gaps via `dropped`.
+    #[allow(dead_code)]
+    pub fn read_since(&self, pty_id: &str, offset: u64) -> Option<(Vec<u8>, u64, u64)> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(pty_id)
+            .map(|s| s.ring.read_since(offset))
+    }
+
     #[cfg(test)]
     fn session_count(&self) -> usize {
         self.sessions.lock().unwrap().len()
@@ -488,6 +543,7 @@ mod tests {
             done,
             pending,
             reader_handle: None,
+            ring: Ring::new(),
         };
         (session, child)
     }
