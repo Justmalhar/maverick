@@ -6,6 +6,41 @@
 
 ---
 
+## Delivery Status (as of 2026-05-31)
+
+**All 23 planned workstreams are implemented, reviewed, and committed green.**
+
+| Group | Workstreams | Status |
+|---|---|---|
+| Desktop P0 | E, A, B, C, D, F | ✅ done |
+| Desktop P1 | A, B, C, D, E | ✅ done |
+| Desktop P2 | A, B | ✅ done |
+| Desktop P3 | A, B | ✅ done |
+| Companion | 1, 2, 3, 4, 5, 6 | ✅ done |
+| RN/Web client | 1, 2 | ✅ done |
+
+Each landed only after its gate passed: `tsc` clean, `bun run test:coverage`
+at **100 lines / ≥95 branches / 100 functions / 100 statements** (CI-enforced),
+`cargo build` + `cargo test` (289 lib + 6 integration) green, and `bun test`
+for the sidecar. The companion server (§5) **replaces `MaverickAgent`**, which is
+deprecated (`maverick-app/server/DEPRECATED.md`) and kept one release as a
+fallback. The IDE-as-server architecture is documented in `SYSTEM-DESIGN.md §12–13`.
+
+**Remaining (owner-only, cannot run headlessly):** distribution
+live-verification — regenerate the real minisign keypair, set CI signing
+secrets, publish a signed release with `<asset>.sha256` companions, then verify
+the in-app updater + `getmaverick.sh` end-to-end. Tracked as task **#24**; the
+placeholders it replaces are documented in `src-tauri/DISTRIBUTION.md`. Also see
+the live cutover checklist in `maverick-app/server/DEPRECATED.md` (validate the
+unmodified client against the IDE server before deleting the old daemon).
+
+Open Decisions §10 #2 (hook merge) and #3 (session mapping) were resolved during
+the build: `hook_server.rs` does an idempotent merge of `~/.claude/settings.json`,
+and remote sessions use a parallel `session_registry.rs` so a client can attach
+to terminals already open on the desktop.
+
+---
+
 ## 0. Locked Decisions (ADRs)
 
 | # | Decision | Choice | Rationale |
