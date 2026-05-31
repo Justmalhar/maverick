@@ -1,11 +1,31 @@
+use serde::{Deserialize, Serialize};
 use tauri::webview::WebviewBuilder;
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, WebviewUrl};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewUrl};
 
 const BROWSER_LABEL: &str = "maverick-browser";
+const CAPTURED_EVENT: &str = "browser://captured";
+
+// One element capture from the embedded inspector. Travels JS -> the
+// first-class `browser_capture` command -> a typed Tauri event to the main
+// window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapturedElement {
+    pub selector: String,
+    pub text: String,
+    pub html: String,
+}
 
 // Injected before each page load. Exposes window.__mvInspect.{enable,disable}()
-// which the host toggles via eval; on click it computes a CSS path and emits a
-// `browser://captured` Tauri event back to the main window.
+// which the host toggles via eval; on click it computes a CSS path and forwards
+// it to the `browser_capture` command, which re-emits a typed `browser://captured`
+// event to the main window.
+//
+// WHY a first-class command instead of `plugin:event|emit`: the old path poked
+// the undocumented `__TAURI_INTERNALS__.invoke('plugin:event|emit', ...)` shape
+// and swallowed every failure, so a broken capture channel was invisible. The
+// page still has to reach Rust through the IPC bridge (`__TAURI_INTERNALS__`),
+// but it now targets a command we own and validate, and capture failures are
+// surfaced to the page console + Rust logs rather than silently dropped.
 const INSPECT_SCRIPT: &str = r#"
 (function () {
   if (window.__mvInspect) return;
@@ -31,12 +51,14 @@ const INSPECT_SCRIPT: &str = r#"
     return parts.join(' > ');
   }
   function emit(payload) {
-    try {
-      window.__TAURI_INTERNALS__.invoke('plugin:event|emit', {
-        event: 'browser://captured',
-        payload: payload,
-      });
-    } catch (e) { /* host not ready */ }
+    var ipc = window.__TAURI_INTERNALS__;
+    if (!ipc || typeof ipc.invoke !== 'function') {
+      console.error('[maverick] capture channel unavailable: Tauri IPC missing');
+      return;
+    }
+    Promise.resolve(ipc.invoke('browser_capture', { element: payload })).catch(function (e) {
+      console.error('[maverick] element capture failed', e);
+    });
   }
   function onMove(e) {
     var t = e.target;
@@ -173,4 +195,63 @@ pub async fn browser_eval<R: Runtime>(app: AppHandle<R>, script: String) -> Resu
         .get_webview(BROWSER_LABEL)
         .ok_or_else(|| "browser webview not open".to_string())?;
     webview.eval(&script).map_err(|e| e.to_string())
+}
+
+/// First-class capture sink for the embedded inspector. Re-emits the captured
+/// element to the main window as a typed `browser://captured` event. Emit
+/// failures are surfaced (returned to the caller + logged) rather than swallowed.
+#[tauri::command]
+pub async fn browser_capture<R: Runtime>(
+    app: AppHandle<R>,
+    element: CapturedElement,
+) -> Result<(), String> {
+    app.emit(CAPTURED_EVENT, element).map_err(|e| {
+        let msg = format!("failed to emit {CAPTURED_EVENT}: {e}");
+        log::warn!("{msg}");
+        msg
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    use tauri::Listener;
+
+    fn sample() -> CapturedElement {
+        CapturedElement {
+            selector: "div.card > button".into(),
+            text: "Buy".into(),
+            html: "<button/>".into(),
+        }
+    }
+
+    #[test]
+    fn captured_element_round_trips_through_serde() {
+        let json = serde_json::to_string(&sample()).unwrap();
+        let back: CapturedElement = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.selector, "div.card > button");
+        assert_eq!(back.text, "Buy");
+        assert_eq!(back.html, "<button/>");
+    }
+
+    #[tokio::test]
+    async fn browser_capture_emits_typed_event() {
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+
+        let fired = Arc::new(AtomicBool::new(false));
+        let seen = fired.clone();
+        handle.listen(CAPTURED_EVENT, move |event| {
+            let parsed: CapturedElement = serde_json::from_str(event.payload()).unwrap();
+            assert_eq!(parsed.selector, "div.card > button");
+            seen.store(true, Ordering::SeqCst);
+        });
+
+        browser_capture(handle, sample()).await.unwrap();
+        assert!(fired.load(Ordering::SeqCst), "capture event was not delivered");
+    }
 }

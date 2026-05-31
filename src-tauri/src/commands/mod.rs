@@ -28,7 +28,7 @@ pub use bootstrap::{
     read_maverick_md, request_notification_permission, reset_first_run, write_maverick_md,
 };
 pub use browser::{
-    browser_close, browser_eval, browser_hide, browser_navigate, browser_open,
+    browser_capture, browser_close, browser_eval, browser_hide, browser_navigate, browser_open,
     browser_set_bounds, browser_show,
 };
 pub use caffeinate::{caffeinate_start, caffeinate_status, caffeinate_stop};

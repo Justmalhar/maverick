@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "browser-webview",
-  "description": "Lets the embedded Browser webview emit element-capture events back to the main window.",
+  "description": "Scopes the embedded Browser webview's IPC bridge. Element capture flows through the first-class `browser_capture` command (an app command, allowed by default for this webview); the host re-emits `browser://captured` to the main window. The webview no longer emits Tauri events directly.",
   "webviews": ["maverick-browser"],
-  "permissions": ["core:event:default"]
+  "permissions": ["core:event:allow-listen"]
 }

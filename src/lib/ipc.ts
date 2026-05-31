@@ -296,6 +296,7 @@ export type SettingsKey =
   | "advanced.largeTextThreshold"
   | "advanced.lruLimit"
   | "advanced.caffeinate"
+  | "browser.engine"
   | "version.updateChannel";
 
 export type SettingsValue = string | number | boolean;

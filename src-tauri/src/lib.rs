@@ -189,6 +189,7 @@ pub fn run() {
             browser_hide,
             browser_close,
             browser_eval,
+            browser_capture,
             bootstrap_status,
             bootstrap_update_settings,
             bootstrap_complete,
