@@ -17,9 +17,18 @@
 //!   `Custom(String)`.
 
 mod agent_event;
+pub(crate) mod adapters;
+pub mod agent_host;
+pub mod auth;
+pub mod auth_session;
 pub mod bridge;
 pub(crate) mod connection;
+pub mod device_store;
+pub mod hook_server;
+pub mod pairing;
 mod protocol;
+pub mod session_registry;
+pub mod transport;
 pub mod ws_server;
 
 pub use agent_event::{
@@ -27,9 +36,18 @@ pub use agent_event::{
     PermissionEvent, SessionEndReason, SessionMode, SessionSource, StopFailureReason, ToolCallEvent,
     ToolKind,
 };
+pub use auth::{capability_of, Capability, CapabilityGate, ConnectionTrust, GateDecision};
+pub use auth_session::{PairingTicket, SecurityContext};
+pub use device_store::{DeviceStore, DeviceStoreError, PairedDevice, PinOutcome};
+pub use session_registry::{SessionHandle, SessionRegistry};
+pub use pairing::{
+    device_id_for, safety_number, short_fingerprint, HandshakeOutcome, NoiseResponder,
+    PairingError, PairingRegistry, StaticIdentity,
+};
 pub use protocol::{
     ClientMessage, DirectoryEntry, GitFileStatus, GitStatus, IndexEntry, ServerMessage, SessionInfo,
 };
+pub use transport::{BindPolicy, BindScope, MdnsAdvertiser, RemoteDialer, TransportTier};
 pub use ws_server::{RemoteServer, RemoteStatus, DEFAULT_PORT};
 
 /// Serde adapter that maps a `Vec<u8>` field to/from a base64 string, matching

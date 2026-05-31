@@ -31,11 +31,15 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::{json, Value};
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::pty::Subscription;
+use crate::remote::agent_host::AgentHost;
+use crate::remote::hook_server::HookBridge;
 use crate::remote::{
-    ClientMessage, DirectoryEntry, GitFileStatus, GitStatus, IndexEntry, ServerMessage, SessionInfo,
+    AgentProvider, ClientMessage, DirectoryEntry, GitFileStatus, GitStatus, IndexEntry,
+    ServerMessage, SessionInfo, SessionMode,
 };
 
 /// Max diff bytes streamed inline before we flag `truncated`. 1 MiB keeps a
@@ -97,6 +101,9 @@ pub struct BridgeOutcome {
     /// Present for `attach_session`: the subscription to drain as live `Output`,
     /// tagged with the session UUID to stamp on each frame.
     pub attach: Option<AttachDirective>,
+    /// Present when this connection should start forwarding `agent_event` frames
+    /// for the given agent session from the shared bus (chat-mode attach).
+    pub agent_attach: Option<Uuid>,
 }
 
 /// A successful attach: the session to stream and its live tee subscription.
@@ -107,32 +114,77 @@ pub struct AttachDirective {
 
 impl BridgeOutcome {
     fn reply(msg: ServerMessage) -> Self {
-        Self { replies: vec![msg], attach: None }
+        Self { replies: vec![msg], attach: None, agent_attach: None }
     }
     fn replies(replies: Vec<ServerMessage>) -> Self {
-        Self { replies, attach: None }
+        Self { replies, attach: None, agent_attach: None }
     }
     fn none() -> Self {
-        Self { replies: vec![], attach: None }
+        Self { replies: vec![], attach: None, agent_attach: None }
     }
 }
+
+/// Bounded capacity of the agent-event bus. A burst of token deltas is the worst
+/// case; 1024 frames in flight per lagging subscriber is ample (a slow client
+/// that lags further drops the oldest frames, which `connection` logs).
+const AGENT_BUS_CAPACITY: usize = 1024;
 
 /// Decodes and routes `ClientMessage`s for one host. Shared across every
 /// connection (the session registry is process-wide, mirroring the desktop's
 /// single `PtyManager`); each connection owns its own attach lifecycle.
+///
+/// Companion-4 adds the agent surface: `agent_host` owns chat-mode CLI processes
+/// and publishes normalized `agent_event` frames on `bus`; `hook_bridge` resolves
+/// blocking permission requests from the Claude hook server. Both are wired here
+/// so `create_agent_session`/`agent_input`/`switch_session_mode`/
+/// `permission_response` are fully handled (no longer deferred).
 pub struct RemoteBridge {
     sidecar: Arc<dyn SidecarRequest>,
     pty: Arc<dyn PtyHost>,
     sessions: Mutex<HashMap<Uuid, TrackedSession>>,
+    agent_host: Arc<AgentHost>,
+    hook_bridge: HookBridge,
+    bus: broadcast::Sender<(Uuid, ServerMessage)>,
 }
 
 impl RemoteBridge {
+    /// Production/default constructor. Builds the agent host atop the real
+    /// `ProcessSpawner` (spawns provider CLIs, env-inherited, no key injection)
+    /// and a fresh agent-event bus + hook bridge.
     pub fn new(sidecar: Arc<dyn SidecarRequest>, pty: Arc<dyn PtyHost>) -> Self {
+        let spawner = Arc::new(crate::remote::agent_host::ProcessSpawner);
+        Self::with_spawner(sidecar, pty, spawner)
+    }
+
+    /// Construct with an injected agent spawner (tests pass a fake CLI).
+    pub fn with_spawner(
+        sidecar: Arc<dyn SidecarRequest>,
+        pty: Arc<dyn PtyHost>,
+        spawner: Arc<dyn crate::remote::agent_host::AgentSpawner>,
+    ) -> Self {
+        let (bus, _rx) = broadcast::channel(AGENT_BUS_CAPACITY);
+        let agent_host = Arc::new(AgentHost::new(spawner, bus.clone()));
+        let hook_bridge = HookBridge::new(bus.clone(), agent_host.clone());
         Self {
             sidecar,
             pty,
             sessions: Mutex::new(HashMap::new()),
+            agent_host,
+            hook_bridge,
+            bus,
         }
+    }
+
+    /// Subscribe to the agent-event bus. Each connection takes one receiver and
+    /// forwards events for the session it is attached to.
+    pub fn subscribe_agent_events(&self) -> broadcast::Receiver<(Uuid, ServerMessage)> {
+        self.bus.subscribe()
+    }
+
+    /// The hook bridge, so the host can bind the localhost:7789 hook server and
+    /// install the Claude settings hooks at startup.
+    pub fn hook_bridge(&self) -> HookBridge {
+        self.hook_bridge.clone()
     }
 
     /// Resolve a protocol session UUID to the core's pty string id.
@@ -212,14 +264,28 @@ impl RemoteBridge {
                 self.index_project(request_id, path, refresh).await
             }
 
-            // Deferred to Companion-4 (agent chat / AgentEvent pipeline).
-            ClientMessage::CreateAgentSession { .. }
-            | ClientMessage::SwitchSessionMode { .. }
-            | ClientMessage::AgentInput { .. }
-            | ClientMessage::PermissionResponse { .. } => {
-                BridgeOutcome::reply(ServerMessage::Error {
-                    message: "agent sessions are not yet implemented (Companion-4)".into(),
-                })
+            ClientMessage::CreateAgentSession { name, provider, cwd } => {
+                self.create_agent_session(name, provider, cwd).await
+            }
+
+            ClientMessage::SwitchSessionMode { session_id, mode } => {
+                self.switch_session_mode(session_id, mode).await
+            }
+
+            ClientMessage::AgentInput { session_id, text } => {
+                match self.agent_host.input(session_id, &text).await {
+                    Ok(()) => BridgeOutcome::none(),
+                    Err(e) => BridgeOutcome::reply(ServerMessage::Error { message: e }),
+                }
+            }
+
+            ClientMessage::PermissionResponse { session_id, request_id, allowed } => {
+                // Route on (session_id, request_id): a remote may only answer a
+                // prompt for the session it raised, never another session's.
+                self.hook_bridge
+                    .resolve_permission(session_id, &request_id.to_string(), allowed)
+                    .await;
+                BridgeOutcome::none()
             }
 
             // Upload store is out of Companion-3's read-mostly scope.
@@ -311,6 +377,7 @@ impl RemoteBridge {
         BridgeOutcome {
             replies,
             attach: Some(AttachDirective { session_id, subscription: sub }),
+            agent_attach: None,
         }
     }
 
@@ -435,6 +502,147 @@ impl RemoteBridge {
             Err(message) => BridgeOutcome::reply(ServerMessage::IndexFailed { request_id, message }),
         }
     }
+
+    // ---- Agent surface (Companion-4) ---------------------------------------
+
+    /// Spawn a chat-mode agent session. Registers a `SessionInfo` (with the
+    /// provider + chat mode set), starts the CLI via `AgentHost`, and replies
+    /// `AgentSessionCreated` + an updated `session_list`. The auto-attach is
+    /// implicit: the connection forwards `agent_event` frames for this session
+    /// from the bus once it records it as attached (see `connection`).
+    async fn create_agent_session(
+        &self,
+        name: String,
+        provider: AgentProvider,
+        cwd: Option<String>,
+    ) -> BridgeOutcome {
+        let session_id = Uuid::new_v4();
+        if let Err(e) = self
+            .agent_host
+            .create(session_id, provider, cwd, None)
+            .await
+        {
+            return BridgeOutcome::reply(ServerMessage::Error { message: e });
+        }
+
+        let info = SessionInfo {
+            id: session_id,
+            name,
+            shell: provider_shell(provider),
+            created_at: Utc::now(),
+            agent_provider: Some(provider),
+            session_mode: Some(SessionMode::Chat),
+        };
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(session_id, TrackedSession { pty_id: String::new(), info: info.clone() });
+
+        BridgeOutcome {
+            replies: vec![
+                ServerMessage::AgentSessionCreated { session: info },
+                self.session_list(),
+            ],
+            attach: None,
+            agent_attach: Some(session_id),
+        }
+    }
+
+    /// Switch an agent session between chat and terminal mode.
+    ///
+    /// Companion-4 fully implements the chat path. Terminal mode spawns the
+    /// provider CLI under a real PTY (so the client gets raw scrollback/live
+    /// bytes); on success it auto-attaches like a regular PTY session. Chat mode
+    /// re-creates the agent process with resume support, falling through to the
+    /// agent bus.
+    async fn switch_session_mode(&self, session_id: Uuid, mode: SessionMode) -> BridgeOutcome {
+        let known = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&session_id)
+            .map(|s| s.info.agent_provider);
+        let provider = match known {
+            Some(Some(p)) => p,
+            // Either unknown or a non-agent PTY session: nothing to switch.
+            _ => {
+                return BridgeOutcome::reply(ServerMessage::Error {
+                    message: format!("session {session_id} is not an agent session"),
+                })
+            }
+        };
+
+        match mode {
+            SessionMode::Terminal => {
+                // Tear down the chat process, spawn the CLI under a PTY, attach.
+                self.agent_host.remove(&session_id);
+                let pty_id = match self.pty.spawn(&provider_command(provider), None) {
+                    Ok(id) => id,
+                    Err(e) => return BridgeOutcome::reply(ServerMessage::Error { message: e }),
+                };
+                self.update_session(session_id, |s| {
+                    s.pty_id = pty_id;
+                    s.info.session_mode = Some(SessionMode::Terminal);
+                });
+                let mut out = self.attach(session_id);
+                out.replies.insert(0, self.session_list());
+                out
+            }
+            SessionMode::Chat => {
+                // Re-create the chat agent (no resume id tracked at the protocol
+                // layer yet — Claude resume id lives in AgentHost's index).
+                if let Err(e) = self.agent_host.create(session_id, provider, None, None).await {
+                    return BridgeOutcome::reply(ServerMessage::Error { message: e });
+                }
+                self.update_session(session_id, |s| {
+                    s.pty_id = String::new();
+                    s.info.session_mode = Some(SessionMode::Chat);
+                });
+                BridgeOutcome {
+                    replies: vec![self.session_list()],
+                    attach: None,
+                    agent_attach: Some(session_id),
+                }
+            }
+        }
+    }
+
+    fn update_session(&self, session_id: Uuid, f: impl FnOnce(&mut TrackedSession)) {
+        if let Some(s) = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(&session_id)
+        {
+            f(s);
+        }
+    }
+}
+
+/// The `shell` label shown for an agent session in `session_list` — the provider
+/// name, mirroring Swift's `provider.rawValue`.
+fn provider_shell(provider: AgentProvider) -> String {
+    match provider {
+        AgentProvider::ClaudeCode => "claudeCode",
+        AgentProvider::Codex => "codex",
+        AgentProvider::Antigravity => "antigravity",
+        AgentProvider::Opencode => "opencode",
+        AgentProvider::Hermes => "hermes",
+    }
+    .to_string()
+}
+
+/// The CLI executable for terminal-mode agent sessions (resolved on PATH by the
+/// PTY host). Mirrors the chat-mode launch executables.
+fn provider_command(provider: AgentProvider) -> String {
+    match provider {
+        AgentProvider::ClaudeCode => "claude",
+        AgentProvider::Codex => "codex",
+        AgentProvider::Antigravity => "antigravity",
+        AgentProvider::Opencode => "opencode",
+        AgentProvider::Hermes => "hermes",
+    }
+    .to_string()
 }
 
 fn clamp_u16(v: i64) -> u16 {
@@ -658,6 +866,64 @@ mod tests {
 
     fn bridge(sidecar: impl SidecarRequest + 'static, pty: Arc<FakePty>) -> RemoteBridge {
         RemoteBridge::new(Arc::new(sidecar), pty)
+    }
+
+    use crate::remote::agent_host::{AgentLineReader, AgentSpawner, AgentStdin, SpawnedAgent};
+
+    /// A fake agent spawner returning scripted stdout lines and a no-op stdin.
+    struct FakeSpawner {
+        scripts: Mutex<Vec<Vec<Vec<u8>>>>,
+        count: AtomicUsize,
+        fail: bool,
+    }
+    impl FakeSpawner {
+        fn new(scripts: Vec<Vec<Vec<u8>>>) -> Self {
+            Self { scripts: Mutex::new(scripts), count: AtomicUsize::new(0), fail: false }
+        }
+        fn failing() -> Self {
+            Self { scripts: Mutex::new(vec![]), count: AtomicUsize::new(0), fail: true }
+        }
+    }
+    struct ScriptReader(std::collections::VecDeque<Vec<u8>>);
+    #[async_trait]
+    impl AgentLineReader for ScriptReader {
+        async fn next_line(&mut self) -> Option<Vec<u8>> {
+            self.0.pop_front()
+        }
+    }
+    struct NoStdin;
+    #[async_trait]
+    impl AgentStdin for NoStdin {
+        async fn write_line(&self, _text: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    #[async_trait]
+    impl AgentSpawner for FakeSpawner {
+        async fn spawn(
+            &self,
+            _p: AgentProvider,
+            _c: Option<&str>,
+            _r: Option<&str>,
+        ) -> Result<SpawnedAgent, String> {
+            if self.fail {
+                return Err("spawn boom".into());
+            }
+            let idx = self.count.fetch_add(1, Ordering::SeqCst);
+            let script = self.scripts.lock().unwrap().get(idx).cloned().unwrap_or_default();
+            Ok(SpawnedAgent {
+                stdin: Arc::new(NoStdin),
+                lines: Box::new(ScriptReader(script.into())),
+            })
+        }
+    }
+
+    fn bridge_with_spawner(
+        sidecar: impl SidecarRequest + 'static,
+        pty: Arc<FakePty>,
+        spawner: Arc<dyn AgentSpawner>,
+    ) -> RemoteBridge {
+        RemoteBridge::with_spawner(Arc::new(sidecar), pty, spawner)
     }
 
     fn b64_decode(s: &str) -> Vec<u8> {
@@ -1124,32 +1390,243 @@ mod tests {
 
     // ---- Deferred / out-of-scope surfaces ----------------------------------
 
-    #[tokio::test]
-    async fn agent_messages_return_not_implemented_error() {
-        let b = bridge(FakeSidecar::new(), Arc::new(FakePty::new()));
-        for msg in [
-            ClientMessage::CreateAgentSession {
-                name: "a".into(),
-                provider: crate::remote::AgentProvider::ClaudeCode,
-                cwd: None,
-            },
-            ClientMessage::SwitchSessionMode {
-                session_id: Uuid::nil(),
-                mode: crate::remote::SessionMode::Chat,
-            },
-            ClientMessage::AgentInput { session_id: Uuid::nil(), text: "hi".into() },
-            ClientMessage::PermissionResponse {
-                session_id: Uuid::nil(),
-                request_id: Uuid::nil(),
-                allowed: true,
-            },
-        ] {
-            let out = b.handle(msg).await;
-            match &out.replies[0] {
-                ServerMessage::Error { message } => assert!(message.contains("Companion-4")),
-                other => panic!("expected Error, got {other:?}"),
-            }
+    // ---- Agent surface (Companion-4) ---------------------------------------
+
+    fn agent_session_id(out: &BridgeOutcome) -> Uuid {
+        match &out.replies[0] {
+            ServerMessage::AgentSessionCreated { session } => session.id,
+            other => panic!("expected AgentSessionCreated, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn create_agent_session_registers_and_replies_with_agent_attach() {
+        let spawner = Arc::new(FakeSpawner::new(vec![vec![]]));
+        let b = bridge_with_spawner(FakeSidecar::new(), Arc::new(FakePty::new()), spawner);
+        let out = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "agent".into(),
+                provider: AgentProvider::ClaudeCode,
+                cwd: Some("/repo".into()),
+            })
+            .await;
+
+        match &out.replies[0] {
+            ServerMessage::AgentSessionCreated { session } => {
+                assert_eq!(session.name, "agent");
+                assert_eq!(session.agent_provider, Some(AgentProvider::ClaudeCode));
+                assert_eq!(session.session_mode, Some(SessionMode::Chat));
+                assert_eq!(session.shell, "claudeCode");
+            }
+            other => panic!("got {other:?}"),
+        }
+        assert!(matches!(out.replies[1], ServerMessage::SessionList { .. }));
+        // The connection layer should start forwarding bus events for this id.
+        assert_eq!(out.agent_attach, Some(agent_session_id(&out)));
+        assert!(out.attach.is_none());
+
+        // It shows up in the session list as an agent session.
+        let listed = b.handle(ClientMessage::ListSessions).await;
+        match &listed.replies[0] {
+            ServerMessage::SessionList { sessions } => {
+                assert_eq!(sessions.len(), 1);
+                assert!(sessions[0].agent_provider.is_some());
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn create_agent_session_spawn_failure_errors() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::failing()),
+        );
+        let out = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "a".into(),
+                provider: AgentProvider::Codex,
+                cwd: None,
+            })
+            .await;
+        assert!(matches!(out.replies[0], ServerMessage::Error { .. }));
+        assert!(out.agent_attach.is_none());
+    }
+
+    #[tokio::test]
+    async fn agent_streams_token_delta_over_the_bus() {
+        let script = vec![vec![
+            br#"{"type":"stream","event":{"delta":{"type":"text_delta","text":"Hi"}}}"#.to_vec(),
+        ]];
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(script)),
+        );
+        let mut rx = b.subscribe_agent_events();
+        let out = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "a".into(),
+                provider: AgentProvider::ClaudeCode,
+                cwd: None,
+            })
+            .await;
+        let sid = agent_session_id(&out);
+
+        let (got_sid, msg) = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("event within timeout")
+            .expect("bus open");
+        assert_eq!(got_sid, sid);
+        match msg {
+            ServerMessage::AgentEvent {
+                event: crate::remote::AgentEvent::TokenDelta { text },
+                ..
+            } => assert_eq!(text, "Hi"),
+            other => panic!("got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn agent_input_to_unknown_session_errors() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(vec![])),
+        );
+        let out = b.handle(ClientMessage::AgentInput { session_id: Uuid::new_v4(), text: "x".into() }).await;
+        assert!(matches!(out.replies[0], ServerMessage::Error { .. }));
+    }
+
+    #[tokio::test]
+    async fn agent_input_to_known_session_is_silent_ok() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(vec![vec![]])),
+        );
+        let created = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "a".into(),
+                provider: AgentProvider::ClaudeCode,
+                cwd: None,
+            })
+            .await;
+        let sid = agent_session_id(&created);
+        let out = b.handle(ClientMessage::AgentInput { session_id: sid, text: "hi".into() }).await;
+        assert!(out.replies.is_empty() && out.agent_attach.is_none());
+    }
+
+    #[tokio::test]
+    async fn switch_mode_to_terminal_spawns_pty_and_attaches() {
+        let pty = Arc::new(FakePty::new());
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            pty.clone(),
+            Arc::new(FakeSpawner::new(vec![vec![]])),
+        );
+        let created = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "a".into(),
+                provider: AgentProvider::ClaudeCode,
+                cwd: None,
+            })
+            .await;
+        let sid = agent_session_id(&created);
+
+        let out = b
+            .handle(ClientMessage::SwitchSessionMode { session_id: sid, mode: SessionMode::Terminal })
+            .await;
+        // A PTY was spawned and the session auto-attaches (live subscription).
+        assert!(out.attach.is_some(), "terminal mode attaches a live PTY");
+        // session_list is the first reply.
+        assert!(matches!(out.replies[0], ServerMessage::SessionList { .. }));
+    }
+
+    #[tokio::test]
+    async fn switch_mode_back_to_chat_re_creates_agent() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            // Two spawns: initial create + the chat re-create.
+            Arc::new(FakeSpawner::new(vec![vec![], vec![]])),
+        );
+        let created = b
+            .handle(ClientMessage::CreateAgentSession {
+                name: "a".into(),
+                provider: AgentProvider::Codex,
+                cwd: None,
+            })
+            .await;
+        let sid = agent_session_id(&created);
+        let out = b
+            .handle(ClientMessage::SwitchSessionMode { session_id: sid, mode: SessionMode::Chat })
+            .await;
+        assert_eq!(out.agent_attach, Some(sid));
+        assert!(matches!(out.replies[0], ServerMessage::SessionList { .. }));
+    }
+
+    #[tokio::test]
+    async fn switch_mode_on_non_agent_session_errors() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(vec![])),
+        );
+        let out = b
+            .handle(ClientMessage::SwitchSessionMode { session_id: Uuid::new_v4(), mode: SessionMode::Terminal })
+            .await;
+        assert!(matches!(out.replies[0], ServerMessage::Error { .. }));
+    }
+
+    #[tokio::test]
+    async fn permission_response_is_silent_and_resolves_pending() {
+        // No pending request → resolve is a no-op; reply is empty (no error).
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(vec![])),
+        );
+        let out = b
+            .handle(ClientMessage::PermissionResponse {
+                session_id: Uuid::nil(),
+                request_id: Uuid::new_v4(),
+                allowed: true,
+            })
+            .await;
+        assert!(out.replies.is_empty() && out.attach.is_none() && out.agent_attach.is_none());
+    }
+
+    #[tokio::test]
+    async fn permission_response_unblocks_held_hook_request() {
+        let b = bridge_with_spawner(
+            FakeSidecar::new(),
+            Arc::new(FakePty::new()),
+            Arc::new(FakeSpawner::new(vec![vec![]])),
+        );
+        let sid = Uuid::new_v4();
+        let request_id = Uuid::new_v4();
+        let hook = b.hook_bridge();
+        // Drive a held PermissionRequest through the hook bridge directly.
+        let hook_clone = hook.clone();
+        let req_str = request_id.to_string();
+        let body = serde_json::json!({
+            "session_id": sid.to_string(),
+            "hook_event_name": "PermissionRequest",
+            "request_id": req_str,
+            "tool_name": "Bash"
+        });
+        let held = tokio::spawn(async move { hook_clone.test_process_body(&body).await });
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+        // The client's permission_response, routed through the bridge, resolves it.
+        let out = b
+            .handle(ClientMessage::PermissionResponse { session_id: sid, request_id, allowed: true })
+            .await;
+        assert!(out.replies.is_empty());
+        let resp = held.await.unwrap();
+        assert!(resp.contains("\"behavior\":\"allow\""));
     }
 
     #[tokio::test]

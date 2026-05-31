@@ -16,6 +16,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
@@ -36,11 +37,27 @@ impl ActiveAttach {
     }
 }
 
+/// One live agent-event forward: the session whose `agent_event` frames are
+/// forwarded, plus the abort handle for the bus-draining task.
+struct ActiveAgentAttach {
+    session_id: Uuid,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl ActiveAgentAttach {
+    fn stop(&self) {
+        self.task.abort();
+    }
+}
+
 /// Tracks the single attach for one connection and turns `AttachDirective`s into
-/// running drain tasks that emit `Output` frames on `outbound`.
+/// running drain tasks that emit `Output` frames on `outbound`. Also forwards
+/// `agent_event` frames from the shared bus for the connection's attached agent
+/// session (Companion-4).
 pub struct ConnectionManager {
     outbound: UnboundedSender<ServerMessage>,
     active: parking_lot_mutex::Mutex<Option<ActiveAttach>>,
+    agent_active: parking_lot_mutex::Mutex<Option<ActiveAgentAttach>>,
 }
 
 // A tiny std-Mutex wrapper kept private to avoid leaking lock-poisoning into the
@@ -65,6 +82,7 @@ impl ConnectionManager {
         Self {
             outbound,
             active: parking_lot_mutex::Mutex::new(None),
+            agent_active: parking_lot_mutex::Mutex::new(None),
         }
     }
 
@@ -73,11 +91,56 @@ impl ConnectionManager {
         self.active.lock().as_ref().map(|a| a.session_id)
     }
 
-    /// Detach the current stream (if any). Idempotent. Safe on disconnect/error.
+    /// The agent session whose events this connection is currently forwarding.
+    pub fn attached_agent_session(&self) -> Option<Uuid> {
+        self.agent_active.lock().as_ref().map(|a| a.session_id)
+    }
+
+    /// Detach the current PTY stream (if any). Idempotent. Safe on disconnect.
     pub fn detach(&self) {
         if let Some(prev) = self.active.lock().take() {
             prev.stop();
         }
+    }
+
+    /// Stop forwarding agent events (if any). Idempotent.
+    pub fn detach_agent(&self) {
+        if let Some(prev) = self.agent_active.lock().take() {
+            prev.stop();
+        }
+    }
+
+    /// Begin forwarding `agent_event` (and any other per-session) frames for
+    /// `session_id` from the shared bus to this connection. Replaces any prior
+    /// agent attach. The task ends when the bus closes, the outbound sink closes,
+    /// or `detach_agent` aborts it. Bus lag drops the oldest frames (logged) but
+    /// keeps the task alive — a slow client never wedges the whole bus.
+    pub fn start_agent_attach(
+        &self,
+        session_id: Uuid,
+        mut bus: broadcast::Receiver<(Uuid, ServerMessage)>,
+    ) {
+        self.detach_agent();
+        let outbound = self.outbound.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                match bus.recv().await {
+                    Ok((sid, msg)) => {
+                        if sid != session_id {
+                            continue;
+                        }
+                        if outbound.send(msg).is_err() {
+                            break; // socket writer gone
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        log::warn!("remote: agent bus lagged, dropped {n} frames");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+        *self.agent_active.lock() = Some(ActiveAgentAttach { session_id, task });
     }
 
     /// Begin streaming `directive`'s live subscription to this connection,
@@ -129,8 +192,9 @@ impl ConnectionManager {
 
 impl Drop for ConnectionManager {
     fn drop(&mut self) {
-        // Ensure no orphaned drain task survives a dropped connection.
+        // Ensure no orphaned drain/forward task survives a dropped connection.
         self.detach();
+        self.detach_agent();
     }
 }
 
@@ -251,5 +315,70 @@ mod tests {
         let cm = ConnectionManager::new(tx);
         cm.detach(); // nothing attached
         assert!(cm.attached_session().is_none());
+    }
+
+    // ---- Agent-event forwarding (Companion-4) ----
+
+    async fn next_msg(rx: &mut tokio::sync::mpsc::UnboundedReceiver<ServerMessage>) -> ServerMessage {
+        tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("msg within timeout")
+            .expect("channel open")
+    }
+
+    #[tokio::test]
+    async fn agent_attach_forwards_only_matching_session_events() {
+        let (tx, mut rx) = unbounded_channel();
+        let cm = ConnectionManager::new(tx);
+        let (bus, _keep) = broadcast::channel(16);
+        let mine = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        cm.start_agent_attach(mine, bus.subscribe());
+        assert_eq!(cm.attached_agent_session(), Some(mine));
+
+        // An event for a different session is filtered out...
+        bus.send((other, ServerMessage::Error { message: "other".into() })).unwrap();
+        // ...while one for my session is forwarded.
+        bus.send((mine, ServerMessage::Error { message: "mine".into() })).unwrap();
+        match next_msg(&mut rx).await {
+            ServerMessage::Error { message } => assert_eq!(message, "mine"),
+            other => panic!("got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn reattach_agent_replaces_previous_forward() {
+        let (tx, mut rx) = unbounded_channel();
+        let cm = ConnectionManager::new(tx);
+        let (bus, _keep) = broadcast::channel(16);
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        cm.start_agent_attach(a, bus.subscribe());
+        cm.start_agent_attach(b, bus.subscribe());
+        assert_eq!(cm.attached_agent_session(), Some(b));
+
+        // Only session b is forwarded now.
+        bus.send((a, ServerMessage::Error { message: "a".into() })).unwrap();
+        bus.send((b, ServerMessage::Error { message: "b".into() })).unwrap();
+        match next_msg(&mut rx).await {
+            ServerMessage::Error { message } => assert_eq!(message, "b"),
+            other => panic!("got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn detach_agent_stops_forwarding() {
+        let (tx, mut rx) = unbounded_channel();
+        let cm = ConnectionManager::new(tx);
+        let (bus, _keep) = broadcast::channel(16);
+        let sid = Uuid::new_v4();
+        cm.start_agent_attach(sid, bus.subscribe());
+        cm.detach_agent();
+        assert!(cm.attached_agent_session().is_none());
+        // Give the aborted task a beat to unwind, then a send reaches no one.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        bus.send((sid, ServerMessage::Error { message: "x".into() })).unwrap();
+        let got = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await;
+        assert!(got.is_err(), "no forward after detach_agent");
     }
 }
