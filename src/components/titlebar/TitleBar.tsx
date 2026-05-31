@@ -3,6 +3,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkbench } from "@/state/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { WorkspaceBadges } from "./WorkspaceBadges";
 import { WindowControls } from "./WindowControls";
 
 async function startDrag() {
@@ -29,6 +31,18 @@ export function TitleBar() {
   const panelVisible = useWorkbench((s) => s.layout.panelVisible);
   const platform = useOSPlatform();
   const isMac = platform === "macos";
+  // A manual side-bar toggle also clears any responsive icon-collapse so the
+  // PrimarySideBar is actually revealed below the 900px breakpoint.
+  const { collapsed, toggle: toggleCollapsed } = useResponsiveLayout();
+
+  function handleTogglePrimarySideBar() {
+    if (collapsed) {
+      toggleCollapsed();
+      if (!primarySideBarVisible) togglePrimarySideBar();
+      return;
+    }
+    togglePrimarySideBar();
+  }
 
   function handleMouseDown(e: React.MouseEvent<HTMLElement>) {
     if (e.button !== 0) return;
@@ -55,18 +69,19 @@ export function TitleBar() {
           <TooltipTrigger asChild>
             <button
               type="button"
-              onClick={togglePrimarySideBar}
+              onClick={handleTogglePrimarySideBar}
               data-testid="titlebar-toggle-primarysidebar"
-              aria-pressed={primarySideBarVisible}
+              aria-pressed={primarySideBarVisible && !collapsed}
               className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
             >
               <PanelLeft className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            {primarySideBarVisible ? "Hide" : "Show"} Primary Side Bar
+            {primarySideBarVisible && !collapsed ? "Hide" : "Show"} Primary Side Bar
           </TooltipContent>
         </Tooltip>
+        <WorkspaceBadges />
       </div>
 
       <div data-tauri-drag-region className="drag flex h-full items-center justify-center">

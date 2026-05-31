@@ -11,6 +11,8 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "general.defaultBranch": "origin/main",
   "general.namingScheme": "maverick/{feature-name}",
   "general.restoreSession": true,
+  // JSON-encoded Record<string,string> of global env vars merged into every PTY.
+  "general.env": "{}",
 
   // Appearance
   "appearance.theme": "",

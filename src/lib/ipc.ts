@@ -291,6 +291,7 @@ export type SettingsKey =
   | "general.defaultBranch"
   | "general.namingScheme"
   | "general.restoreSession"
+  | "general.env"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"
@@ -361,6 +362,13 @@ export interface MaverickSettings {
   theme: string;
   defaultBackend: string | null;
   notificationsRequestedAt: number | null;
+  /**
+   * Global environment variables merged into every PTY spawn. Per-workspace /
+   * per-project env overrides these when keys collide. Persisted in the
+   * settings store under the `general.env` key as a JSON-encoded string, so
+   * it is absent from the bootstrap payload (hence optional here).
+   */
+  globalEnv?: Record<string, string>;
 }
 
 export type NotificationPermission = "granted" | "denied" | "default" | "unavailable";

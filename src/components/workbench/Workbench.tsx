@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { onProjectSettingsChanged } from "@/lib/tauri";
 import {
@@ -45,6 +46,8 @@ export function Workbench() {
   });
   const loadProjectSettings = useProjectSettingsStore((s) => s.load);
   const { refreshProjects, refreshWorkspaces, refreshBackends } = useWorkspace();
+  // Collapse the PrimarySideBar to icon-only below the responsive breakpoint.
+  const { collapsed } = useResponsiveLayout();
 
   useEffect(() => {
     refreshProjects().catch((e) => console.error("refreshProjects failed", e));
@@ -85,7 +88,7 @@ export function Workbench() {
           className="h-full flex-1"
           style={{ borderLeft: "1px solid hsl(var(--border))" }}
         >
-          {layout.primarySideBarVisible && (
+          {layout.primarySideBarVisible && !collapsed && (
             <>
               <ResizablePanel
                 defaultSize={15}

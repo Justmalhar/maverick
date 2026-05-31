@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { TerminalLeaf, killLeaf, killWorkspaceLeaves, __testing__ } from "./TerminalLeaf";
 import { makeWorkspace } from "@/test/fixtures";
+import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
 const handle: TerminalHandle = {
@@ -19,9 +20,23 @@ beforeEach(() => {
   vi.mocked(listen).mockReset().mockResolvedValue(() => {});
   TerminalRegistry.register({ mount: () => handle } as TerminalProvider);
   __testing__.leafPtyCache.clear();
+  _resetSettingsStoreForTests();
 });
 
 describe("TerminalLeaf", () => {
+  it("threads the global env into the shell spawn", async () => {
+    useSettingsStore.setState({ values: { "general.env": JSON.stringify({ FOO: "bar" }) } });
+    renderWithProviders(
+      <TerminalLeaf leafId="leaf-env" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ env: { FOO: "bar" } })
+      )
+    );
+  });
+
   it("spawns a login shell in the worktree and renders the pane", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({ ptyId: "pty-1" } as never);
     renderWithProviders(

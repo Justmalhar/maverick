@@ -5,6 +5,7 @@ import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
 import { BottomTerminal, killBottomPty, __testing__ } from "./BottomTerminal";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
+import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
 const initial = useWorkbench.getState();
@@ -43,6 +44,7 @@ beforeEach(() => {
       disconnect = vi.fn();
     }
   );
+  _resetSettingsStoreForTests();
 });
 
 describe("BottomTerminal", () => {
@@ -69,12 +71,30 @@ describe("BottomTerminal", () => {
         command: "/bin/zsh",
         args: ["-l"],
         cwd: "/p/wt",
-        env: undefined,
+        env: {},
       })
     );
     expect(await screen.findByTestId("bottom-terminal")).toBeInTheDocument();
     // Focusing the pane exercises the no-op onFocus handler without throwing.
     fireEvent.mouseDown(screen.getByTestId("terminal-pane-bottom-ws-1"));
+  });
+
+  it("threads the global env into the shell spawn", async () => {
+    registerStubProvider();
+    useSettingsStore.setState({ values: { "general.env": JSON.stringify({ TOK: "z" }) } });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "ws-e", worktreePath: "/p/e" })],
+      activeWorkspaceId: "ws-e",
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({ ptyId: "pty-e" } as never);
+    renderWithProviders(<BottomTerminal />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ env: { TOK: "z" } })
+      )
+    );
   });
 
   it("re-uses the cached pty id on remount", async () => {

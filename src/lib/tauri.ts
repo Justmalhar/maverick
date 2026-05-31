@@ -31,6 +31,7 @@ import type {
   Stash,
   Workspace,
   WorkspacePreset,
+  PresetNode,
 } from "./ipc";
 
 export async function projectAdd(path: string): Promise<Project> {
@@ -236,9 +237,11 @@ export async function presetLaunch(
 
 export async function presetSaveCurrent(
   workspaceId: string,
-  name: string
+  name: string,
+  layout: PresetNode,
+  description?: string
 ): Promise<WorkspacePreset> {
-  return invoke("preset_save_current", { workspaceId, name });
+  return invoke("preset_save_current", { workspaceId, name, layout, description });
 }
 
 export async function mcpStart(

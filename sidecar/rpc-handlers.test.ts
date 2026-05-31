@@ -481,6 +481,26 @@ describe("RpcHandlers", () => {
     expect(saved.name).toBe("n");
   });
 
+  test("preset.save_current persists via the default store-backed launcher and is listed", async () => {
+    const { handlers, dir, store } = makeWithTempProject();
+    const ws = store.workspaceCreate({
+      projectId: store.projectByPath(dir)!.id,
+      branch: "main",
+      agentBackend: "claude",
+      worktreePath: `${dir}/wt`,
+    });
+    const layout = { type: "terminal", agent: "claude", cwd: "{{workspace_root}}", mode: "agent" };
+    const saved = (await handlers.dispatch("preset.save_current", {
+      workspaceId: ws.id,
+      name: "stored",
+      layout,
+      baseBranch: "dev",
+    })) as { name: string };
+    expect(saved.name).toBe("stored");
+    const list = (await handlers.dispatch("preset.list", { projectPath: dir })) as Array<{ name: string }>;
+    expect(list.map((p) => p.name)).toContain("stored");
+  });
+
   test("mcp.start/stop/list", async () => {
     await h.dispatch("mcp.start", { name: "fs", projectPath: "/r" });
     const list = (await h.dispatch("mcp.list", {})) as unknown[];

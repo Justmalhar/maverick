@@ -172,4 +172,59 @@ describe("SQLiteStore", () => {
     const id = store.sessionCreate(ws.id);
     expect(id.startsWith("sess_")).toBe(true);
   });
+
+  test("projectByPath returns the matching project", () => {
+    const proj = store.projectAdd({ path: "/tmp/by-path" });
+    expect(store.projectByPath("/tmp/by-path")?.id).toBe(proj.id);
+  });
+
+  test("projectByPath returns null when no project matches", () => {
+    expect(store.projectByPath("/tmp/missing")).toBeNull();
+  });
+
+  test("presetSave with projectId persists and presetList returns it", () => {
+    const proj = store.projectAdd({ path: "/tmp/presets" });
+    const layout = { type: "terminal" as const, agent: "claude", cwd: "/", mode: "agent" as const };
+    const saved = store.presetSave({ name: "p1", layout, projectId: proj.id, description: "d", baseBranch: "dev" });
+    expect(saved.name).toBe("p1");
+    expect(saved.description).toBe("d");
+    expect(saved.baseBranch).toBe("dev");
+    const list = store.presetList(proj.id);
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("p1");
+    expect(list[0].layout).toEqual(layout);
+    expect(list[0].description).toBe("d");
+    expect(list[0].baseBranch).toBe("dev");
+  });
+
+  test("presetSave resolves projectId from workspaceId", () => {
+    const proj = store.projectAdd({ path: "/tmp/ws-presets" });
+    const ws = store.workspaceCreate({
+      projectId: proj.id,
+      branch: "main",
+      agentBackend: "claude",
+      worktreePath: "/tmp/wt-p",
+    });
+    const layout = { type: "terminal" as const, agent: "codex", cwd: "/", mode: "terminal" as const };
+    store.presetSave({ name: "from-ws", layout, workspaceId: ws.id });
+    expect(store.presetList(proj.id).map((p) => p.name)).toEqual(["from-ws"]);
+  });
+
+  test("presetSave with neither id stores a null project_id (not listed per-project)", () => {
+    const proj = store.projectAdd({ path: "/tmp/orphan" });
+    const layout = { type: "browser" as const, url: "https://x" };
+    const saved = store.presetSave({ name: "orphan", layout });
+    expect(saved.name).toBe("orphan");
+    expect(saved.description).toBeUndefined();
+    expect(saved.baseBranch).toBeUndefined();
+    expect(store.presetList(proj.id)).toHaveLength(0);
+  });
+
+  test("presetList orders newest first", () => {
+    const proj = store.projectAdd({ path: "/tmp/order" });
+    const t = (agent: string) => ({ type: "terminal" as const, agent, cwd: "/", mode: "agent" as const });
+    store.presetSave({ name: "first", layout: t("a"), projectId: proj.id });
+    store.presetSave({ name: "second", layout: t("b"), projectId: proj.id });
+    expect(store.presetList(proj.id).map((p) => p.name)).toEqual(["second", "first"]);
+  });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ptySpawn, ptyKill } from "@/lib/tauri";
+import { getGlobalEnv } from "@/lib/stores/settings";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
 
@@ -67,7 +68,7 @@ export function TerminalLeaf({
     }
     let cancelled = false;
     setState({ status: "spawning" });
-    ptySpawn(LEAF_SHELL, LEAF_ARGS, workspace.worktreePath)
+    ptySpawn(LEAF_SHELL, LEAF_ARGS, workspace.worktreePath, getGlobalEnv())
       .then(({ ptyId }) => {
         if (cancelled) return;
         leafPtyCache.set(leafId, ptyId);

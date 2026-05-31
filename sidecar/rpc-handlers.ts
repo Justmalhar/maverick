@@ -141,6 +141,7 @@ const Schemas = {
     name: z.string(),
     layout: z.record(z.string(), z.unknown()),
     description: nullishOptional(z.string()),
+    baseBranch: nullishOptional(z.string()),
   }),
   mcpStart: z.object({
     name: z.string(),
@@ -255,7 +256,13 @@ export class RpcHandlers {
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
     this.presets =
-      opts.presets ?? new PresetLauncher({ loader: this.config, worktree: this.worktree, process: this.process });
+      opts.presets ??
+      new PresetLauncher({
+        loader: this.config,
+        worktree: this.worktree,
+        process: this.process,
+        store: this.store,
+      });
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
     this.automations =
       opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
@@ -621,7 +628,10 @@ export class RpcHandlers {
       }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);
-        return this.presets.list(p);
+        const projectId = p.projectPath
+          ? this.store.projectByPath(p.projectPath)?.id
+          : undefined;
+        return this.presets.list({ projectPath: p.projectPath, projectId });
       }
       case "preset.launch": {
         const p = Schemas.presetLaunch.parse(params);
@@ -637,7 +647,8 @@ export class RpcHandlers {
           workspaceId: p.workspaceId,
           name: p.name,
           layout: p.layout as never,
-          description: p.description,
+          description: p.description ?? undefined,
+          baseBranch: p.baseBranch ?? undefined,
         });
       }
       case "mcp.start": {

@@ -94,6 +94,8 @@ interface WorkbenchState {
   // Layout actions
   setActivityView: (view: ActivityView) => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
+  setActivitybarCollapsed: (collapsed: boolean) => void;
+  toggleActivitybarCollapsed: () => void;
   togglePrimarySideBar: () => void;
   toggleAuxiliaryBar: () => void;
   togglePanel: () => void;
@@ -228,6 +230,10 @@ export const useWorkbench = create<WorkbenchState>()(
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),
+    setActivitybarCollapsed: (collapsed) =>
+      set((s) => ({ layout: { ...s.layout, activitybarCollapsed: collapsed } })),
+    toggleActivitybarCollapsed: () =>
+      set((s) => ({ layout: { ...s.layout, activitybarCollapsed: !s.layout.activitybarCollapsed } })),
     togglePrimarySideBar: () =>
       set((s) => ({
         layout: { ...s.layout, primarySideBarVisible: !s.layout.primarySideBarVisible },

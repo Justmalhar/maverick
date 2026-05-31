@@ -5,6 +5,7 @@ import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
 import { AgentTerminal, killAgentPty, __testing__ } from "./AgentTerminal";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeBackend } from "@/test/fixtures";
+import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
 const initial = useWorkbench.getState();
@@ -71,9 +72,29 @@ beforeEach(() => {
     }
   );
   useWorkbench.setState({ ...initial, backends: [] });
+  _resetSettingsStoreForTests();
 });
 
 describe("AgentTerminal", () => {
+  it("merges global env into the spawn, with per-backend env overriding", async () => {
+    useSettingsStore.setState({
+      values: { "general.env": JSON.stringify({ GLOBAL: "1", SHARED: "global" }) },
+    });
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", command: "claude", env: { SHARED: "backend" } })],
+    });
+    renderWithProviders(
+      <AgentTerminal workspace={makeWorkspace({ id: "wEnv", agentBackend: "claude-code", worktreePath: "/wt" })} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ env: { GLOBAL: "1", SHARED: "backend" } })
+      )
+    );
+  });
+
   it("spawns the resolved backend command in the worktree", async () => {
     useWorkbench.setState({
       ...initial,

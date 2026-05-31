@@ -13,12 +13,14 @@ import {
   SlidersHorizontal,
   Sparkles,
   Terminal,
+  Variable,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsSearchInput } from "./primitives/SettingsSearchInput";
 
 export type SectionId =
   | "general"
+  | "environment"
   | "git"
   | "models"
   | "providers"
@@ -49,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Workspace",
     items: [
       { id: "general", label: "General", icon: SettingsIcon },
+      { id: "environment", label: "Environment", icon: Variable },
       { id: "git", label: "Git", icon: GitBranch },
     ],
   },

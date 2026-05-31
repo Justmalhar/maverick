@@ -7,6 +7,7 @@ import { SettingsHeader } from "./SettingsHeader";
 import { SettingsFooter } from "./SettingsFooter";
 import { SettingsJsonEditor } from "./SettingsJsonEditor";
 import GeneralSettings from "./sections/GeneralSettings";
+import EnvironmentSettings from "./sections/EnvironmentSettings";
 import ModelsSettings from "./sections/ModelsSettings";
 import ProvidersSettings from "./sections/ProvidersSettings";
 import AppearanceSettings from "./sections/AppearanceSettings";
@@ -31,6 +32,11 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
     title: "General",
     description: "Defaults for new workspaces, base branches, and startup behaviour.",
     Component: GeneralSettings,
+  },
+  environment: {
+    title: "Environment",
+    description: "Global environment variables injected into every PTY.",
+    Component: EnvironmentSettings,
   },
   git: {
     title: "Git",

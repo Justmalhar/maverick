@@ -30,6 +30,7 @@ describe("SettingsPanel", () => {
       ["settings-nav-skills", "skills-settings"],
       ["settings-nav-version", "version-settings"],
       ["settings-nav-terminal", "terminal-presets"],
+      ["settings-nav-environment", "environment-settings"],
       ["settings-nav-general", "general-settings"],
     ];
     for (const [nav, sec] of sections) {

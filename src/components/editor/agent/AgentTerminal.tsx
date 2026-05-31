@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkbench } from "@/state/store";
 import { ptySpawn, ptyKill, messageAppend, messagesList } from "@/lib/tauri";
+import { getGlobalEnv } from "@/lib/stores/settings";
 import { recordUsageEstimate } from "@/hooks/useContextUsage";
 import type { Message, Workspace } from "@/lib/ipc";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
@@ -108,9 +109,11 @@ export function AgentTerminal({ workspace }: Props) {
     const command =
       backend?.command ?? FALLBACK_COMMAND[workspace.agentBackend] ?? workspace.agentBackend;
     const args = backend?.args ?? [];
+    // Global env is the base; per-backend env overrides on key collision.
+    const env = { ...getGlobalEnv(), ...(backend?.env ?? {}) };
     let cancelled = false;
     setState({ status: "spawning" });
-    ptySpawn(command, args, workspace.worktreePath, backend?.env)
+    ptySpawn(command, args, workspace.worktreePath, env)
       .then(({ ptyId }) => {
         if (cancelled) return;
         agentPtyCache.set(workspace.id, ptyId);

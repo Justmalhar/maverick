@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Plus,
   SplitSquareHorizontal,
@@ -10,6 +11,8 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { usePresets } from "@/hooks/usePresets";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -21,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { EditorTab } from "./EditorTab";
+import { SaveLayoutDialog } from "./SaveLayoutDialog";
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
@@ -48,9 +52,18 @@ export function EditorTabs() {
   const layout = useWorkbench((s) => s.layout);
   const togglePanel = useWorkbench((s) => s.togglePanel);
 
+  const projectPath = useProjectSettingsStore((s) => s.data?.rootPath);
+  const { saveCurrentLayout } = usePresets(projectPath);
+  const [saveLayoutFor, setSaveLayoutFor] = useState<string | null>(null);
+
   const openTerminal = () => {
     if (!layout.panelVisible) togglePanel();
     window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+  };
+
+  const handleTabContextMenu = (e: React.MouseEvent, workspaceId: string) => {
+    e.preventDefault();
+    setSaveLayoutFor(workspaceId);
   };
 
   return (
@@ -109,6 +122,7 @@ export function EditorTabs() {
             active={ws.id === activeId}
             onSelect={() => setActiveWorkspace(ws.id)}
             onClose={() => removeWorkspace(ws.id)}
+            onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
           />
         ))}
       </div>
@@ -180,6 +194,14 @@ export function EditorTabs() {
           <TooltipContent side="bottom">Split editor</TooltipContent>
         </Tooltip>
       </div>
+
+      <SaveLayoutDialog
+        open={saveLayoutFor !== null}
+        onOpenChange={(open) => !open && setSaveLayoutFor(null)}
+        onSave={async (name) => {
+          if (saveLayoutFor) await saveCurrentLayout(saveLayoutFor, name);
+        }}
+      />
     </div>
   );
 }

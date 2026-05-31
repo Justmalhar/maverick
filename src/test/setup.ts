@@ -29,11 +29,12 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   },
 }));
 
-// matchMedia polyfill
+// matchMedia polyfill. Defaults to the desktop-wide branch (matches:true) so
+// the responsive icon-collapse stays expanded unless a test opts into compact.
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
+    matches: true,
     media: query,
     onchange: null,
     addListener: vi.fn(),

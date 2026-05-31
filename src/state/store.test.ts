@@ -126,6 +126,13 @@ describe("workbench store", () => {
     useWorkbench.getState().togglePanel();
     expect(useWorkbench.getState().layout.panelVisible).toBe(true);
 
+    useWorkbench.getState().setActivitybarCollapsed(true);
+    expect(useWorkbench.getState().layout.activitybarCollapsed).toBe(true);
+    useWorkbench.getState().toggleActivitybarCollapsed();
+    expect(useWorkbench.getState().layout.activitybarCollapsed).toBe(false);
+    useWorkbench.getState().toggleActivitybarCollapsed();
+    expect(useWorkbench.getState().layout.activitybarCollapsed).toBe(true);
+
     useWorkbench.getState().setPrimarySideBarWidth(200);
     useWorkbench.getState().setAuxiliaryBarWidth(220);
     useWorkbench.getState().setPanelHeight(150);

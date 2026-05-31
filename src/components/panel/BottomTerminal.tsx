@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Terminal } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { ptySpawn, ptyKill } from "@/lib/tauri";
+import { getGlobalEnv } from "@/lib/stores/settings";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
 
 const DEFAULT_SHELL = "/bin/zsh";
@@ -39,7 +40,7 @@ export function BottomTerminal() {
     }
     let cancelled = false;
     setState({ status: "spawning" });
-    ptySpawn(DEFAULT_SHELL, DEFAULT_ARGS, ws.worktreePath)
+    ptySpawn(DEFAULT_SHELL, DEFAULT_ARGS, ws.worktreePath, getGlobalEnv())
       .then(({ ptyId }) => {
         if (cancelled) return;
         ptyCache.set(ws.id, ptyId);

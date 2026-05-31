@@ -9,9 +9,10 @@ interface Props {
   active: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-export function EditorTab({ workspace, active, onSelect, onClose }: Props) {
+export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu }: Props) {
   const mode = useWorkbench(selectEditorMode(workspace.id));
   const ModeIcon = mode === "terminal" ? TerminalSquare : Bot;
 
@@ -23,6 +24,7 @@ export function EditorTab({ workspace, active, onSelect, onClose }: Props) {
       aria-selected={active}
       tabIndex={0}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

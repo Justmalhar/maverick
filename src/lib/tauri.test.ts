@@ -136,8 +136,10 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("preset_launch", {
       preset: { name: "x", layout }, projectPath: "/p1", branch: undefined,
     });
-    await api.presetSaveCurrent("w1", "n");
-    expect(invoke).toHaveBeenLastCalledWith("preset_save_current", { workspaceId: "w1", name: "n" });
+    await api.presetSaveCurrent("w1", "n", layout);
+    expect(invoke).toHaveBeenLastCalledWith("preset_save_current", {
+      workspaceId: "w1", name: "n", layout, description: undefined,
+    });
 
     await api.mcpStart("fs");
     expect(invoke).toHaveBeenLastCalledWith("mcp_start", { name: "fs" });
