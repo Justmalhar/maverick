@@ -87,6 +87,10 @@ export async function ptyKill(ptyId: string): Promise<void> {
   return invoke("pty_kill", { ptyId });
 }
 
+export async function defaultShell(): Promise<string> {
+  return invoke("default_shell");
+}
+
 export async function configLoad(projectPath: string): Promise<MaverickConfig> {
   return invoke("config_load", { projectPath });
 }

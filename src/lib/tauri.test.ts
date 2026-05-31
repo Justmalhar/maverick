@@ -49,6 +49,13 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("pty_kill", { ptyId: "pty1" });
   });
 
+  it("defaultShell forwards to the default_shell command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("/bin/zsh" as never);
+    const shell = await api.defaultShell();
+    expect(invoke).toHaveBeenLastCalledWith("default_shell");
+    expect(shell).toBe("/bin/zsh");
+  });
+
   it("config and messages", async () => {
     await api.configLoad("/tmp/p");
     expect(invoke).toHaveBeenLastCalledWith("config_load", { projectPath: "/tmp/p" });

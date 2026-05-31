@@ -4,6 +4,8 @@ import { useSettings } from "@/lib/stores/settings";
 import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
+import { TerminalPane } from "./terminal/TerminalPane";
+import { cn } from "@/lib/utils";
 
 const UsagePanel = lazy(() => import("@/panels/usage/UsagePanel"));
 const BrowserPanel = lazy(() => import("@/panels/browser/BrowserPanel"));
@@ -33,10 +35,15 @@ export function EditorGroup() {
   const systemTabs = useWorkbench((s) => s.systemTabs);
   const activeSystemTab = useWorkbench((s) => s.activeSystemTab);
   const [lruLimit] = useSettings("advanced.lruLimit", 8);
+  const terminalTabs = useWorkbench((s) => s.terminalTabs);
+  const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
+  const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
 
-  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0;
+  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0;
   const showEmpty = !hasAnyTabs;
   const showSystemTab = activeSystemTab && systemTabs.includes(activeSystemTab);
+  const showTerminalTab =
+    !!activeTerminalTabId && terminalTabs.some((t) => t.id === activeTerminalTabId);
   // Keep the browser mounted for the lifetime of its tab. It is only torn down
   // when its tab is closed, so a page survives switching to any other tab.
   const browserOpen = systemTabs.includes("browser");
@@ -65,9 +72,33 @@ export function EditorGroup() {
             <WorkspaceEditor
               key={ws.id}
               workspace={ws}
-              active={!showSystemTab && ws.id === activeId}
+              active={!showSystemTab && !showTerminalTab && ws.id === activeId}
             />
           ))}
+
+        {/* Standalone terminal tabs: keep-alive mounted, hidden (not unmounted)
+            when not active so the PTY and scrollback survive a tab switch. */}
+        {terminalTabs.map((tab) => {
+          const active = showTerminalTab && tab.id === activeTerminalTabId;
+          return (
+            <div
+              key={tab.id}
+              data-testid={`terminal-tab-content-${tab.id}`}
+              aria-hidden={!active}
+              className={cn(
+                "absolute inset-0 bg-background",
+                !active && "keep-alive-hidden content-visibility-auto"
+              )}
+            >
+              <TerminalPane
+                ptyId={tab.ptyId}
+                paneId={tab.id}
+                isFocused={active}
+                onFocus={() => setActiveTerminalTab(tab.id)}
+              />
+            </div>
+          );
+        })}
 
         {/* Browser: keep-alive mounted while its tab exists; hidden (not
             unmounted) when another tab is active so the page survives. */}

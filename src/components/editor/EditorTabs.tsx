@@ -7,6 +7,7 @@ import {
   CheckSquare2,
   Zap,
   Plug,
+  TerminalSquare,
   X,
   SquareTerminal,
 } from "lucide-react";
@@ -25,6 +26,8 @@ import {
 import { cn } from "@/lib/utils";
 import { EditorTab } from "./EditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
+import { useTerminalTab } from "@/hooks/useTerminalTab";
+import { defaultTerminalCwd } from "@/lib/default-cwd";
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
@@ -36,6 +39,8 @@ const SYSTEM_TAB_META: Record<
   automations: { label: "Automations", icon: Zap, shortcut: "⌘⇧A" },
   mcps: { label: "MCP Servers", icon: Plug },
 };
+
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps"];
 
 export function EditorTabs() {
   const workspaces = useWorkbench((s) => s.workspaces);
@@ -65,6 +70,20 @@ export function EditorTabs() {
     e.preventDefault();
     setSaveLayoutFor(workspaceId);
   };
+
+  const terminalTabs = useWorkbench((s) => s.terminalTabs);
+  const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
+  const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
+  const { open: openTerminalTab, close: closeTerminal } = useTerminalTab();
+
+  async function onNewTerminal() {
+    try {
+      const cwd = await defaultTerminalCwd();
+      await openTerminalTab(cwd);
+    } catch (err) {
+      console.error("Failed to open terminal tab", err);
+    }
+  }
 
   return (
     <div
@@ -125,9 +144,64 @@ export function EditorTabs() {
             onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
           />
         ))}
+
+        {terminalTabs.map((tab) => {
+          const active = activeTerminalTabId === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTerminalTab(tab.id)}
+              data-testid={`editor-tab-terminal-${tab.id}`}
+              className={cn(
+                "group relative flex min-w-[110px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
+                active
+                  ? "bg-tab-active text-tab-fg-active"
+                  : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              <TerminalSquare className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <span className="flex-1 truncate text-left">{tab.title}</span>
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Close ${tab.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void closeTerminal(tab.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    void closeTerminal(tab.id);
+                  }
+                }}
+                className="flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-60"
+                data-active={active}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-px pr-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Open browser"
+              data-testid="editor-tabs-browser"
+              onClick={() => openSystemTab("browser")}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+            >
+              <Globe className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Open browser ⌘⇧B</TooltipContent>
+        </Tooltip>
+
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -145,8 +219,17 @@ export function EditorTabs() {
             <TooltipContent side="bottom">Open view</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>New</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={onNewTerminal}
+              data-testid="editor-tabs-open-terminal-tab"
+            >
+              <TerminalSquare className="h-3.5 w-3.5" />
+              <span className="flex-1">Terminal</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuLabel>Open as tab</DropdownMenuLabel>
-            {(Object.keys(SYSTEM_TAB_META) as SystemTabId[]).map((id) => {
+            {DROPDOWN_TAB_IDS.map((id) => {
               const meta = SYSTEM_TAB_META[id];
               const Icon = meta.icon;
               return (

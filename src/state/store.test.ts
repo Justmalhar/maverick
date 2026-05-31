@@ -20,6 +20,10 @@ beforeEach(() => {
     activeWorkspaceId: null,
     editorModes: {},
     splitTrees: {},
+    terminalTabs: [],
+    activeTerminalTabId: null,
+    systemTabs: [],
+    activeSystemTab: null,
     commandPaletteOpen: false,
     quickOpenOpen: false,
     presetLauncherOpen: false,
@@ -225,6 +229,55 @@ describe("workbench store", () => {
     const ps = useWorkbench.getState().projectSettings;
     expect(ps.open).toBe(false);
     expect(ps.projectId).toBeNull();
+  });
+
+  it("terminal tabs: add, remove, set active, mutual exclusivity", () => {
+    const tab1 = { id: "t1", cwd: "/Users/me/Desktop", title: "Desktop", ptyId: "pty-1" };
+    const tab2 = { id: "t2", cwd: "/Users/me/code", title: "code", ptyId: "pty-2" };
+
+    useWorkbench.getState().addTerminalTab(tab1);
+    useWorkbench.getState().addTerminalTab(tab2);
+    expect(useWorkbench.getState().terminalTabs.map((t) => t.id)).toEqual(["t1", "t2"]);
+
+    // duplicate add is a no-op
+    useWorkbench.getState().addTerminalTab(tab1);
+    expect(useWorkbench.getState().terminalTabs).toHaveLength(2);
+
+    // setActiveTerminalTab nulls workspace and system tab actives
+    useWorkbench.setState({ activeWorkspaceId: "w1", activeSystemTab: "browser" });
+    useWorkbench.getState().setActiveTerminalTab("t2");
+    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
+
+    // setActiveWorkspace nulls activeTerminalTabId AND activeSystemTab
+    useWorkbench.setState({ activeSystemTab: "browser", activeTerminalTabId: "t1" });
+    useWorkbench.getState().setActiveWorkspace("w1");
+    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
+
+    // openSystemTab nulls activeTerminalTabId
+    useWorkbench.getState().setActiveTerminalTab("t1");
+    useWorkbench.getState().openSystemTab("browser");
+    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+
+    // setActiveSystemTab with a non-null id nulls activeTerminalTabId and activeWorkspaceId
+    useWorkbench.setState({ activeWorkspaceId: "w1", activeTerminalTabId: "t1" });
+    useWorkbench.getState().setActiveSystemTab("browser");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+
+    // removeTerminalTab clears active when removing the active tab
+    useWorkbench.getState().setActiveTerminalTab("t1");
+    useWorkbench.getState().removeTerminalTab("t1");
+    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
+    expect(useWorkbench.getState().terminalTabs.map((t) => t.id)).toEqual(["t2"]);
+
+    // removeTerminalTab on inactive tab does not clear active
+    useWorkbench.getState().setActiveTerminalTab("t2");
+    useWorkbench.getState().addTerminalTab({ ...tab1 });
+    useWorkbench.getState().removeTerminalTab("t1");
+    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
   });
 });
 

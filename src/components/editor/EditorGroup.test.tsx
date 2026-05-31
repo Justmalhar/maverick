@@ -1,10 +1,29 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { EditorGroup } from "./EditorGroup";
 import { useWorkbench } from "@/state/store";
 import { useSettingsStore, _resetSettingsStoreForTests } from "@/lib/stores/settings";
 import { makeWorkspace } from "@/test/fixtures";
+
+vi.mock("./terminal/TerminalPane", () => ({
+  TerminalPane: ({
+    ptyId,
+    paneId,
+    onFocus,
+  }: {
+    ptyId: string;
+    paneId: string;
+    onFocus: (paneId: string) => void;
+  }) => (
+    <button
+      data-testid={`mock-terminal-pane-${paneId}`}
+      data-pty={ptyId}
+      onClick={() => onFocus(paneId)}
+    />
+  ),
+}));
 
 const initial = useWorkbench.getState();
 
@@ -139,5 +158,57 @@ describe("EditorGroup", () => {
     });
     renderWithProviders(<EditorGroup />);
     expect(screen.queryByTestId("browser-panel")).not.toBeInTheDocument();
+  });
+
+  it("renders a terminal pane for each terminal tab; only the active one is visible", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      systemTabs: [],
+      activeSystemTab: null,
+      terminalTabs: [
+        { id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" },
+        { id: "t2", cwd: "/b", title: "b", ptyId: "pty-2" },
+      ],
+      activeTerminalTabId: "t1",
+    });
+    renderWithProviders(<EditorGroup />);
+    const active = screen.getByTestId("terminal-tab-content-t1");
+    const inactive = screen.getByTestId("terminal-tab-content-t2");
+    expect(active).toHaveAttribute("aria-hidden", "false");
+    expect(inactive).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("focusing a terminal pane activates its tab", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      systemTabs: [],
+      activeSystemTab: null,
+      terminalTabs: [
+        { id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" },
+        { id: "t2", cwd: "/b", title: "b", ptyId: "pty-2" },
+      ],
+      activeTerminalTabId: "t1",
+    });
+    renderWithProviders(<EditorGroup />);
+    await userEvent.click(screen.getByTestId("mock-terminal-pane-t2"));
+    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
+  });
+
+  it("does not show the empty editor when only a terminal tab is open", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      systemTabs: [],
+      activeSystemTab: null,
+      terminalTabs: [{ id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" }],
+      activeTerminalTabId: "t1",
+    });
+    renderWithProviders(<EditorGroup />);
+    expect(screen.queryByTestId("empty-editor")).not.toBeInTheDocument();
   });
 });
