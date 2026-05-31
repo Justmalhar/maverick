@@ -28,7 +28,8 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
   });
   const projectPath = useWorkbench((s) => {
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
-    return s.projects.find((p) => p.id === ws?.projectId)?.path;
+    const active = s.projects.find((p) => p.id === ws?.projectId);
+    return (active ?? s.projects[0])?.path;
   });
   const addWorkspace = useWorkbench((s) => s.addWorkspace);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
@@ -49,8 +50,9 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
   }, [presets, query]);
 
   const launch = async (preset: WorkspacePreset) => {
+    if (!projectPath) return;
     try {
-      const result = await presetLaunch(preset, projectId, preset.baseBranch);
+      const result = await presetLaunch(preset, projectPath, preset.baseBranch);
       addWorkspace({
         id: result.workspaceId,
         projectId,

@@ -1,3 +1,4 @@
+import { join } from "path";
 import { defaultShell } from "./deps";
 import type {
   BlameLine,
@@ -81,15 +82,23 @@ export class GitError extends Error {
   }
 }
 
+/** Reads a file's raw bytes in-process. Rejects if the path is unreadable. */
+export type FileReader = (path: string) => Promise<ArrayBuffer>;
+
+const defaultFileReader: FileReader = (path) => Bun.file(path).arrayBuffer();
+
 export interface GitModuleOptions {
   shell?: Shell;
+  readFile?: FileReader;
 }
 
 export class GitModule {
   private shell: Shell;
+  private readFile: FileReader;
 
   constructor(opts: GitModuleOptions = {}) {
     this.shell = opts.shell ?? defaultShell;
+    this.readFile = opts.readFile ?? defaultFileReader;
   }
 
   async log(params: LogParams): Promise<Commit[]> {
@@ -280,7 +289,7 @@ export class GitModule {
       ["git", "-C", params.worktreePath, "stash", action, `stash@{${params.index}}`],
       undefined
     );
-    if (exitCode !== 0) throw new Error(stderr || `git stash ${action} failed`);
+    if (exitCode !== 0) throw GitModule.classifyError(stderr, `git stash ${action}`);
     return { ok: true };
   }
 
@@ -299,40 +308,60 @@ export class GitModule {
       } catch {
         content = "";
       }
-      // We read the working-tree file (it carries the conflict markers); base is
-      // best-effort via the index stage 1 above and may be empty for add/add.
-      let working: string;
-      try {
-        working = await this.shell.text(["cat", `${params.worktreePath}/${filePath}`], undefined);
-      } catch {
-        working = "";
+      // We read the working-tree file (it carries the conflict markers) in-process;
+      // base is best-effort via the index stage 1 above and may be empty for add/add.
+      const working = await this.readConflictWorkingTree(params.worktreePath, filePath);
+      if (working === null) {
+        // Binary or unreadable conflict: cannot surface text hunks, so emit a
+        // flagged entry the UI can route to manual resolution instead of
+        // silently reporting zero conflicts for the file.
+        hunks.push({ filePath, hunkIndex: 0, ours: [], theirs: [], binary: true });
+        continue;
       }
       hunks.push(...GitModule.parseConflictMarkers(filePath, working, content));
     }
     return hunks;
   }
 
+  /**
+   * Read a conflicted working-tree file as text. Returns `null` for binary
+   * content (NUL byte present, git's own heuristic) or an unreadable path so the
+   * caller can flag it rather than swallow the error. Read errors are not
+   * swallowed silently — a missing/unreadable path maps to the same `null`
+   * signal, never a spurious empty string that hides the conflict.
+   */
+  private async readConflictWorkingTree(
+    worktreePath: string,
+    filePath: string
+  ): Promise<string | null> {
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await this.readFile(join(worktreePath, filePath)));
+    } catch {
+      return null;
+    }
+    if (bytes.includes(0)) return null;
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  }
+
   async resolveConflict(params: ResolveConflictParams): Promise<{ ok: true }> {
-    // `git checkout --ours/--theirs` resolves whole-file; `--merge` (both) keeps
-    // markers re-applied. We then stage the file so the index reflects resolution.
-    const arg =
-      params.resolution === "ours"
-        ? "--ours"
-        : params.resolution === "theirs"
-          ? "--theirs"
-          : "--merge";
-    const checkout = await this.shell.run(
-      ["git", "-C", params.worktreePath, "checkout", arg, "--", params.filePath],
-      undefined
-    );
-    if (checkout.exitCode !== 0) throw new Error(checkout.stderr || "git checkout (resolve) failed");
+    // "both" keeps the user's hand-edited working tree (which still carries the
+    // conflict markers they resolve in-editor) and simply stages it. There is no
+    // `git checkout --merge <file>` flag, so we only check out for whole-file
+    // ours/theirs resolutions; every path ends by staging the file.
     if (params.resolution !== "both") {
-      const add = await this.shell.run(
-        ["git", "-C", params.worktreePath, "add", "--", params.filePath],
+      const arg = params.resolution === "ours" ? "--ours" : "--theirs";
+      const checkout = await this.shell.run(
+        ["git", "-C", params.worktreePath, "checkout", arg, "--", params.filePath],
         undefined
       );
-      if (add.exitCode !== 0) throw new Error(add.stderr || "git add (resolve) failed");
+      if (checkout.exitCode !== 0) throw new Error(checkout.stderr || "git checkout (resolve) failed");
     }
+    const add = await this.shell.run(
+      ["git", "-C", params.worktreePath, "add", "--", params.filePath],
+      undefined
+    );
+    if (add.exitCode !== 0) throw new Error(add.stderr || "git add (resolve) failed");
     return { ok: true };
   }
 

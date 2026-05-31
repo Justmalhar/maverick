@@ -181,10 +181,10 @@ export async function projectSettingsOpenFile(projectId: string): Promise<{ path
 
 export async function presetLaunch(
   preset: WorkspacePreset,
-  projectId: string,
+  projectPath: string,
   branch?: string
 ): Promise<{ workspaceId: string }> {
-  return invoke("preset_launch", { preset, projectId, branch });
+  return invoke("preset_launch", { preset, projectPath, branch });
 }
 
 export async function presetSaveCurrent(

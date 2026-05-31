@@ -20,8 +20,8 @@ export function usePresets(projectPath?: string) {
   }, [projectPath]);
 
   const launch = useCallback(
-    async (preset: WorkspacePreset, projectId: string, branch?: string) =>
-      presetLaunch(preset, projectId, branch),
+    async (preset: WorkspacePreset, projectPath: string, branch?: string) =>
+      presetLaunch(preset, projectPath, branch),
     []
   );
 

@@ -330,7 +330,11 @@ export function useSourceControl(
       return;
     }
     void refresh({ remote: "auto" });
-  }, [refresh, worktreePath, enabled]);
+    // `worktreePath` is intentionally omitted: it is already captured inside the
+    // refresh→doRefresh closure, so `refresh` changes identity whenever the path
+    // does. Listing it here too would let this effect race the line-178 reset
+    // effect and briefly strand isLoading=true after a path change.
+  }, [refresh, enabled]);
 
   return useMemo<SourceControlSummary>(
     () => ({

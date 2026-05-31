@@ -435,6 +435,18 @@ describe("useSourceControl", () => {
     await waitFor(() => expect(result.current.upstream).toBe("origin/main"));
   });
 
+  it("does not strand isLoading after a worktreePath change", async () => {
+    mockGit({ branchList: () => [branch({ isCurrent: true, upstream: "origin/main" })] });
+    const { result, rerender } = renderHook(
+      ({ path }) => useSourceControl(path),
+      { initialProps: { path: "/wt-a" } }
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    rerender({ path: "/wt-b" });
+    await waitFor(() => expect(result.current.branch?.upstream).toBe("origin/main"));
+    expect(result.current.isLoading).toBe(false);
+  });
+
   it("LRU evicts oldest auto-fetch entries beyond limit", async () => {
     // The auto-fetch throttle map is module-level and bounded to 16 entries.
     // Mounting 18 distinct paths (each auto-fetches once) evicts /p0 + /p1.

@@ -8,6 +8,10 @@ interface Step {
   stderr?: string;
 }
 
+function bytes(s: string): ArrayBuffer {
+  return new TextEncoder().encode(s).buffer as ArrayBuffer;
+}
+
 function transcript(steps: Step[]): { shell: Shell; calls: string[][] } {
   const calls: string[][] = [];
   let i = 0;
@@ -331,11 +335,31 @@ describe("GitModule methods", () => {
     expect(calls[2]).toEqual(["git", "-C", "/w", "stash", "drop", "stash@{2}"]);
   });
 
-  test("stashApply throws on failure", async () => {
+  test("stashApply throws a typed GitError via classifyError", async () => {
     const { shell } = transcript([{ exitCode: 1, stderr: "no stash entries" }]);
-    await expect(
-      new GitModule({ shell }).stashApply({ worktreePath: "/w", index: 0 })
-    ).rejects.toThrow(/no stash entries/);
+    let caught: unknown;
+    try {
+      await new GitModule({ shell }).stashApply({ worktreePath: "/w", index: 0 });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(GitError);
+    expect((caught as GitError).kind).toBe("failed");
+    expect((caught as GitError).message).toMatch(/no stash entries/);
+  });
+
+  test("stashPop classifies an auth failure from stderr", async () => {
+    const { shell } = transcript([
+      { exitCode: 1, stderr: "fatal: Authentication failed for 'https://x'" },
+    ]);
+    let caught: unknown;
+    try {
+      await new GitModule({ shell }).stashPop({ worktreePath: "/w", index: 0 });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(GitError);
+    expect((caught as GitError).kind).toBe("auth");
   });
 
   test("conflicts lists unmerged files and parses their markers", async () => {
@@ -350,15 +374,19 @@ describe("GitModule methods", () => {
     const { shell, calls } = transcript([
       { stdout: "file.ts\n" }, // diff --name-only --diff-filter=U
       { stdout: "base line" }, // git show :1:file.ts
-      { stdout: conflicted }, // cat working tree
     ]);
-    const hunks = await new GitModule({ shell }).conflicts({ worktreePath: "/w" });
+    const readFile = async (path: string) => {
+      expect(path).toBe("/w/file.ts");
+      return bytes(conflicted);
+    };
+    const hunks = await new GitModule({ shell, readFile }).conflicts({ worktreePath: "/w" });
     expect(calls[0]).toContain("--diff-filter=U");
     expect(hunks).toHaveLength(1);
     expect(hunks[0].filePath).toBe("file.ts");
     expect(hunks[0].ours).toEqual(["ours line"]);
     expect(hunks[0].theirs).toEqual(["theirs line"]);
     expect(hunks[0].base).toEqual(["base line"]);
+    expect(hunks[0].binary).toBeUndefined();
   });
 
   test("conflicts returns empty when working tree is clean", async () => {
@@ -367,22 +395,53 @@ describe("GitModule methods", () => {
     expect(hunks).toEqual([]);
   });
 
-  test("conflicts tolerates git show / cat failures", async () => {
-    const calls: string[][] = [];
+  test("conflicts tolerates a failing git show but still reads the working tree", async () => {
+    const conflicted = ["<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> feat"].join("\n");
     const shell: Shell = {
       async text(cmd) {
-        calls.push(cmd);
         if (cmd.includes("--diff-filter=U")) return "file.ts\n";
-        throw new Error("boom"); // both git show and cat fail
+        throw new Error("boom"); // git show :1: fails (no base stage)
       },
-      async run(cmd) {
-        calls.push(cmd);
+      async run() {
         return { stdout: "", stderr: "", exitCode: 0 };
       },
     };
-    const hunks = await new GitModule({ shell }).conflicts({ worktreePath: "/w" });
-    // No markers in empty working content -> no hunks, but no throw either.
-    expect(hunks).toEqual([]);
+    const hunks = await new GitModule({
+      shell,
+      readFile: async () => bytes(conflicted),
+    }).conflicts({ worktreePath: "/w" });
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].ours).toEqual(["ours"]);
+    expect(hunks[0].base).toBeUndefined();
+  });
+
+  test("conflicts flags a binary conflict file instead of dropping it", async () => {
+    const { shell } = transcript([
+      { stdout: "image.png\n" }, // diff --name-only --diff-filter=U
+      { stdout: "" }, // git show :1:image.png
+    ]);
+    const binaryReader = async () => new Uint8Array([0x89, 0x50, 0x00, 0x4e]).buffer;
+    const hunks = await new GitModule({ shell, readFile: binaryReader }).conflicts({
+      worktreePath: "/w",
+    });
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0]).toEqual({ filePath: "image.png", hunkIndex: 0, ours: [], theirs: [], binary: true });
+  });
+
+  test("conflicts flags an unreadable conflict file as binary rather than swallowing", async () => {
+    const { shell } = transcript([
+      { stdout: "gone.ts\n" }, // diff --name-only --diff-filter=U
+      { stdout: "" }, // git show :1:gone.ts
+    ]);
+    const failingReader = async () => {
+      throw new Error("ENOENT");
+    };
+    const hunks = await new GitModule({ shell, readFile: failingReader }).conflicts({
+      worktreePath: "/w",
+    });
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].binary).toBe(true);
+    expect(hunks[0].filePath).toBe("gone.ts");
   });
 
   test("resolveConflict ours checks out --ours and stages the file", async () => {
@@ -408,7 +467,7 @@ describe("GitModule methods", () => {
     expect(calls[0]).toContain("--theirs");
   });
 
-  test("resolveConflict both uses --merge and skips staging", async () => {
+  test("resolveConflict both stages the working-tree file without checkout", async () => {
     const { shell, calls } = transcript([{}]);
     await new GitModule({ shell }).resolveConflict({
       worktreePath: "/w",
@@ -416,8 +475,23 @@ describe("GitModule methods", () => {
       hunkIndex: 0,
       resolution: "both",
     });
-    expect(calls[0]).toContain("--merge");
-    expect(calls).toHaveLength(1); // no `add`
+    // No `git checkout` (there is no valid --merge file flag); only stage as-is.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual(["git", "-C", "/w", "add", "--", "f.ts"]);
+    expect(calls[0]).not.toContain("checkout");
+    expect(calls[0]).not.toContain("--merge");
+  });
+
+  test("resolveConflict both throws when staging fails", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "add failed (both)" }]);
+    await expect(
+      new GitModule({ shell }).resolveConflict({
+        worktreePath: "/w",
+        filePath: "f.ts",
+        hunkIndex: 0,
+        resolution: "both",
+      })
+    ).rejects.toThrow(/add failed \(both\)/);
   });
 
   test("resolveConflict throws when checkout fails", async () => {

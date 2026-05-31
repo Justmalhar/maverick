@@ -174,6 +174,12 @@ export interface ConflictHunk {
   ours: string[];
   theirs: string[];
   base?: string[];
+  /**
+   * Set when the conflicted working-tree file could not be read as text (binary
+   * content or an unreadable path). The resolver UI surfaces this as a
+   * needs-manual-resolution entry instead of silently dropping the file.
+   */
+  binary?: boolean;
 }
 
 export type ConflictResolution = "ours" | "theirs" | "both";

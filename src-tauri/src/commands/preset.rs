@@ -19,7 +19,7 @@ pub async fn preset_list(
 pub async fn preset_launch(
     state: State<'_, AppState>,
     preset: Value,
-    project_id: String,
+    project_path: String,
     branch: Option<String>,
 ) -> Result<Value, String> {
     state
@@ -28,7 +28,7 @@ pub async fn preset_launch(
             "preset.launch",
             json!({
                 "preset": preset,
-                "projectId": project_id,
+                "projectPath": project_path,
                 "branch": branch,
             }),
         )

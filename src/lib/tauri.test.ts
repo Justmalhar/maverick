@@ -109,9 +109,9 @@ describe("tauri command wrappers", () => {
     await api.presetList("/p");
     expect(invoke).toHaveBeenLastCalledWith("preset_list", { projectPath: "/p" });
     const layout = { type: "terminal" as const, agent: "a", cwd: "/", mode: "agent" as const };
-    await api.presetLaunch({ name: "x", layout }, "p1");
+    await api.presetLaunch({ name: "x", layout }, "/p1");
     expect(invoke).toHaveBeenLastCalledWith("preset_launch", {
-      preset: { name: "x", layout }, projectId: "p1", branch: undefined,
+      preset: { name: "x", layout }, projectPath: "/p1", branch: undefined,
     });
     await api.presetSaveCurrent("w1", "n");
     expect(invoke).toHaveBeenLastCalledWith("preset_save_current", { workspaceId: "w1", name: "n" });
