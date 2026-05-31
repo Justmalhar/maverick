@@ -24,6 +24,18 @@ vi.mock("@tauri-apps/api/window", () => ({
   }),
 }));
 
+// Auto-update plugins (P3-B). VersionSettings mounts useUpdater on every
+// settings render, so a default no-op mock keeps unrelated tests green.
+// `check()` resolves to null (up to date) by default; the dedicated
+// useUpdater/VersionSettings specs override these per-test with vi.mocked(...).
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@tauri-apps/plugin-process", () => ({
+  relaunch: vi.fn().mockResolvedValue(undefined),
+}));
+
 // The shell plugin reaches into `window.__TAURI_INTERNALS__` directly instead
 // of going through `@tauri-apps/api/core::invoke`, so our existing mock above
 // doesn't catch its `open(url)` calls. Provide a separate spy.

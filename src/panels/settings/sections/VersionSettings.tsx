@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { SettingsGroup } from "../primitives/SettingsGroup";
 import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsSelect } from "../primitives/SettingsSelect";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/stores/settings";
-
-const APP_VERSION = "0.1.0";
-const COMMIT = "cc-ui/settings-redesign";
+import { appVersion, appCommit, versionLabel } from "@/lib/build-info";
+import { useUpdater, type UpdaterStatus } from "@/hooks/useUpdater";
 
 const CHANNELS = [
   { value: "stable", label: "Stable" },
@@ -15,19 +14,44 @@ const CHANNELS = [
   { value: "nightly", label: "Nightly" },
 ];
 
+const APP_VERSION = appVersion();
+const COMMIT = appCommit();
+
+function statusMessage(status: UpdaterStatus, available: string | undefined): string {
+  switch (status) {
+    case "idle":
+      return "Not checked yet.";
+    case "checking":
+      return "Checking…";
+    case "uptodate":
+      return "Up to date";
+    case "available":
+      return available ? `Update available: ${available}` : "Update available";
+    case "installing":
+      return "Downloading and installing…";
+    case "unconfigured":
+      return "Updates are not configured for this build.";
+    case "error":
+      return "Check failed.";
+  }
+}
+
 export default function VersionSettings() {
   const [channel, setChannel] = useSettings("version.updateChannel", "stable");
   const [copied, setCopied] = useState(false);
+  const { status, update, error, checkNow, installAndRestart } = useUpdater();
 
   const copyVersion = async () => {
     try {
-      await navigator.clipboard.writeText(`Maverick ${APP_VERSION} (${COMMIT})`);
+      await navigator.clipboard.writeText(versionLabel());
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // clipboard blocked — no-op
     }
   };
+
+  const busy = status === "checking" || status === "installing";
 
   return (
     <div data-testid="version-settings" className="space-y-5">
@@ -54,7 +78,20 @@ export default function VersionSettings() {
         <SettingsRow
           title="Status"
           description="Most recent check against the update channel."
-          control={<span className="text-xs text-muted-foreground">Up to date</span>}
+          control={
+            <span
+              data-testid="version-status"
+              className={
+                status === "error"
+                  ? "text-xs text-destructive"
+                  : status === "available"
+                    ? "text-xs text-accent"
+                    : "text-xs text-muted-foreground"
+              }
+            >
+              {statusMessage(status, update?.version)}
+            </span>
+          }
         />
       </SettingsGroup>
 
@@ -76,11 +113,46 @@ export default function VersionSettings() {
           title="Check for updates"
           description="Fetch release manifest from the channel above."
           control={
-            <Button variant="outline" size="sm" data-testid="version-check">
-              Check now
-            </Button>
+            status === "available" || status === "installing" ? (
+              <Button
+                variant="default"
+                size="sm"
+                data-testid="version-install"
+                disabled={busy}
+                onClick={() => void installAndRestart()}
+              >
+                {status === "installing" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Install &amp; restart
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="version-check"
+                disabled={busy}
+                onClick={() => void checkNow()}
+              >
+                {status === "checking" ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Check now
+              </Button>
+            )
           }
         />
+        {status === "error" && error ? (
+          <SettingsRow
+            title="Error"
+            description="The last update check did not complete."
+            control={
+              <span data-testid="version-error" className="text-xs text-destructive">
+                {error}
+              </span>
+            }
+          />
+        ) : null}
       </SettingsGroup>
     </div>
   );

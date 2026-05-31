@@ -64,6 +64,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        // Auto-update (P3-B). `updater` exposes `plugin:updater|check/download_and_install`
+        // to the webview (gated by the capability); `process` exposes
+        // `plugin:process|restart` so the frontend can relaunch into the new build.
+        // Desktop-only — the updater has no mobile target.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

@@ -29,9 +29,18 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/justmalhar/maverick/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDczRjBFRTU4OUI0MkNENjkKUldScHpVS2JXTzd3YzYySWNNREhRWVcrWktKamxzdS9NVFl1WS9vRlVnbWVXaXJ1YlljWW1mQncK"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "externalBin": ["binaries/maverick-sidecar"],
     "category": "DeveloperTool",
     "shortDescription": "Native desktop IDE that orchestrates AI coding CLIs.",
