@@ -84,9 +84,11 @@ impl<R: Runtime> PtyHost for ManagedPty<R> {
 }
 
 /// A running listener: the bound address plus a handle whose abort stops accept.
+/// `hook` is the Claude hook bridge's localhost:7789 listener (if it bound).
 struct Running {
     addr: SocketAddr,
     accept_task: JoinHandle<()>,
+    hook: Option<crate::remote::hook_server::HookListenerHandle>,
 }
 
 /// Snapshot of the server for the `remote_status` command.
@@ -163,9 +165,25 @@ impl RemoteServer {
         let pty: Arc<dyn PtyHost> = Arc::new(ManagedPty { app: app.clone() });
         let bridge = Arc::new(RemoteBridge::new(sidecar, pty));
 
+        // Bind the Claude hook bridge on 127.0.0.1:7789 and merge the hook config
+        // into ~/.claude/settings.json (idempotent, non-clobbering). A bind
+        // failure (e.g. port already taken) is non-fatal: chat-mode stream-json
+        // events still flow; only the hook-driven lifecycle events are lost.
+        let hook_bridge = bridge.hook_bridge();
+        if let Err(e) = crate::remote::hook_server::HookConfigWriter::install() {
+            log::warn!("remote: hook config not written: {e}");
+        }
+        let hook = match hook_bridge.serve(crate::remote::hook_server::HOOK_PORT).await {
+            Ok(handle) => Some(handle),
+            Err(e) => {
+                log::warn!("remote: hook server not started: {e}");
+                None
+            }
+        };
+
         let accept_task = tokio::spawn(accept_loop(listener, bridge));
 
-        *guard = Some(Running { addr, accept_task });
+        *guard = Some(Running { addr, accept_task, hook });
         self.enabled.store(true, std::sync::atomic::Ordering::Release);
         drop(guard);
         Ok(self.status().await)
@@ -176,6 +194,9 @@ impl RemoteServer {
     pub async fn stop(&self) -> RemoteStatus {
         if let Some(running) = self.running.lock().await.take() {
             running.accept_task.abort();
+            if let Some(hook) = running.hook {
+                hook.shutdown();
+            }
         }
         self.enabled.store(false, std::sync::atomic::Ordering::Release);
         self.status().await
@@ -283,7 +304,11 @@ where
     if let Some(sid) = conn.attached_session() {
         log::debug!("remote: detaching session {sid} on disconnect");
     }
+    if let Some(sid) = conn.attached_agent_session() {
+        log::debug!("remote: detaching agent session {sid} on disconnect");
+    }
     conn.detach();
+    conn.detach_agent();
 
     // The writer task can't be drained to graceful EOF via dropping `out_tx`
     // alone: a live tee drain task (spawn_blocking on the C2 receiver) may still
@@ -315,6 +340,13 @@ async fn handle_text(
         }
     };
     let outcome = bridge.handle(msg).await;
+    // Start the agent-event forward BEFORE sending replies so the client can't
+    // miss an event that races in between the reply and the subscription. The
+    // broadcast receiver is created from the bridge's bus; only frames for this
+    // session reach the socket.
+    if let Some(session_id) = outcome.agent_attach {
+        conn.start_agent_attach(session_id, bridge.subscribe_agent_events());
+    }
     for reply in outcome.replies {
         if out_tx.send(reply).is_err() {
             return;
@@ -466,7 +498,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_message_returns_deferred_error_over_ws() {
+    async fn agent_input_to_unknown_session_errors_over_ws() {
+        // AgentInput for a non-existent session now yields a routing error
+        // (the agent surface is implemented in Companion-4).
         let (mut client, server) = connect().await;
         send(
             &mut client,
@@ -474,7 +508,7 @@ mod tests {
         )
         .await;
         match recv_server_msg(&mut client).await {
-            ServerMessage::Error { message } => assert!(message.contains("Companion-4")),
+            ServerMessage::Error { message } => assert!(message.contains("no agent session")),
             other => panic!("got {other:?}"),
         }
         client.close(None).await.unwrap();

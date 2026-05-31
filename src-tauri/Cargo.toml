@@ -51,3 +51,7 @@ async-trait = "0.1"
 tempfile = "3"
 # `test` enables tauri::test::mock_app for exercising commands headlessly.
 tauri = { version = "2", features = ["test"] }
+# `test-util` enables tokio's paused-clock (`time::advance`, `start_paused`) so
+# the hook-bridge permission-timeout test asserts the 30 s auto-deny in virtual
+# time, deterministically and instantly (no real 30 s wait). Dev/test only.
+tokio = { version = "1", features = ["full", "test-util"] }
