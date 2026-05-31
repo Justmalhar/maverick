@@ -8,6 +8,8 @@ pub async fn automation_run(
     state: State<'_, AppState>,
     automation_name: String,
     workspace_id: Option<String>,
+    project_path: Option<String>,
+    worktree_path: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -16,6 +18,8 @@ pub async fn automation_run(
             json!({
                 "automationName": automation_name,
                 "workspaceId": workspace_id,
+                "projectPath": project_path,
+                "worktreePath": worktree_path,
             }),
         )
         .await

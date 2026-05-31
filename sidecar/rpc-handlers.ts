@@ -20,7 +20,7 @@ import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
 import { stdoutNotifier } from "./deps";
-import type { Notifier } from "./types";
+import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
 const StringParam = z.object({}).passthrough();
@@ -134,6 +134,19 @@ const Schemas = {
     projectPath: nullishOptional(z.string()),
   }),
   mcpStop: z.object({ name: z.string() }),
+  mcpLogs: z.object({ name: z.string(), sinceOffset: nullishOptional(z.number().int().nonnegative()) }),
+  mcpAdd: z.object({
+    name: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).default([]),
+    env: nullishOptional(z.record(z.string(), z.string())),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+  }),
+  configSave: z.object({
+    projectPath: z.string(),
+    patch: z.record(z.string(), z.unknown()),
+  }),
   contextUsage: z.object({ sessionId: z.string() }),
   contextRecord: z.object({
     sessionId: z.string(),
@@ -288,6 +301,13 @@ export class RpcHandlers {
     }
   }
 
+  // Drives MCP backoff-gated auto-restarts. The server loop calls this on a
+  // fixed interval; each tick re-spawns any crashed server whose backoff window
+  // has elapsed (until the per-server retry cap is hit).
+  pollMcpHealth(): void {
+    this.mcp.tick();
+  }
+
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
     switch (method) {
       case "project.add": {
@@ -404,6 +424,10 @@ export class RpcHandlers {
       case "config.load": {
         const p = Schemas.configLoad.parse(params);
         return this.config.load(p.projectPath);
+      }
+      case "config.save": {
+        const p = Schemas.configSave.parse(params);
+        return this.config.save(p.projectPath, p.patch as Partial<MaverickConfig>);
       }
       case "messages.list": {
         const p = Schemas.messagesList.parse(params);
@@ -554,6 +578,21 @@ export class RpcHandlers {
       }
       case "mcp.list":
         return this.mcp.list();
+      case "mcp.logs": {
+        const p = Schemas.mcpLogs.parse(params);
+        return this.mcp.logs(p.name, p.sinceOffset ?? 0);
+      }
+      case "mcp.add": {
+        const p = Schemas.mcpAdd.parse(params);
+        const projectPath =
+          p.projectPath ?? (p.workspaceId ? this.requireWorkspacePaths(p.workspaceId).projectPath : undefined);
+        if (!projectPath) throw new Error("mcp.add requires workspaceId or projectPath");
+        const config = this.config.load(projectPath);
+        const mcps = (config.mcps ?? []).filter((m) => m.name !== p.name);
+        mcps.push({ name: p.name, command: p.command, args: p.args, env: p.env });
+        this.config.save(projectPath, { mcps });
+        return { ok: true };
+      }
       case "context.usage": {
         const p = Schemas.contextUsage.parse(params);
         return this.context.usage(p.sessionId);

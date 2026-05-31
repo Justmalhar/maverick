@@ -87,6 +87,13 @@ export async function configLoad(projectPath: string): Promise<MaverickConfig> {
   return invoke("config_load", { projectPath });
 }
 
+export async function configSave(
+  projectPath: string,
+  patch: Partial<MaverickConfig>
+): Promise<MaverickConfig> {
+  return invoke("config_save", { projectPath, patch });
+}
+
 export async function messagesList(
   sessionId: string,
   limit = 100,
@@ -210,6 +217,41 @@ export async function mcpList(): Promise<MCPServer[]> {
   return invoke("mcp_list");
 }
 
+export interface MCPLogPage {
+  data: string;
+  nextOffset: number;
+  dropped: number;
+}
+
+export async function mcpLogs(name: string, sinceOffset = 0): Promise<MCPLogPage> {
+  return invoke("mcp_logs", { name, sinceOffset });
+}
+
+export async function mcpAdd(
+  name: string,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  workspaceId?: string,
+  projectPath?: string
+): Promise<{ ok: true }> {
+  return invoke("mcp_add", { name, command, args, env, workspaceId, projectPath });
+}
+
+export function onMcpStatus(
+  callback: (payload: {
+    name: string;
+    status: MCPServer["status"];
+    restarts: number;
+    exitCode: number;
+  }) => void
+): Promise<UnlistenFn> {
+  return listen<{ name: string; status: MCPServer["status"]; restarts: number; exitCode: number }>(
+    "mcp:status",
+    (e) => callback(e.payload)
+  );
+}
+
 export async function contextUsage(sessionId: string): Promise<ContextUsage> {
   return invoke("context_usage", { sessionId });
 }
@@ -231,9 +273,11 @@ export async function attachmentCreate(
 
 export async function automationRun(
   automationName: string,
-  workspaceId?: string
+  workspaceId?: string,
+  projectPath?: string,
+  worktreePath?: string
 ): Promise<void> {
-  return invoke("automation_run", { automationName, workspaceId });
+  return invoke("automation_run", { automationName, workspaceId, projectPath, worktreePath });
 }
 
 export async function notifySend(

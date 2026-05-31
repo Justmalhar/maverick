@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkbench } from "@/state/store";
-import { configLoad, automationRun } from "@/lib/tauri";
+import { configLoad, configSave, automationRun } from "@/lib/tauri";
 import type { Automation } from "@/lib/ipc";
 import AutomationBuilder from "./AutomationBuilder";
 import AutomationRunner from "./AutomationRunner";
@@ -57,18 +57,17 @@ export default function AutomationsPanel() {
 
   const upsert = useCallback(
     (next: Automation) => {
-      setAutomations((curr) => {
-        const idx = curr.findIndex((a) => a.name === next.name);
-        if (idx >= 0) {
-          const out = [...curr];
-          out[idx] = next;
-          return out;
-        }
-        return [...curr, next];
-      });
-      // Persistence to maverick.yaml is handled by sidecar; v0.1 keeps it in-memory if backend command missing.
+      // Compute the merged list synchronously so we can both render it and
+      // persist it to maverick.yaml in the same pass — without this the edit was
+      // in-memory only and vanished on reload.
+      const idx = automations.findIndex((a) => a.name === next.name);
+      const merged = idx >= 0 ? automations.map((a, i) => (i === idx ? next : a)) : [...automations, next];
+      setAutomations(merged);
+      if (activeProject) {
+        configSave(activeProject.path, { automations: merged }).catch((e) => setError(String(e)));
+      }
     },
-    []
+    [activeProject, automations]
   );
 
   const selectedAutomation = useMemo(

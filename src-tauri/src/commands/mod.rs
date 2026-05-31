@@ -32,7 +32,7 @@ pub use browser::{
     browser_set_bounds, browser_show,
 };
 pub use caffeinate::{caffeinate_start, caffeinate_status, caffeinate_stop};
-pub use config::config_load;
+pub use config::{config_load, config_save};
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
 pub use file_tree::file_tree;
@@ -43,7 +43,7 @@ pub use git::{
 };
 pub use instructions::instructions_resolve;
 pub use kanban::{kanban_list, kanban_upsert};
-pub use mcp::{mcp_list, mcp_start, mcp_stop};
+pub use mcp::{mcp_add, mcp_list, mcp_logs, mcp_start, mcp_stop};
 pub use messages::{message_append, messages_list};
 pub use notify::{
     notify_list, notify_mark_all_read, notify_mark_read, notify_send, notify_unread_count,

@@ -5,6 +5,7 @@ export interface ManagedProc {
   kill(signal?: string | number): void;
   stdin?: { write(data: string | Uint8Array): unknown | Promise<unknown>; flush?(): unknown };
   stdout?: ReadableStream<Uint8Array>;
+  stderr?: ReadableStream<Uint8Array>;
   exitCode: number | null;
   exited: Promise<number>;
 }

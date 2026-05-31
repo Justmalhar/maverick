@@ -133,12 +133,15 @@ export interface AutomationStep {
   [key: string]: unknown;
 }
 
+export type MCPStatus = "running" | "stopped" | "error" | "crashed" | "restarting";
+
 export interface MCPServer {
   name: string;
   command: string;
   args: string[];
-  status: "running" | "stopped" | "error";
+  status: MCPStatus;
   pid?: number;
+  restarts?: number;
 }
 
 export interface ContextUsage {

@@ -86,7 +86,12 @@ export default function MCPsPanel() {
           </div>
         )}
       </ScrollArea>
-      <AddMCPDialog open={addOpen} onOpenChange={setAddOpen} onAdded={refresh} />
+      <AddMCPDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={refresh}
+        workspaceId={activeWorkspaceId ?? undefined}
+      />
     </motion.div>
   );
 }

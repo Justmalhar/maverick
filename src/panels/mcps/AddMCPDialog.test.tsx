@@ -73,4 +73,27 @@ describe("AddMCPDialog", () => {
     expect(invoke).toHaveBeenCalledWith("mcp_add", expect.objectContaining({ env: { KEY: "VAL" } }));
     expect(onAdded).toHaveBeenCalled();
   });
+
+  it("applies a bundled preset to prefill the form and submits with workspaceId", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
+    const onAdded = vi.fn();
+    renderWithProviders(
+      <AddMCPDialog open onOpenChange={() => {}} onAdded={onAdded} workspaceId="w1" />
+    );
+    await userEvent.click(screen.getByTestId("mcp-preset-filesystem"));
+    expect(screen.getByTestId("mcp-name")).toHaveValue("filesystem");
+    expect(screen.getByTestId("mcp-command")).toHaveValue("npx");
+    await userEvent.click(screen.getByTestId("mcp-add-submit"));
+    expect(invoke).toHaveBeenCalledWith(
+      "mcp_add",
+      expect.objectContaining({ name: "filesystem", command: "npx", workspaceId: "w1" })
+    );
+  });
+
+  it("renders every bundled preset chip", () => {
+    renderWithProviders(<AddMCPDialog open onOpenChange={() => {}} onAdded={() => {}} />);
+    for (const id of ["filesystem", "git", "sqlite", "fetch"]) {
+      expect(screen.getByTestId(`mcp-preset-${id}`)).toBeInTheDocument();
+    }
+  });
 });

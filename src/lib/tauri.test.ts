@@ -122,6 +122,16 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("mcp_stop", { name: "fs" });
     await api.mcpList();
     expect(invoke).toHaveBeenLastCalledWith("mcp_list");
+    await api.mcpLogs("fs");
+    expect(invoke).toHaveBeenLastCalledWith("mcp_logs", { name: "fs", sinceOffset: 0 });
+    await api.mcpLogs("fs", 42);
+    expect(invoke).toHaveBeenLastCalledWith("mcp_logs", { name: "fs", sinceOffset: 42 });
+    await api.mcpAdd("fs", "npx", ["-y"], { K: "V" }, "w1", "/p");
+    expect(invoke).toHaveBeenLastCalledWith("mcp_add", {
+      name: "fs", command: "npx", args: ["-y"], env: { K: "V" }, workspaceId: "w1", projectPath: "/p",
+    });
+    await api.configSave("/p", { automations: [] });
+    expect(invoke).toHaveBeenLastCalledWith("config_save", { projectPath: "/p", patch: { automations: [] } });
     await api.contextUsage("s1");
     expect(invoke).toHaveBeenLastCalledWith("context_usage", { sessionId: "s1" });
     await api.contextRecord("s1", 1234, 0.05);
@@ -251,5 +261,14 @@ describe("tauri command wrappers", () => {
     await api.onWorkspaceStatus(statusCb);
     captured["workspace:status"]({ payload: { workspaceId: "w", status: "active" } });
     expect(statusCb).toHaveBeenCalledWith({ workspaceId: "w", status: "active" });
+
+    const mcpStatusCb = vi.fn();
+    await api.onMcpStatus(mcpStatusCb);
+    captured["mcp:status"]({
+      payload: { name: "fs", status: "restarting", restarts: 1, exitCode: 1 },
+    });
+    expect(mcpStatusCb).toHaveBeenCalledWith({
+      name: "fs", status: "restarting", restarts: 1, exitCode: 1,
+    });
   });
 });

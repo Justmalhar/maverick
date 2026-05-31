@@ -667,6 +667,161 @@ describe("RpcHandlers", () => {
     expect(new RpcHandlers()).toBeInstanceOf(RpcHandlers);
   });
 
+  test("mcp.logs returns the captured ring page", async () => {
+    await h.dispatch("mcp.start", { name: "fs", projectPath: "/r" });
+    const page = (await h.dispatch("mcp.logs", { name: "fs" })) as {
+      data: string;
+      nextOffset: number;
+      dropped: number;
+    };
+    expect(page).toHaveProperty("nextOffset");
+    expect(page).toHaveProperty("dropped");
+    await h.dispatch("mcp.stop", { name: "fs" });
+  });
+
+  test("mcp.logs accepts an explicit sinceOffset", async () => {
+    await h.dispatch("mcp.start", { name: "fs", projectPath: "/r" });
+    const page = (await h.dispatch("mcp.logs", { name: "fs", sinceOffset: 0 })) as {
+      nextOffset: number;
+    };
+    expect(page.nextOffset).toBe(0);
+    await h.dispatch("mcp.stop", { name: "fs" });
+  });
+
+  test("pollMcpHealth ticks the manager without throwing", () => {
+    expect(() => h.pollMcpHealth()).not.toThrow();
+  });
+
+  test("config.save persists a patch and config.load reflects it", () => {
+    const files: Record<string, string> = {
+      "/r/maverick.yaml":
+        "version: 1\nbackends:\n  default: claude\n  available: []\n",
+    };
+    const config = new ConfigLoader({
+      read: (p) => files[p] ?? "",
+      exists: (p) => p in files,
+      write: (p, c) => {
+        files[p] = c;
+      },
+    });
+    const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
+    return (async () => {
+      const saved = (await handlers.dispatch("config.save", {
+        projectPath: "/r",
+        patch: { automations: [{ name: "ship", trigger: "manual", steps: [] }] },
+      })) as { automations: Array<{ name: string }> };
+      expect(saved.automations[0].name).toBe("ship");
+      const reloaded = (await handlers.dispatch("config.load", { projectPath: "/r" })) as {
+        automations: Array<{ name: string }>;
+      };
+      expect(reloaded.automations[0].name).toBe("ship");
+    })();
+  });
+
+  test("mcp.add appends a server to the config and persists it", async () => {
+    const files: Record<string, string> = {
+      "/r/maverick.yaml":
+        "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: existing, command: c, args: [] }\n",
+    };
+    const config = new ConfigLoader({
+      read: (p) => files[p] ?? "",
+      exists: (p) => p in files,
+      write: (p, c) => {
+        files[p] = c;
+      },
+    });
+    const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
+    const r = (await handlers.dispatch("mcp.add", {
+      name: "fs",
+      command: "mcp-fs",
+      args: ["-y"],
+      env: { K: "V" },
+      projectPath: "/r",
+    })) as { ok: boolean };
+    expect(r.ok).toBe(true);
+    const reloaded = (await handlers.dispatch("config.load", { projectPath: "/r" })) as {
+      mcps: Array<{ name: string }>;
+    };
+    expect(reloaded.mcps.map((m) => m.name).sort()).toEqual(["existing", "fs"]);
+  });
+
+  test("mcp.add replaces a server of the same name (no duplicate)", async () => {
+    const files: Record<string, string> = {
+      "/r/maverick.yaml":
+        "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: fs, command: old, args: [] }\n",
+    };
+    const config = new ConfigLoader({
+      read: (p) => files[p] ?? "",
+      exists: (p) => p in files,
+      write: (p, c) => {
+        files[p] = c;
+      },
+    });
+    const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
+    await handlers.dispatch("mcp.add", { name: "fs", command: "new", args: [], projectPath: "/r" });
+    const reloaded = (await handlers.dispatch("config.load", { projectPath: "/r" })) as {
+      mcps: Array<{ name: string; command: string }>;
+    };
+    expect(reloaded.mcps).toHaveLength(1);
+    expect(reloaded.mcps[0].command).toBe("new");
+  });
+
+  test("mcp.add throws without a workspaceId or projectPath", async () => {
+    await expect(h.dispatch("mcp.add", { name: "x", command: "c", args: [] })).rejects.toThrow(
+      /workspaceId or projectPath/
+    );
+  });
+
+  test("mcp.add resolves projectPath from workspaceId", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mvk-mcpadd-"));
+    const files: Record<string, string> = {
+      [join(dir, "maverick.yaml")]:
+        "version: 1\nbackends:\n  default: claude\n  available: []\n",
+    };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const config = new ConfigLoader({
+      read: (p) => files[p] ?? "",
+      exists: (p) => p in files,
+      write: (p, c) => {
+        files[p] = c;
+      },
+    });
+    const fakeWorktree = {
+      async create() {
+        return { workspaceId: "ws_add", worktreePath: `${dir}/wt` };
+      },
+      async destroy() {
+        return { ok: true as const };
+      },
+      async list() {
+        return [];
+      },
+      async prune() {
+        return { ok: true as const };
+      },
+    };
+    const handlers = new RpcHandlers({
+      store,
+      config,
+      worktree: fakeWorktree as never,
+      notifier: { write: () => {} },
+    });
+    const proj = (await handlers.dispatch("project.add", { path: dir })) as { id: string };
+    const ws = (await handlers.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: dir,
+      branch: "feat",
+      backend: "claude",
+    })) as { id: string };
+    const r = (await handlers.dispatch("mcp.add", {
+      name: "fs",
+      command: "c",
+      args: [],
+      workspaceId: ws.id,
+    })) as { ok: boolean };
+    expect(r.ok).toBe(true);
+  });
+
   it("project.settings.get returns defaults for a path without maverick.json", async () => {
     const { handlers, projectId } = makeWithTempProject();
     const result = (await handlers.dispatch("project.settings.get", { projectId })) as { name: string; scripts: { setup: string } };
