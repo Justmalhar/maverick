@@ -959,6 +959,257 @@ describe("RpcHandlers", () => {
     expect(existsSync(wtPath)).toBe(true);
   });
 
+  it("workspace.destroy removes the worktree before deleting the DB row", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-order`;
+    mkdirSync(wtPath, { recursive: true });
+    const order: string[] = [];
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_order", worktreePath: wtPath }; },
+      async destroy() {
+        // The row must still exist when the worktree is being removed.
+        order.push(store.workspaceGet("ws_order") ? "destroy-with-row" : "destroy-without-row");
+        return { ok: true as const };
+      },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/order", backend: "claude",
+    })) as { id: string };
+    await h.dispatch("workspace.destroy", { workspaceId: ws.id });
+    expect(order).toEqual(["destroy-with-row"]);
+    // Row is gone only after the worktree was removed.
+    expect(store.workspaceGet(ws.id)).toBeNull();
+  });
+
+  it("workspace.destroy keeps the DB row when worktree removal fails (no orphan)", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-orphan`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_orphan", worktreePath: wtPath }; },
+      async destroy() { throw new Error("remove and prune both failed"); },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/orphan", backend: "claude",
+    })) as { id: string };
+    await expect(h.dispatch("workspace.destroy", { workspaceId: ws.id })).rejects.toThrow();
+    // The worktree could not be removed, so the row must survive — the worktree
+    // is still referenced and therefore recoverable, not orphaned.
+    expect(store.workspaceGet(ws.id)).not.toBeNull();
+  });
+
+  it("workspace.destroy on an unknown workspace is a no-op", async () => {
+    const { store } = makeWithTempProject();
+    const fakeWorktree = {
+      async create() { return { workspaceId: "x", worktreePath: "/x" }; },
+      async destroy() { throw new Error("should not be called"); },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    const result = (await h.dispatch("workspace.destroy", { workspaceId: "nope" })) as { ok: boolean };
+    expect(result.ok).toBe(true);
+  });
+
+  it("workspace.create surfaces a setup-script failure as status=error", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-setup-fail`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_setup_fail", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "exit 7", run: "", archive: "" } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/setup-fail", backend: "claude",
+    })) as { id: string; status: string; setupError?: string };
+    expect(ws.status).toBe("error");
+    expect(ws.setupError).toContain("code 7");
+    // The error status is persisted, not just returned.
+    expect(store.workspaceGet(ws.id)?.status).toBe("error");
+  });
+
+  it("workspace.create surfaces a setup-script spawn error", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-setup-throw`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_setup_throw", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const fakeProcess = {
+      async spawnOnce() { throw new Error("ENOENT: /bin/sh missing"); },
+      spawnOnceHandle() { throw new Error("unused"); },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      process: fakeProcess as never,
+      notifier: { write: () => {} },
+    });
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "anything", run: "", archive: "" } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/setup-throw", backend: "claude",
+    })) as { status: string; setupError?: string };
+    expect(ws.status).toBe("error");
+    expect(ws.setupError).toContain("ENOENT");
+  });
+
+  it("workspace.destroy kills a hung archive child when the timeout wins", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-archive-timeout`;
+    mkdirSync(wtPath, { recursive: true });
+    let killed = false;
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_arch_to", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    // An archive that never exits; the handler's 30s timeout must kill it.
+    const hungProc = {
+      exitCode: null as number | null,
+      exited: new Promise<number>(() => {}),
+      kill() { killed = true; },
+    };
+    const fakeProcess = {
+      async spawnOnce() { return { code: 0 }; },
+      spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      process: fakeProcess as never,
+      notifier: { write: () => {} },
+    });
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "", run: "", archive: "sleep 9999" } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/arch-to", backend: "claude",
+    })) as { id: string };
+
+    // Override timers so the 30s race resolves immediately without real waiting.
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((fn: () => void) => realSetTimeout(fn, 0)) as never;
+    try {
+      await h.dispatch("workspace.destroy", { workspaceId: ws.id });
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+    expect(killed).toBe(true);
+    expect(store.workspaceGet(ws.id)).toBeNull();
+  });
+
+  it("workspace.destroy ignores a kill that throws on an already-exited child", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-archive-killthrow`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_arch_kt", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const hungProc = {
+      exitCode: null as number | null,
+      exited: new Promise<number>(() => {}),
+      kill() { throw new Error("already exited"); },
+    };
+    const fakeProcess = {
+      async spawnOnce() { return { code: 0 }; },
+      spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      process: fakeProcess as never,
+      notifier: { write: () => {} },
+    });
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "", run: "", archive: "sleep 9999" } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/arch-kt", backend: "claude",
+    })) as { id: string };
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((fn: () => void) => realSetTimeout(fn, 0)) as never;
+    try {
+      const r = (await h.dispatch("workspace.destroy", { workspaceId: ws.id })) as { ok: boolean };
+      expect(r.ok).toBe(true);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
+  it("workspace.destroy logs and continues when the archive child errors", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-archive-err`;
+    mkdirSync(wtPath, { recursive: true });
+    const fakeWorktree = {
+      async create() { return { workspaceId: "ws_arch_err", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const fakeProcess = {
+      async spawnOnce() { return { code: 0 }; },
+      spawnOnceHandle() {
+        return { proc: { kill() {} }, exited: Promise.reject(new Error("archive boom")) };
+      },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      process: fakeProcess as never,
+      notifier: { write: () => {} },
+    });
+    await h.dispatch("project.settings.update", {
+      projectId,
+      patch: { scripts: { setup: "", run: "", archive: "false" } },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/arch-err", backend: "claude",
+    })) as { id: string };
+    const r = (await h.dispatch("workspace.destroy", { workspaceId: ws.id })) as { ok: boolean };
+    expect(r.ok).toBe(true);
+    expect(store.workspaceGet(ws.id)).toBeNull();
+  });
+
   it("emits project.settings.changed after successful update", async () => {
     const { handlers, projectId, notifications } = makeWithTempProject();
     await handlers.dispatch("project.settings.update", { projectId, patch: { remote: "alpha" } });

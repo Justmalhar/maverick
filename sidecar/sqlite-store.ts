@@ -189,6 +189,11 @@ export class SQLiteStore {
     };
   }
 
+  workspaceSetStatus(id: string, status: Workspace["status"]): { ok: true } {
+    this.db.query("UPDATE workspaces SET status = ? WHERE id = ?").run(status, id);
+    return { ok: true };
+  }
+
   workspaceList(projectId?: string): Workspace[] {
     const rows = projectId
       ? this.db

@@ -148,4 +148,21 @@ describe("ProcessManager", () => {
     const out = await new Response(proc.stdout!).text();
     expect(out.trim()).toBe("bar");
   });
+
+  test("spawnOnce resolves with the child exit code", async () => {
+    const proc: ManagedProc = { exitCode: 5, exited: Promise.resolve(5), kill() {} };
+    const mgr = makeManager(proc);
+    const { code } = await mgr.spawnOnce({ cwd: "/", command: "true", args: [] });
+    expect(code).toBe(5);
+  });
+
+  test("spawnOnceHandle returns the live child alongside its exit promise", async () => {
+    const proc = fakeProc([], 3);
+    const mgr = makeManager(proc);
+    const handle = mgr.spawnOnceHandle({ cwd: "/", command: "x", args: ["-y"] });
+    expect(handle.proc).toBe(proc);
+    handle.proc.kill();
+    expect(proc.killed).toBe(true);
+    expect(handle.exited).toBe(proc.exited);
+  });
 });

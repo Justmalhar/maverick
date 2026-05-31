@@ -356,14 +356,21 @@ export class RpcHandlers {
           worktreePath,
         });
         if (settings && settings.scripts.setup.trim() !== "") {
+          let setupError: string | undefined;
           try {
-            await this.process.spawnOnce({
+            const { code } = await this.process.spawnOnce({
               cwd: worktreePath,
               command: "/bin/sh",
               args: ["-c", settings.scripts.setup],
             });
+            if (code !== 0) setupError = `setup script exited with code ${code}`;
           } catch (err) {
-            console.error(`[workspace.create] scripts.setup failed:`, err);
+            setupError = err instanceof Error ? err.message : String(err);
+          }
+          if (setupError) {
+            console.error(`[workspace.create] scripts.setup failed:`, setupError);
+            this.store.workspaceSetStatus(ws.id, "error");
+            return { ...ws, status: "error" as const, setupError };
           }
         }
         return ws;
@@ -371,30 +378,47 @@ export class RpcHandlers {
       case "workspace.destroy": {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
-        if (ws) {
-          const project = this.store.projectGet(ws.projectId);
-          if (project) {
-            const settings = this.projectSettings.read(project.path);
-            if (settings.scripts.archive.trim() !== "") {
-              const archive = this.process
-                .spawnOnce({
-                  cwd: ws.worktreePath,
-                  command: "/bin/sh",
-                  args: ["-c", settings.scripts.archive],
-                })
-                .catch((err) => {
-                  console.error(`[workspace.destroy] archive failed:`, err);
-                  return { code: -1 };
-                });
-              const timeout = new Promise<{ code: number }>((resolve) =>
-                setTimeout(() => resolve({ code: -2 }), 30_000)
-              );
-              await Promise.race([archive, timeout]);
-            }
+        if (!ws) return { ok: true };
+        const project = this.store.projectGet(ws.projectId);
+        if (project) {
+          const settings = this.projectSettings.read(project.path);
+          if (settings.scripts.archive.trim() !== "") {
+            const { proc, exited } = this.process.spawnOnceHandle({
+              cwd: ws.worktreePath,
+              command: "/bin/sh",
+              args: ["-c", settings.scripts.archive],
+            });
+            const archive = exited
+              .then((code) => ({ code }))
+              .catch((err) => {
+                console.error(`[workspace.destroy] archive failed:`, err);
+                return { code: -1 };
+              });
+            // Kill the lingering script if the timeout wins the race; otherwise
+            // a hung archive command would leak a child for the process lifetime.
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<{ code: number }>((resolve) => {
+              timer = setTimeout(() => {
+                try {
+                  proc.kill();
+                } catch {
+                  /* already exited */
+                }
+                resolve({ code: -2 });
+              }, 30_000);
+            });
+            await Promise.race([archive, timeout]);
+            if (timer) clearTimeout(timer);
           }
         }
-        const { worktreePath } = this.store.workspaceDestroy(p.workspaceId);
-        await this.worktree.destroy({ worktreePath });
+        // Remove the worktree (with a prune fallback) BEFORE deleting the DB row:
+        // if removal throws, the row survives so the worktree stays recoverable
+        // rather than becoming an orphaned, unreferenced directory.
+        await this.worktree.destroy({
+          worktreePath: ws.worktreePath,
+          projectPath: project?.path,
+        });
+        this.store.workspaceDestroy(p.workspaceId);
         return { ok: true };
       }
       case "workspace.list": {
