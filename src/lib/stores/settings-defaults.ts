@@ -57,6 +57,9 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "advanced.lruLimit": 8,
   "advanced.caffeinate": true,
 
+  // Browser — "iframe" (sandboxed, testable default) or "native" (child webview).
+  "browser.engine": "iframe",
+
   // Version
   "version.updateChannel": "stable",
 };

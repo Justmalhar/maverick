@@ -11,12 +11,12 @@ const KanbanBoard = lazy(() => import("@/panels/kanban/KanbanBoard"));
 const AutomationsPanel = lazy(() => import("@/panels/automations/AutomationsPanel"));
 const MCPsPanel = lazy(() => import("@/panels/mcps/MCPsPanel"));
 
-function SystemTabContent({ id }: { id: SystemTabId }) {
+// The browser is keep-alive mounted separately (see below) so its page/URL/
+// history survive a tab switch — switching to it here would unmount it.
+function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
   switch (id) {
     case "dashboard":
       return <UsagePanel />;
-    case "browser":
-      return <BrowserPanel />;
     case "kanban":
       return <KanbanBoard />;
     case "automations":
@@ -37,6 +37,10 @@ export function EditorGroup() {
   const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0;
   const showEmpty = !hasAnyTabs;
   const showSystemTab = activeSystemTab && systemTabs.includes(activeSystemTab);
+  // Keep the browser mounted for the lifetime of its tab. It is only torn down
+  // when its tab is closed, so a page survives switching to any other tab.
+  const browserOpen = systemTabs.includes("browser");
+  const browserVisible = Boolean(showSystemTab) && activeSystemTab === "browser";
 
   const liveIds = useMemo(
     () => computeLiveWorkspaceIds(workspaces, accessOrder, activeId, lruLimit),
@@ -65,8 +69,22 @@ export function EditorGroup() {
             />
           ))}
 
-        {/* System tabs: lazy-loaded, mounted only when active */}
-        {showSystemTab && (
+        {/* Browser: keep-alive mounted while its tab exists; hidden (not
+            unmounted) when another tab is active so the page survives. */}
+        {browserOpen && (
+          <Suspense fallback={null}>
+            <div
+              className="absolute inset-0 overflow-hidden bg-editor"
+              style={{ display: browserVisible ? undefined : "none" }}
+              aria-hidden={!browserVisible}
+            >
+              <BrowserPanel visible={browserVisible} />
+            </div>
+          </Suspense>
+        )}
+
+        {/* Other system tabs: lazy-loaded, mounted only when active */}
+        {showSystemTab && activeSystemTab && activeSystemTab !== "browser" && (
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

@@ -40,3 +40,5 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3"
+# `test` enables tauri::test::mock_app for exercising commands headlessly.
+tauri = { version = "2", features = ["test"] }

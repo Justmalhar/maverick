@@ -113,4 +113,31 @@ describe("EditorGroup", () => {
     renderWithProviders(<EditorGroup />);
     await waitFor(() => expect(screen.getByTestId("mcps-panel")).toBeInTheDocument());
   });
+
+  it("keeps the browser mounted (hidden) when another system tab is active", async () => {
+    useWorkbench.setState({
+      ...initial,
+      systemTabs: ["browser", "kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorGroup />);
+    // The active kanban tab renders…
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // …while the browser stays in the DOM (keep-alive), just hidden.
+    const browser = await screen.findByTestId("browser-panel");
+    expect(browser).toBeInTheDocument();
+    expect(browser.closest("[aria-hidden]")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("does not mount the browser when its tab is not open", () => {
+    useWorkbench.setState({
+      ...initial,
+      systemTabs: ["kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorGroup />);
+    expect(screen.queryByTestId("browser-panel")).not.toBeInTheDocument();
+  });
 });
