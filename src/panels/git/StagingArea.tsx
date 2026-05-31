@@ -28,10 +28,11 @@ export default function StagingArea({ worktreePath }: Props) {
   const refresh = useCallback(async () => {
     if (!worktreePath) return;
     try {
-      const result = await diffGet(worktreePath);
-      // Heuristic split: server returns combined; partition by status carrying a `staged` flag in patch header.
-      // Until backend separates, treat all returned files as "unstaged" for v0.1.
-      setState({ unstaged: result.files, staged: [] });
+      const [unstaged, staged] = await Promise.all([
+        diffGet(worktreePath),
+        diffGet(worktreePath, undefined, true),
+      ]);
+      setState({ unstaged: unstaged.files, staged: staged.files });
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -57,7 +58,6 @@ export default function StagingArea({ worktreePath }: Props) {
     [worktreePath, refresh]
   );
 
-  /* v8 ignore start — unstage path unreachable until backend separates staged files (v0.2). */
   const unstageHunk = useCallback(
     async (patch: string) => {
       try {
@@ -86,7 +86,6 @@ export default function StagingArea({ worktreePath }: Props) {
       setBusy(false);
     }
   }, [worktreePath, message, refresh]);
-  /* v8 ignore stop */
 
   const hasStaged = state.staged.length > 0;
 

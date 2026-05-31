@@ -81,6 +81,43 @@ export const useSettingsStore = create<State>((set, get) => ({
   },
 }));
 
+/**
+ * Parse the JSON-encoded `general.env` value into a string→string map.
+ * Malformed JSON, non-objects, and non-string values are dropped defensively
+ * so a corrupt persisted blob can never crash a PTY spawn.
+ */
+export function parseEnvMap(raw: SettingsValue | undefined): Record<string, string> {
+  if (typeof raw !== "string" || raw.trim() === "") return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Imperative read of the global env map for non-React callers (PTY spawns).
+ * Reflects the latest optimistic value in the settings store.
+ */
+export function getGlobalEnv(): Record<string, string> {
+  return parseEnvMap(useSettingsStore.getState().values["general.env"]);
+}
+
+/** React accessor for the global env map plus a setter that persists it. */
+export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
+  const raw = useSettingsStore((s) => s.values["general.env"]);
+  const setKey = useSettingsStore((s) => s.set);
+  const value = parseEnvMap(raw);
+  return [value, (next) => setKey("general.env", JSON.stringify(next))];
+}
+
 type Widen<V> = V extends string
   ? string
   : V extends number

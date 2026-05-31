@@ -6,6 +6,8 @@ export interface ServerOptions {
   handlers?: RpcHandlers;
   notifier?: Notifier;
   input?: AsyncIterable<string>;
+  /** MCP health-poll cadence in ms. <=0 disables the timer (used in tests). */
+  healthIntervalMs?: number;
 }
 
 export async function processLine(line: string, handlers: RpcHandlers, notifier: Notifier): Promise<void> {
@@ -51,10 +53,16 @@ export async function runServer(opts: ServerOptions = {}): Promise<void> {
   const handlers = opts.handlers ?? new RpcHandlers();
   const notifier = opts.notifier ?? stdoutNotifier;
   const input = opts.input ?? (console as unknown as AsyncIterable<string>);
-  for await (const line of input) {
-    if (typeof line === "string") {
-      await processLine(line, handlers, notifier);
+  const intervalMs = opts.healthIntervalMs ?? 2_000;
+  const timer = intervalMs > 0 ? setInterval(() => handlers.pollMcpHealth(), intervalMs) : null;
+  try {
+    for await (const line of input) {
+      if (typeof line === "string") {
+        await processLine(line, handlers, notifier);
+      }
     }
+  } finally {
+    if (timer) clearInterval(timer);
   }
 }
 

@@ -853,3 +853,91 @@ Each panel is lazily mounted on first open, then kept in DOM (same keep-alive st
 - **Migrations:** Sequential `.sql` files in `sidecar/migrations/`, run on sidecar startup
 - **WAL mode:** Enabled (`PRAGMA journal_mode=WAL`) for concurrent reads during PTY streaming
 - **Backup:** User-managed; Maverick exposes "Export DB" in settings (v0.2)
+
+---
+
+## 12. Companion Server (Remote Access)
+
+The desktop IDE *is* the companion server. A phone, tablet, or second laptop
+attaches as a thin client over a WebSocket and drives the same sessions the
+desktop drives — "your laptop is the server, anything else is a client." This
+**supersedes the standalone `MaverickAgent` menu-bar daemon** (now deprecated;
+see `maverick-app/server/DEPRECATED.md`), folding its role into the Rust core
+under `src-tauri/src/remote/` so there is one source of truth for sessions,
+auth, and the wire protocol.
+
+### 12.1 Why it lives in the Rust core
+
+- **No second process to install or trust.** The PTYs, ring buffers, git, and
+  file RPC already live in-process; the server tees them rather than re-hosting.
+- **Real auth, finally.** `MaverickAgent` shipped a no-op token. The IDE server
+  does X25519/Noise_XX QR pairing + a per-device token gate + capability scope.
+- **Off by default, loopback by default.** The WS listener binds `127.0.0.1`
+  and is disabled until the user starts it from Settings → Remote.
+
+### 12.2 Module map (`src-tauri/src/remote/`)
+
+| Module | Responsibility |
+|---|---|
+| `ws_server.rs` | tokio-tungstenite listener; start/revoke lifecycle; loopback-by-default bind |
+| `connection.rs` | Per-socket read/write loop; frame codec; auth gate (close `4401` on failure) |
+| `protocol.rs` | `serde` port of `MaverickProtocol` — the wire contract shared with the client |
+| `agent_event.rs` + `adapters/{claude,codex,heuristic}.rs` | Normalise each backend's stream into provider-agnostic `AgentEvent`s (Claude rich-stream + Codex `--json` full; OpenCode/Antigravity/Hermes heuristic) |
+| `agent_host.rs` | Bridges a remote session to a running agent process |
+| `hook_server.rs` | `localhost:7789` Claude-hook receiver; blocking `PermissionRequest` (fail-closed), bound to `(session_id, request_id)`; idempotent `~/.claude/settings.json` merge |
+| `bridge.rs` | Forwards git / file / directory RPC to the IDE's existing handlers |
+| `pairing.rs` | Noise_XX handshake over the QR-exchanged ephemeral key (`snow`) |
+| `auth.rs` / `auth_session.rs` | Token issue/verify; per-connection capability scope |
+| `device_store.rs` | TOFU device pinning; constant-time token compare (`subtle`); `0600` atomic key file |
+| `transport.rs` | `RemoteDialer` trait — LAN/mDNS today, iroh P2P stubbed behind it |
+| `session_registry.rs` | Maps live sessions so a client can attach/detach without restarting a PTY |
+
+### 12.3 Session continuity — the ring buffer
+
+Each PTY owns a bounded **ring buffer** (`pty/ring.rs`, `RING_CAP = 1 MiB`).
+On client attach, the server replays the last `REPLAY_CAP = 256 KiB` so a phone
+that connects mid-run sees recent scrollback immediately instead of a blank
+pane. The same primitive powers desktop⇄phone **handoff**: start a task on one
+client, attach from another, and the replay + live tee reconstruct the view with
+no re-prompting. Writes are coalesced (4 ms window) and UTF-8 boundary-safe.
+
+### 12.4 Connectivity tiers (the Tailscale replacement)
+
+```
+Tier 1  LAN + mDNS        same network; zero-config discovery, lowest latency
+Tier 2  iroh P2P (DERP)   NAT-traversed direct path; free relay fallback  [stubbed behind RemoteDialer]
+Tier 3  Relay (DO)        last-resort store-and-forward                   [planned]
+```
+
+Noise session keys are **transport-independent**: pairing happens once (QR), and
+the same encrypted session rides whichever tier connects. Tailscale is demoted
+from a hard dependency to an optional Tier-2 alternative, not a prerequisite.
+
+### 12.5 Pairing flow
+
+```
+Desktop (server)                         Phone (client)
+  Settings → Remote → "Pair device"
+  generate ephemeral X25519 keypair
+  render QR { host, port, pubkey, nonce } ──scan──▶ decode QR
+                                                    Noise_XX handshake ◀──▶ handshake
+  TOFU-pin device pubkey                            derive session key
+  issue scoped per-device token       ──────────▶  store token (Keychain/SecureStore)
+  ◀───────────── authed WS (close 4401 on bad token) ─────────────▶
+```
+
+`remote_start` / `remote_pair` / `remote_revoke` are the Tauri commands that the
+Settings UI calls; revoke drops the device's pin and invalidates its token.
+
+---
+
+## 13. React Native Client (`maverick-app/mobile`)
+
+The mobile/web client is **Expo + react-native-web**, sharing a TypeScript port
+of `MaverickProtocol` with the desktop. One codebase targets iOS, Android, and
+the browser (the long-term "anything is a client" goal). It carries the same
+Noise_XX pairing, a `ConnectionManager` over the tier ladder above, agent chat,
+git/file surfaces, and a terminal rendered in a WebView (xterm.js) fed by the
+ring-buffer replay + live tee. The wire contract is byte-for-byte identical to
+the desktop's, so the client is renderer-only — all session authority stays on
+the host.

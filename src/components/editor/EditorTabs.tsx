@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Plus,
   SplitSquareHorizontal,
@@ -7,8 +8,11 @@ import {
   Zap,
   Plug,
   X,
+  SquareTerminal,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { usePresets } from "@/hooks/usePresets";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -20,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { EditorTab } from "./EditorTab";
+import { SaveLayoutDialog } from "./SaveLayoutDialog";
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
@@ -44,6 +49,22 @@ export function EditorTabs() {
   const closeSystemTab = useWorkbench((s) => s.closeSystemTab);
   const setActiveSystemTab = useWorkbench((s) => s.setActiveSystemTab);
   const setCommandPaletteOpen = useWorkbench((s) => s.setCommandPaletteOpen);
+  const layout = useWorkbench((s) => s.layout);
+  const togglePanel = useWorkbench((s) => s.togglePanel);
+
+  const projectPath = useProjectSettingsStore((s) => s.data?.rootPath);
+  const { saveCurrentLayout } = usePresets(projectPath);
+  const [saveLayoutFor, setSaveLayoutFor] = useState<string | null>(null);
+
+  const openTerminal = () => {
+    if (!layout.panelVisible) togglePanel();
+    window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+  };
+
+  const handleTabContextMenu = (e: React.MouseEvent, workspaceId: string) => {
+    e.preventDefault();
+    setSaveLayoutFor(workspaceId);
+  };
 
   return (
     <div
@@ -101,6 +122,7 @@ export function EditorTabs() {
             active={ws.id === activeId}
             onSelect={() => setActiveWorkspace(ws.id)}
             onClose={() => removeWorkspace(ws.id)}
+            onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
           />
         ))}
       </div>
@@ -142,6 +164,15 @@ export function EditorTabs() {
               );
             })}
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={openTerminal}
+              data-testid="editor-tabs-open-terminal"
+            >
+              <SquareTerminal className="h-3.5 w-3.5" />
+              <span className="flex-1">New Terminal</span>
+              <kbd className="text-[10px] text-muted-foreground">⌘⇧T</kbd>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
               <span className="flex-1">All commands…</span>
               <kbd className="text-[10px] text-muted-foreground">⌘⇧P</kbd>
@@ -163,6 +194,14 @@ export function EditorTabs() {
           <TooltipContent side="bottom">Split editor</TooltipContent>
         </Tooltip>
       </div>
+
+      <SaveLayoutDialog
+        open={saveLayoutFor !== null}
+        onOpenChange={(open) => !open && setSaveLayoutFor(null)}
+        onSave={async (name) => {
+          if (saveLayoutFor) await saveCurrentLayout(saveLayoutFor, name);
+        }}
+      />
     </div>
   );
 }

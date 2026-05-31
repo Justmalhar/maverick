@@ -5,11 +5,13 @@ import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { mcpList } from "@/lib/tauri";
+import { useWorkbench } from "@/state/store";
 import type { MCPServer } from "@/lib/ipc";
 import MCPServerCard from "./MCPServerCard";
 import AddMCPDialog from "./AddMCPDialog";
 
 export default function MCPsPanel() {
+  const activeWorkspaceId = useWorkbench((s) => s.activeWorkspaceId);
   const [servers, setServers] = useState<MCPServer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,12 +76,22 @@ export default function MCPsPanel() {
         ) : (
           <div className="space-y-1.5 p-2">
             {servers.map((s) => (
-              <MCPServerCard key={s.name} server={s} onChange={refresh} />
+              <MCPServerCard
+                key={s.name}
+                server={s}
+                onChange={refresh}
+                workspaceId={activeWorkspaceId ?? undefined}
+              />
             ))}
           </div>
         )}
       </ScrollArea>
-      <AddMCPDialog open={addOpen} onOpenChange={setAddOpen} onAdded={refresh} />
+      <AddMCPDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={refresh}
+        workspaceId={activeWorkspaceId ?? undefined}
+      />
     </motion.div>
   );
 }

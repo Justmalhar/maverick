@@ -7,8 +7,10 @@ use crate::state::AppState;
 pub async fn workspace_create(
     state: State<'_, AppState>,
     project_id: String,
+    project_path: String,
     branch: String,
     backend: String,
+    base_branch: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -16,8 +18,10 @@ pub async fn workspace_create(
             "workspace.create",
             json!({
                 "projectId": project_id,
+                "projectPath": project_path,
                 "branch": branch,
                 "backend": backend,
+                "baseBranch": base_branch,
             }),
         )
         .await

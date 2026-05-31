@@ -47,11 +47,29 @@ export class AutomationRunner {
     const automation = (config.automations ?? []).find((a) => a.name === params.automationName);
     if (!automation) throw new Error(`Automation not found: ${params.automationName}`);
     let stepsRun = 0;
-    for (const step of automation.steps) {
-      await this.executeStep(step, params.worktreePath, params.projectPath, params.vars ?? {});
+    for (let i = 0; i < automation.steps.length; i++) {
+      const step = automation.steps[i];
+      this.emitStep(automation.name, i, "running");
+      try {
+        await this.executeStep(step, params.worktreePath, params.projectPath, params.vars ?? {});
+      } catch (err) {
+        const output = err instanceof Error ? err.message : String(err);
+        this.emitStep(automation.name, i, "error", output);
+        throw err;
+      }
+      this.emitStep(automation.name, i, "ok", `${step.type} ok`);
       stepsRun++;
     }
     return { ok: true, stepsRun };
+  }
+
+  private emitStep(
+    automation: string,
+    stepIndex: number,
+    status: "running" | "ok" | "error",
+    output?: string
+  ): void {
+    emit(this.notifier, "automation.step", { automation, stepIndex, status, output });
   }
 
   async executeStep(
@@ -68,7 +86,8 @@ export class AutomationRunner {
         return;
       }
       case "skill": {
-        const skillName = String(step.name ?? "");
+        // The builder UI writes `skill`; older configs use `name`. Accept both.
+        const skillName = String(step.skill ?? step.name ?? "");
         this.skills.run({ projectPath, skillName, vars });
         return;
       }

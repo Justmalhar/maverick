@@ -2,19 +2,31 @@ import {
   AlertCircle,
   AlertTriangle,
   GitBranch,
-  Coffee,
   RefreshCw,
-  Bell,
   Check,
 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useContextUsage } from "@/hooks/useContextUsage";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
+import {
+  useSourceControl,
+  getSourceControlRemoteIndicator,
+} from "@/hooks/useSourceControl";
+import { formatTokens } from "@/lib/context-usage";
+import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
 import { StatusBarItem } from "./StatusBarItem";
+import { NotificationBell } from "./NotificationBell";
+import { CaffeinateToggle } from "./CaffeinateToggle";
 
 export function StatusBar() {
   const backends = useWorkbench((s) => s.backends);
   const active = useWorkbench(selectActiveWorkspace);
   const workspaceCount = useWorkbench((s) => s.workspaces.length);
   const activeBackend = backends.find((b) => b.active);
+  const usage = useContextUsage(active?.sessionId);
+  const agentStatus = useAgentStatus(active?.id ?? "");
+  const sourceControl = useSourceControl(active?.worktreePath, Boolean(active));
+  const indicator = getSourceControlRemoteIndicator(sourceControl);
 
   return (
     <footer
@@ -33,12 +45,30 @@ export function StatusBar() {
         ) : (
           <StatusBarItem testId="statusbar-no-folder">No folder</StatusBarItem>
         )}
-        {active && (
+        {active && indicator.visible ? (
+          <StatusBarItem
+            icon={<RefreshCw className="h-3 w-3" />}
+            testId="statusbar-sync"
+            title={indicator.title}
+            onClick={
+              indicator.disabled
+                ? undefined
+                : () => void sourceControl.runRemoteAction("contextual")
+            }
+          >
+            {indicator.label}
+          </StatusBarItem>
+        ) : active ? (
           <StatusBarItem
             icon={<RefreshCw className="h-3 w-3" />}
             testId="statusbar-sync"
           >
             sync
+          </StatusBarItem>
+        ) : null}
+        {active && (
+          <StatusBarItem testId="statusbar-agent-status">
+            <AgentStatusPill status={agentStatus} />
           </StatusBarItem>
         )}
         <StatusBarItem
@@ -62,13 +92,12 @@ export function StatusBar() {
         <StatusBarItem testId="statusbar-language">
           {active ? active.agentBackend : "plaintext"}
         </StatusBarItem>
-        <StatusBarItem testId="statusbar-tokens">0 tokens</StatusBarItem>
-        <StatusBarItem
-          icon={<Coffee className="h-3 w-3" />}
-          testId="statusbar-caffeine"
-        >
-          caffeinate
+        <StatusBarItem testId="statusbar-tokens">
+          {active
+            ? `~${formatTokens(usage.tokensUsed)} tok · $${usage.sessionCostEstimate.toFixed(2)}`
+            : "0 tokens"}
         </StatusBarItem>
+        <CaffeinateToggle />
         <StatusBarItem
           icon={<Check className="h-3 w-3" />}
           testId="statusbar-backends"
@@ -82,12 +111,7 @@ export function StatusBar() {
         <StatusBarItem testId="statusbar-workspaces">
           {workspaceCount} ws
         </StatusBarItem>
-        <StatusBarItem
-          icon={<Bell className="h-3 w-3" />}
-          testId="statusbar-notifications"
-        >
-          v0.1
-        </StatusBarItem>
+        <NotificationBell />
       </div>
     </footer>
   );

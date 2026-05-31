@@ -61,4 +61,26 @@ describe("ContextTracker", () => {
     const tracker = new ContextTracker(store, { ids, defaultWindow: 50_000 });
     expect(tracker.usage("anything").contextWindow).toBe(50_000);
   });
+
+  test("record sets absolute token + cost figures (upsert)", () => {
+    const { store, ids } = makeStore();
+    const proj = store.projectAdd({ path: "/r" });
+    const ws = store.workspaceCreate({
+      projectId: proj.id,
+      branch: "main",
+      agentBackend: "claude",
+      worktreePath: "/wt",
+    });
+    const tracker = new ContextTracker(store, { ids });
+
+    const first = tracker.record(ws.sessionId, 500, 0.05);
+    expect(first.tokensUsed).toBe(500);
+    expect(first.sessionCostEstimate).toBeCloseTo(0.05);
+
+    // record overwrites (absolute) rather than accumulating like update.
+    const second = tracker.record(ws.sessionId, 1200, 0.12);
+    expect(second.tokensUsed).toBe(1200);
+    expect(second.sessionCostEstimate).toBeCloseTo(0.12);
+    expect(tracker.usage(ws.sessionId).tokensUsed).toBe(1200);
+  });
 });

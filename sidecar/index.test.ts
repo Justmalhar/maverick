@@ -112,6 +112,45 @@ describe("runServer entrypoint", () => {
     expect(typeof runServer).toBe("function");
   });
 
+  test("runServer ticks MCP health on its interval then clears the timer", async () => {
+    const handlers = makeHandlers();
+    let ticks = 0;
+    handlers.pollMcpHealth = () => {
+      ticks++;
+    };
+    async function* gen() {
+      // Give the interval time to fire at least once before stdin drains.
+      await new Promise((r) => setTimeout(r, 25));
+      yield JSON.stringify({ jsonrpc: "2.0", id: 1, method: "project.list", params: {} });
+    }
+    await runServer({
+      handlers,
+      notifier: { write: () => {} },
+      input: gen() as AsyncIterable<string>,
+      healthIntervalMs: 5,
+    });
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  test("runServer with healthIntervalMs<=0 disables the timer", async () => {
+    const handlers = makeHandlers();
+    let ticks = 0;
+    handlers.pollMcpHealth = () => {
+      ticks++;
+    };
+    async function* gen() {
+      await new Promise((r) => setTimeout(r, 15));
+      yield JSON.stringify({ jsonrpc: "2.0", id: 1, method: "project.list", params: {} });
+    }
+    await runServer({
+      handlers,
+      notifier: { write: () => {} },
+      input: gen() as AsyncIterable<string>,
+      healthIntervalMs: 0,
+    });
+    expect(ticks).toBe(0);
+  });
+
   test("runServer consumes injected async input", async () => {
     const lines: string[] = [];
     async function* gen() {

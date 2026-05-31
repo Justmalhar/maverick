@@ -8,12 +8,13 @@ pub async fn diff_get(
     state: State<'_, AppState>,
     worktree_path: String,
     file_path: Option<String>,
+    staged: Option<bool>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request(
             "diff.get",
-            json!({ "worktreePath": worktree_path, "filePath": file_path }),
+            json!({ "worktreePath": worktree_path, "filePath": file_path, "staged": staged }),
         )
         .await
         .map_err(|e| e.to_string())

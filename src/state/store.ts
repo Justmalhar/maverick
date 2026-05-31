@@ -26,6 +26,15 @@ interface PanelLayout {
 
 export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps";
 
+export interface PreviewFile {
+  /** Absolute path of the file being previewed. */
+  path: string;
+  /** Display label (basename) for the preview tab. */
+  name: string;
+  /** When true, markdown renders as raw source instead of the rendered view. */
+  raw?: boolean;
+}
+
 interface WorkbenchState {
   // Data
   projects: Project[];
@@ -39,11 +48,16 @@ interface WorkbenchState {
 
   // Per-workspace state
   activeWorkspaceId: string | null;
+  // Most-recently-used first. Drives LRU render suspension of editor groups.
+  workspaceAccessOrder: string[];
   editorModes: Record<string, EditorMode>;
   splitTrees: Record<string, SplitNode>;
 
   // Layout
   layout: PanelLayout;
+
+  // Active file preview shown in the AuxiliaryBar "preview" tab.
+  previewFile: PreviewFile | null;
 
   // Overlays
   commandPaletteOpen: boolean;
@@ -72,9 +86,16 @@ interface WorkbenchState {
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
 
+  // Preview
+  openPreview: (file: PreviewFile) => void;
+  closePreview: () => void;
+  togglePreviewRaw: () => void;
+
   // Layout actions
   setActivityView: (view: ActivityView) => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
+  setActivitybarCollapsed: (collapsed: boolean) => void;
+  toggleActivitybarCollapsed: () => void;
   togglePrimarySideBar: () => void;
   toggleAuxiliaryBar: () => void;
   togglePanel: () => void;
@@ -110,6 +131,7 @@ export const useWorkbench = create<WorkbenchState>()(
     systemTabs: [],
     activeSystemTab: null,
     activeWorkspaceId: null,
+    workspaceAccessOrder: [],
     editorModes: {},
     splitTrees: {},
 
@@ -125,6 +147,8 @@ export const useWorkbench = create<WorkbenchState>()(
       auxiliaryView: "files",
     },
 
+    previewFile: null,
+
     commandPaletteOpen: false,
     quickOpenOpen: false,
     presetLauncherOpen: false,
@@ -134,18 +158,41 @@ export const useWorkbench = create<WorkbenchState>()(
 
     setProjects: (projects) => set({ projects }),
     addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
-    setWorkspaces: (workspaces) => set({ workspaces }),
-    addWorkspace: (workspace) => set((s) => ({ workspaces: [...s.workspaces, workspace] })),
+    setWorkspaces: (workspaces) =>
+      set((s) => ({
+        workspaces,
+        workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) =>
+          workspaces.some((w) => w.id === wid)
+        ),
+      })),
+    addWorkspace: (workspace) =>
+      set((s) => ({
+        workspaces: [...s.workspaces, workspace],
+        workspaceAccessOrder: [
+          workspace.id,
+          ...s.workspaceAccessOrder.filter((wid) => wid !== workspace.id),
+        ],
+      })),
     removeWorkspace: (id) =>
       set((s) => ({
         workspaces: s.workspaces.filter((w) => w.id !== id),
         activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
+        workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
       })),
     updateWorkspace: (id, patch) =>
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
       })),
-    setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
+    setActiveWorkspace: (id) =>
+      set((s) => ({
+        activeWorkspaceId: id,
+        // Selecting a workspace switches the editor away from any system tab,
+        // mirroring how opening a system tab clears the active workspace.
+        activeSystemTab: id ? null : s.activeSystemTab,
+        workspaceAccessOrder: id
+          ? [id, ...s.workspaceAccessOrder.filter((wid) => wid !== id)]
+          : s.workspaceAccessOrder,
+      })),
     setEditorMode: (workspaceId, mode) =>
       set((s) => ({ editorModes: { ...s.editorModes, [workspaceId]: mode } })),
     toggleEditorMode: (workspaceId) =>
@@ -160,6 +207,19 @@ export const useWorkbench = create<WorkbenchState>()(
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
 
+    openPreview: (file) =>
+      set((s) => ({
+        previewFile: file,
+        layout: { ...s.layout, auxiliaryView: "preview", auxiliaryBarVisible: true },
+      })),
+    closePreview: () => set({ previewFile: null }),
+    togglePreviewRaw: () =>
+      set((s) => ({
+        previewFile: s.previewFile
+          ? { ...s.previewFile, raw: !s.previewFile.raw }
+          : s.previewFile,
+      })),
+
     setActivityView: (view) =>
       set((s) => ({
         layout: {
@@ -170,6 +230,10 @@ export const useWorkbench = create<WorkbenchState>()(
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),
+    setActivitybarCollapsed: (collapsed) =>
+      set((s) => ({ layout: { ...s.layout, activitybarCollapsed: collapsed } })),
+    toggleActivitybarCollapsed: () =>
+      set((s) => ({ layout: { ...s.layout, activitybarCollapsed: !s.layout.activitybarCollapsed } })),
     togglePrimarySideBar: () =>
       set((s) => ({
         layout: { ...s.layout, primarySideBarVisible: !s.layout.primarySideBarVisible },
@@ -228,3 +292,29 @@ export const selectWorkspacesForProject =
   (projectId: string) =>
   (s: WorkbenchState): Workspace[] =>
     s.workspaces.filter((w) => w.projectId === projectId);
+
+/**
+ * The set of workspace ids whose editors stay rendered (keep-alive). When more
+ * than `lruLimit` workspaces are open, the least-recently-used ones fall out of
+ * this set and have their DOM destroyed — their sidecar PTYs are unaffected.
+ * The active workspace is always live.
+ */
+export function computeLiveWorkspaceIds(
+  workspaces: Workspace[],
+  accessOrder: string[],
+  activeWorkspaceId: string | null,
+  lruLimit: number
+): Set<string> {
+  const existing = new Set(workspaces.map((w) => w.id));
+  if (lruLimit <= 0 || workspaces.length <= lruLimit) return existing;
+
+  const ranked = accessOrder.filter((id) => existing.has(id));
+  // Any open workspace missing from the access order (e.g. restored from disk)
+  // is appended so it can still be reached before suspension kicks in.
+  for (const w of workspaces) {
+    if (!ranked.includes(w.id)) ranked.push(w.id);
+  }
+  const live = new Set(ranked.slice(0, lruLimit));
+  if (activeWorkspaceId) live.add(activeWorkspaceId);
+  return live;
+}

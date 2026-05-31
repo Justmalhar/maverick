@@ -11,6 +11,8 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "general.defaultBranch": "origin/main",
   "general.namingScheme": "maverick/{feature-name}",
   "general.restoreSession": true,
+  // JSON-encoded Record<string,string> of global env vars merged into every PTY.
+  "general.env": "{}",
 
   // Appearance
   "appearance.theme": "",
@@ -56,6 +58,9 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "advanced.largeTextThreshold": 5000,
   "advanced.lruLimit": 8,
   "advanced.caffeinate": true,
+
+  // Browser — "iframe" (sandboxed, testable default) or "native" (child webview).
+  "browser.engine": "iframe",
 
   // Version
   "version.updateChannel": "stable",

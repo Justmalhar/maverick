@@ -135,3 +135,78 @@ describe("ConfigLoader", () => {
     }
   });
 });
+
+describe("ConfigLoader.save", () => {
+  function harness(seed?: { yaml?: string; json?: string }) {
+    const files: Record<string, string> = {};
+    if (seed?.yaml !== undefined) files["/p/maverick.yaml"] = seed.yaml;
+    if (seed?.json !== undefined) files["/p/maverick.json"] = seed.json;
+    const loader = new ConfigLoader({
+      read: (path) => files[path] ?? "",
+      exists: (path) => path in files,
+      write: (path, contents) => {
+        files[path] = contents;
+      },
+    });
+    return { loader, files };
+  }
+
+  test("merges a patch into existing YAML and persists it", () => {
+    const { loader, files } = harness({ yaml: MIN_CONFIG });
+    const saved = loader.save("/p", {
+      automations: [{ name: "build", trigger: "manual", steps: [{ type: "shell", command: "x" }] }],
+    });
+    expect(saved.automations?.[0].name).toBe("build");
+    // Re-reading the written file yields the same automation.
+    const round = loader.load("/p");
+    expect(round.automations?.[0].name).toBe("build");
+    expect(files["/p/maverick.yaml"]).toContain("build");
+  });
+
+  test("writes JSON when only maverick.json exists", () => {
+    const { loader, files } = harness({
+      json: JSON.stringify({ version: 1, backends: { default: "claude", available: [] } }),
+    });
+    loader.save("/p", { mcps: [{ name: "fs", command: "mcp-fs", args: [] }] });
+    expect(files["/p/maverick.json"]).toContain("\"fs\"");
+    expect(files["/p/maverick.yaml"]).toBeUndefined();
+  });
+
+  test("creates a default YAML config when none exists", () => {
+    const { loader, files } = harness();
+    const saved = loader.save("/p", { mcps: [{ name: "fs", command: "c", args: [] }] });
+    expect(saved.version).toBe(1);
+    expect(saved.backends.default).toBe("claude");
+    expect(files["/p/maverick.yaml"]).toBeDefined();
+  });
+
+  test("ignores a non-object on-disk config and falls back to defaults", () => {
+    const { loader } = harness({ yaml: "null\n" });
+    const saved = loader.save("/p", { skills: [] });
+    expect(saved.version).toBe(1);
+  });
+
+  test("validates the merged config against the schema", () => {
+    const { loader } = harness({ yaml: MIN_CONFIG });
+    expect(() =>
+      loader.save("/p", { backends: { default: 1 } as never })
+    ).toThrow();
+  });
+
+  test("default fs-backed save round-trips through disk", () => {
+    const { mkdtempSync, rmSync, writeFileSync } = require("fs");
+    const { tmpdir } = require("os");
+    const { join } = require("path");
+    const tmp = mkdtempSync(join(tmpdir(), "mvk-cfg-save-"));
+    try {
+      writeFileSync(join(tmp, "maverick.yaml"), MIN_CONFIG, "utf8");
+      const loader = new ConfigLoader();
+      loader.save(tmp, {
+        automations: [{ name: "ship", trigger: "manual", steps: [] }],
+      });
+      expect(loader.load(tmp).automations?.[0].name).toBe("ship");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});

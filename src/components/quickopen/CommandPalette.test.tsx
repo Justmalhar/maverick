@@ -38,6 +38,20 @@ describe("CommandPalette", () => {
     expect(useWorkbench.getState().layout.activityView).toBe("projects");
   });
 
+  it("global.quickOpen opens the Go to File overlay", async () => {
+    renderWithProviders(<CommandPalette />);
+    await userEvent.click(screen.getByTestId("commandpalette-item-global.quickOpen"));
+    expect(useWorkbench.getState().quickOpenOpen).toBe(true);
+    expect(useWorkbench.getState().commandPaletteOpen).toBe(false);
+  });
+
+  it("preview.open switches the aux view to preview", async () => {
+    renderWithProviders(<CommandPalette />);
+    await userEvent.click(screen.getByTestId("commandpalette-item-preview.open"));
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
+    expect(useWorkbench.getState().commandPaletteOpen).toBe(false);
+  });
+
   const cases: Array<[string, (s: ReturnType<typeof useWorkbench.getState>) => unknown]> = [
     ["view.kanban", (s) => expect(s.layout.activityView).toBe("kanban")],
     ["view.browser", (s) => expect(s.layout.activityView).toBe("browser")],

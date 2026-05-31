@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Play, Wrench, FolderPlus, StopCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { PanelTabs, type BottomPanelTab } from "./PanelTabs";
+import { BottomTerminal } from "./BottomTerminal";
 
 interface EmptyProps {
   icon: typeof Play;
@@ -100,6 +101,17 @@ function ScriptPane({ kind }: { kind: "setup" | "run" }) {
 export function Panel({ collapsed = false }: { collapsed?: boolean }) {
   const [tab, setTab] = useState<BottomPanelTab>("setup");
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === "setup" || detail === "run" || detail === "terminal") {
+        setTab(detail);
+      }
+    };
+    window.addEventListener("maverick:panel:tab", handler);
+    return () => window.removeEventListener("maverick:panel:tab", handler);
+  }, []);
+
   return (
     <section
       data-testid="bottom-panel"
@@ -111,6 +123,7 @@ export function Panel({ collapsed = false }: { collapsed?: boolean }) {
         <div className="flex-1 overflow-hidden">
           {tab === "setup" && <ScriptPane kind="setup" />}
           {tab === "run" && <ScriptPane kind="run" />}
+          {tab === "terminal" && <BottomTerminal />}
         </div>
       )}
     </section>

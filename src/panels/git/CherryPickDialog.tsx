@@ -1,6 +1,6 @@
 // Cherry-pick dialog: enter SHA(s) or select from recent commits.
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { gitCherryPick } from "@/lib/tauri";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +35,7 @@ export default function CherryPickDialog({ open, onOpenChange, worktreePath }: P
     setBusy(true);
     setError(null);
     try {
-      await invoke("git_cherry_pick", { worktreePath, sha: sha.trim() });
+      await gitCherryPick(worktreePath, sha.trim());
       onOpenChange(false);
     } catch (e) {
       setError(String(e));

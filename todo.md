@@ -35,10 +35,10 @@
 - [x] Keep-alive mount + `display:none` for inactive editors (`WorkspaceEditor.tsx`)
 - [x] Resizable panels with persisted sizes
 - [~] Editor tabs toolbar — design spec exists (`docs/superpowers/specs/2026-05-23-editor-tabs-toolbar-design.md`) + plan, implementation may still be in progress
-- [ ] Bottom `Panel` "Terminal" tab (raw PTY shell for the worktree) — only Setup + Run today
+- [x] Bottom `Panel` "Terminal" tab (raw PTY shell for the worktree) — `BottomTerminal` spawns `/bin/zsh -l` in the worktree; sidecar `pty.spawn` defaults cwd to worktreePath
 - [ ] `WorkspaceBadges` in TitleBar (per `SYSTEM-DESIGN.md` §4.1)
 - [ ] Sidebar icon-only collapse < 900px window width
-- [ ] LRU suspension after 20+ open workspaces (PTYs preserved, render destroyed)
+- [x] LRU suspension beyond `advanced.lruLimit` open workspaces — store tracks MRU access order; `computeLiveWorkspaceIds` keeps the active + most-recent N rendered, suspends the rest (DOM destroyed, sidecar PTYs preserved, reconnect on re-focus)
 
 ---
 
@@ -55,7 +55,7 @@
 - [x] Per-repo `maverick.json` (`ProjectSettingsStore` + `sidecar/project-settings.ts`)
 - [x] Live-reload project settings on disk change (`onProjectSettingsChanged` event in `Workbench`)
 - [ ] `maverick.yaml` schema validation for top-level config (Zod schemas exist but `ConfigLoader` does not enforce — verify)
-- [ ] `Cmd+1`–`Cmd+9` jump-to-workspace-by-index
+- [x] `Cmd+1`–`Cmd+9` jump-to-workspace-by-index (wired in `useShortcuts.ts`; now also surfaced in `registry.ts` for Settings/Command Palette discovery)
 - [ ] Backend status footer health-check (status dot is rendered, but no real ping)
 
 ---
@@ -63,7 +63,9 @@
 ## Phase 3 — Editor Modes
 
 ### 3.1 Agent Mode
-- [x] `AgentView` + `MessageList` + `AgentMessage` + `UserMessage` + `ToolCallSummary`
+- [x] **Real PTY backend (Rust `portable-pty`)** — `PtyManager` owns OS pseudo-terminals; `pty_spawn/write/resize/kill` rewritten to use it (reader thread → `pty:data`, waiter → `pty:exit`). Bun sidecar no longer hosts terminals (node-pty fails under Bun; Bun.spawn is pipe-only). ⚠️ runtime-verify live.
+- [x] **`AgentTerminal`** — workspace agent mode now spawns the backend CLI (`claude`) as a live PTY in the worktree and renders it via xterm.js, replacing the chat bubbles. PTY cached per workspace (survives tab switches). Chat `AgentView` retained but no longer the default editor view.
+- [x] `AgentView` + `MessageList` + `AgentMessage` + `UserMessage` + `ToolCallSummary` (retained; superseded by AgentTerminal as the default)
 - [x] `InputBar` with `/skill` autocomplete (textarea + Send button)
 - [x] `messages.list` / `messages.append` RPC + SQLite persistence
 - [~] Model selector per workspace — backend dropdown exists in some flows, not in `InputBar` itself
@@ -90,7 +92,7 @@
 - [x] `FilesView` — file tree, M/A/D/R indicators (uses `file.tree` RPC)
 - [x] `DiffView` — diff2html-style renderer
 - [x] `diff.get` / `diff.stage_hunk` / `diff.unstage_hunk` RPC + `DiffReader`
-- [~] "AI Code Review" button visible in `DiffView` line 89 — likely stub, not wired to a backend pipeline
+- [x] "AI Code Review" button in `DiffView` — wired to `runAiReview` (diff → prompt → agent PTY); "Create PR" button wired to `pr.create`
 - [ ] Hunk navigation `]c` / `[c`
 - [ ] `⌘⇧A` / `⌘⇧U` stage / unstage hunk shortcuts
 
@@ -149,7 +151,7 @@
 - [ ] `⌘⇧G` shortcut (registered in `registry.ts` but ActivityBar has no Git icon → opens via palette only)
 - [ ] Cherry-pick / rebase full execution flows (dialog exists; runner wiring unclear)
 - [ ] Remote ops: fetch / pull / push / set upstream with conflict detection
-- [ ] AI Code Review pipeline (`⌘⇧R` action + `gh pr create` chain) — registry has `editor.retry` on `⌘⇧R` instead
+- [x] AI Code Review pipeline (`⌘⇧R` action + `gh pr create` chain) — `ai.review` action + `pr.create` RPC (`GitModule.prCreate`) now wired
 
 ---
 
@@ -169,13 +171,13 @@
 
 ## Phase 10 — Browser Panel
 
-- [x] `BrowserPanel` + `BrowserToolbar` + `ElementInspector`
-- [x] URL bar with back / forward / refresh / stop
+- [x] `BrowserPanel` + `BrowserToolbar` (now native-webview driven; iframe `ElementInspector` removed)
+- [x] URL bar with back / forward / refresh / stop — drive the native webview via `browser_navigate` / `browser_eval`
 - [x] In-app history stack
-- [~] Element inspector overlay — `ElementInspector.tsx` exists; cross-origin iframe element capture is fundamentally limited (PRD specified Tauri `WebviewWindow` but implementation uses `<iframe>`)
-- [ ] `WebviewWindow` migration (PRD §5.15) — required for real element capture
-- [ ] `⌘⇧I` WYSIWYG toggle
-- [ ] Captured element → input bar context injection
+- [x] Element inspector — injected `__mvInspect` script in the native webview emits `browser://captured`; cross-origin now works (script runs inside the target page)
+- [x] **`WebviewWindow` migration (PRD §5.15)** — embedded child webview via Tauri `unstable` `window.add_child`, pinned to the panel rect (`browser_open/navigate/set_bounds/show/hide/close/eval`), hidden under modal overlays, closed on unmount. ⚠️ **Compiles + React fully tested; native runtime behavior must be verified live** (`bun run tauri dev`) — geometry sync, hide-on-overlay, and the capture event channel are runtime-only.
+- [x] Captured element → input bar context injection (`maverick:input-append`)
+- [ ] `⌘⇧I` WYSIWYG toggle — inspect toggle is in the toolbar; the `⌘⇧I` keybinding is not yet registered
 
 ---
 
@@ -238,11 +240,11 @@
 - [x] `ContextTracker` sidecar + `context.usage` RPC + `context_usage` table
 - [x] `UsagePanel` UI shell (placeholder data — wired comment explicitly states "Data placeholders today")
 - [x] `Caffeinate` sidecar class with darwin / linux branches
-- [ ] **Notification bell with history** in StatusBar — current item shows static `"v0.1"` instead
-- [ ] OS native notification dispatch (Tauri notification plugin not installed in `package.json`)
-- [ ] In-app toast notifications
-- [ ] `Caffeinate` RPC binding (`sidecar/rpc-handlers.ts` does not expose `caffeinate.start/stop`)
-- [ ] StatusBar `caffeinate` item is non-interactive (static "caffeinate" label, no toggle)
+- [x] **Notification bell with history** in StatusBar — `NotificationBell` with unread badge + popover list + mark-read; `notify.list/markRead/markAllRead/unreadCount` RPC; `notification.send` now persists to DB and live-updates the bell
+- [x] OS native notification dispatch — `dispatchOsNotification` via `@tauri-apps/plugin-notification` (plugin + capabilities already wired); fired from the global `Toaster` on every `notification:send`
+- [x] In-app toast notifications — `Toaster` (radix-toast) mounted in `Workbench`, renders toasts from `notification:send` events with auto-dismiss + queue cap
+- [x] `Caffeinate` RPC binding — `caffeinate.start/stop/status` in sidecar + Rust commands + React wrappers
+- [x] StatusBar `caffeinate` item is non-interactive — replaced with interactive `CaffeinateToggle` (awake/caffeinate states, aria-pressed)
 - [ ] `Settings → Advanced → Caffeinate while agents running` (toggle exists in settings but no real wiring)
 - [ ] Per-event quota warning notifications (80% / 100%)
 - [ ] Real context-usage data — token counter, cost estimate, model-pricing config
@@ -256,22 +258,20 @@
 - [x] Repository Settings (delivered as Project Settings overlay)
 - [x] AI Preferences fields (review_prefs / pr_prefs / branch style / general)
 - [x] `attachment.create` RPC + `AttachmentStore` sidecar
-- [ ] **Auto-convert long text** in `InputBar` — paste > 5,000 chars → `@attachment:` ref. Today `InputBar.tsx` ignores paste size; `AttachmentStore` is never invoked from UI
-- [ ] **MAVERICK.md instruction file** — auto-prepended to every prompt. No reference anywhere in `src/` or `sidecar/`
-- [ ] Fallback chain MAVERICK.md → CLAUDE.md → AGENTS.md → none
-- [ ] `~/.maverick/GLOBAL.md` cross-repo instructions
-- [ ] **AI PR Review** workflow — `⌘⇧R` is bound to `editor.retry`; no diff → backend → `gh pr create` chain anywhere
-- [ ] "Create PR" one-click action (consumes `createPr` AI pref)
+- [x] **Auto-convert long text** in `InputBar` — paste > `advanced.largeTextThreshold` (default 5,000) chars now calls `attachment.create`, inserts `@attachment:<ref>` at the caret, and renders a removable chip with the char count
+- [x] **MAVERICK.md instruction file** — `InstructionsResolver` + `instructions.resolve` RPC; `AgentView` prepends resolved instructions to the first prompt of a fresh session (visible/persisted message stays clean)
+- [x] Fallback chain MAVERICK.md → CLAUDE.md → AGENTS.md → none (HTML comments stripped; empty files skip to next candidate)
+- [x] `~/.maverick/MAVERICK.md` cross-repo (global) instructions — prepended ahead of project-local instructions
+- [x] **AI PR Review** workflow — `⌘⇧R` rebound from the `editor.retry` stub to `ai.review`; `runAiReview` builds a diff-aware prompt (honoring the project `review` pref) and pipes it to the agent PTY; DiffView "AI Code Review" button wired to the same path
+- [x] "Create PR" one-click action — `pr.create` RPC pushes the branch + runs `gh pr create --fill`; DiffView button confirms, shows the resulting PR URL or error
 
 ---
 
 ## Phase 17 — Distribution & Polish
 
-- [ ] `getmaverick.sh` curl installer (platform detection, macOS / Linux / Windows)
-- [ ] macOS `.dmg` bundle + universal arm64+x86_64 binary
-- [ ] Linux `.AppImage` / `.deb`
-- [ ] Windows `.msi` installer
-- [ ] Auto-update check on launch (GitHub releases API, delta updates)
+- [x] `getmaverick.sh` curl installer (platform + arch detection, macOS / Linux / Windows; configurable `MAVERICK_REPO`/`MAVERICK_VERSION`)
+- [x] macOS `.dmg` / Linux `.AppImage`+`.deb` / Windows `.msi` — `bundle.targets: "all"` + installer metadata (category, descriptions, publisher, copyright, macOS min version, deb deps). Requires `bun run tauri:build` per platform; universal macOS binary needs a `--target universal-apple-darwin` build.
+- [ ] Auto-update check on launch — NOT enabled (needs decision): generate a signer keypair (`bunx tauri signer generate`), add `tauri-plugin-updater` + `@tauri-apps/plugin-updater` + `updater:default` capability, set `plugin.updater.pubkey` + endpoint (e.g. GitHub releases `latest.json`), and `bundle.createUpdaterArtifacts: true`. Left off to avoid a half-configured update channel.
 - [ ] Update channel selector (stable / beta) — `AccountSettings` section missing
 - [ ] Telemetry opt-out plumbing (toggle stub in AdvancedSettings only)
 - [ ] License key + plan info (post-v0.1)
@@ -283,8 +283,8 @@
 - [x] 278 test files across React (`*.test.tsx`), sidecar (`bun test`), Rust (`cargo test`)
 - [x] `bun run test:coverage` exists; thresholds `100/95/100/100` per `CLAUDE.md`
 - [x] Recent "100% line/func/stmt + 95%+ branch coverage" commit (`f94285b`)
-- [ ] Playwright E2E golden-path CI nightly (config not present)
-- [ ] CI workflow file (no `.github/workflows/` directory)
+- [x] Playwright E2E golden-path — `playwright.config.ts` + `e2e/golden-path.spec.ts` (boot smoke); `@playwright/test` devDep + `test:e2e` script; runs via `.github/workflows/e2e-nightly.yml`. (Full Tauri-runtime E2E via tauri-driver is future work.)
+- [x] CI workflow file — `.github/workflows/ci.yml` (frontend typecheck+coverage, sidecar bun test, rust cargo test) + nightly E2E workflow
 
 ---
 
@@ -310,17 +310,25 @@
 
 ## Top-priority gaps to close before "v0.1 done"
 
-1. **Notification bell UI + Tauri notification plugin** (Phase 15) — currently a static `v0.1` label.
-2. **Caffeinate RPC + toggle wiring** (Phase 15) — backend exists, UI cannot turn it on.
-3. **Context tracker live wiring** (Phase 15) — `UsagePanel` and StatusBar `0 tokens` are placeholders.
-4. **Auto-convert paste > 5000 chars** in `InputBar` (Phase 16) — `AttachmentStore` is orphaned.
-5. **MAVERICK.md instruction-file injection** (Phase 16) — not implemented.
-6. **AI PR Review pipeline** (`⌘⇧R` + `gh pr create`) (Phase 16) — shortcut collides with `editor.retry`.
-7. **Bottom Panel "Terminal" tab** (Phase 1) — only Setup + Run present.
-8. **Workspace LRU suspension + `⌘1`–`⌘9` jumps** (Phase 1/2).
-9. **Browser → real `WebviewWindow`** (Phase 10) — iframe blocks element capture.
-10. **Distribution installers + auto-update** (Phase 17).
+1. ~~**Notification bell UI**~~ ✅ done — `NotificationBell` with unread badge, popover history, mark-read; DB-persisted + live events. (Tauri OS-native notification plugin dispatch still open.)
+2. ~~**Caffeinate RPC + toggle wiring**~~ ✅ done — `caffeinate.start/stop/status` + interactive `CaffeinateToggle`.
+3. **Context tracker live wiring** (Phase 15) — `UsagePanel` and StatusBar `0 tokens` are still placeholders.
+4. ~~**Auto-convert paste > 5000 chars**~~ ✅ done — paste → `attachment.create` → `@attachment:` chip in `InputBar`.
+5. ~~**MAVERICK.md instruction-file injection**~~ ✅ done — `InstructionsResolver` + first-prompt injection with MAVERICK.md → CLAUDE.md → AGENTS.md fallback and global file.
+6. ~~**AI PR Review pipeline**~~ ✅ done — `⌘⇧R` → `ai.review`; `runAiReview` diff→prompt→PTY; `pr.create` (`gh pr create`) wired to DiffView.
+7. ~~**Bottom Panel "Terminal" tab**~~ ✅ done — `BottomTerminal` raw shell scoped to the worktree.
+8. ~~**Workspace LRU suspension + `⌘1`–`⌘9` jumps**~~ ✅ done — access-order LRU window + index-jump shortcuts surfaced in the registry.
+9. ~~**Browser → real `WebviewWindow`**~~ ✅ done — embedded child webview (Tauri `unstable`); injected capture script unblocks cross-origin. Compiles + React tested; live runtime verification pending.
+10. **Distribution installers + auto-update** (Phase 17) — ✅ bundle metadata + `getmaverick.sh`; auto-update still needs a signing key + release endpoint.
+
+### Remaining for v0.1
+- ~~Context-usage live data~~ ✅ done — `context.record` RPC + `useContextUsage` hook; StatusBar shows `~tok · $cost` for the active session; UsagePanel aggregates real per-backend usage; AgentView records estimated tokens (chars/4 + per-backend pricing) on load + each prompt.
+- ~~OS-native notification dispatch + in-app toasts~~ ✅ done — `Toaster` + `dispatchOsNotification` wired to `notification:send`.
+- ~~Browser `WebviewWindow` migration~~ ✅ done — embedded child webview (Tauri `unstable`); compiles + React tested; **needs live runtime verification**.
+- Distribution: ✅ bundle metadata + `getmaverick.sh` done; **auto-update still open** — needs a signing keypair + release endpoint (your decision).
+- ~~CI workflow + Playwright E2E nightly~~ ✅ done — `.github/workflows/ci.yml` + `e2e-nightly.yml` + Playwright golden-path scaffold.
+- ~~README.md + AGENTS.md at repo root~~ ✅ done (Phase 0).
 
 ---
 
-*Source of truth: `PRD.md` (v0.1, 2026-05-20), `SYSTEM-DESIGN.md` (2026-05-20), and the codebase as of commit `c81d204` on `main`.*
+*Source of truth: `PRD.md` (v0.1, 2026-05-20), `SYSTEM-DESIGN.md` (2026-05-20). Updated 2026-05-27 after closing the worktree-create regression + 8 feature gaps.*

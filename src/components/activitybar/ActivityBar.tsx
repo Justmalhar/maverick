@@ -1,11 +1,10 @@
-import { FolderTree, KanbanSquare, Zap, Plug } from "lucide-react";
+import { FolderTree, GitBranch, KanbanSquare, Zap, Plug } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import type { ActivityView } from "@/lib/ipc";
 import { ActivityBarItem } from "./ActivityBarItem";
 
 // Top: Projects view. Below: document-style views opened as editor tabs.
 // Bottom: settings only — account opened the same modal so it was redundant.
-// Source Control + Browser live in the editor tab dropdown / shortcuts only.
 const VIEW_ITEMS: Array<{
   view: ActivityView;
   icon: typeof FolderTree;
@@ -13,6 +12,7 @@ const VIEW_ITEMS: Array<{
   shortcut?: string;
 }> = [
   { view: "projects", icon: FolderTree, label: "Projects", shortcut: "⌘⇧E" },
+  { view: "git", icon: GitBranch, label: "Source Control", shortcut: "⌘⇧G" },
 ];
 
 const TAB_ITEMS: Array<{

@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { onProjectSettingsChanged } from "@/lib/tauri";
 import {
@@ -9,11 +10,14 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { TitleBar } from "@/components/titlebar/TitleBar";
+import { ActivityBar } from "@/components/activitybar/ActivityBar";
+import { StatusBar } from "@/components/statusbar/StatusBar";
 import { PrimarySideBar } from "@/components/primarysidebar/PrimarySideBar";
 import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
 import { QuickOpen } from "@/components/quickopen/QuickOpen";
 import { CommandPalette } from "@/components/quickopen/CommandPalette";
+import { Toaster } from "@/components/notifications/Toaster";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
 const SettingsPanel = lazy(() => import("@/panels/settings/SettingsPanel"));
@@ -41,12 +45,15 @@ export function Workbench() {
     return ws?.projectId ?? null;
   });
   const loadProjectSettings = useProjectSettingsStore((s) => s.load);
-  const { refreshProjects, refreshWorkspaces } = useWorkspace();
+  const { refreshProjects, refreshWorkspaces, refreshBackends } = useWorkspace();
+  // Collapse the PrimarySideBar to icon-only below the responsive breakpoint.
+  const { collapsed } = useResponsiveLayout();
 
   useEffect(() => {
     refreshProjects().catch((e) => console.error("refreshProjects failed", e));
     refreshWorkspaces().catch((e) => console.error("refreshWorkspaces failed", e));
-  }, [refreshProjects, refreshWorkspaces]);
+    refreshBackends().catch((e) => console.error("refreshBackends failed", e));
+  }, [refreshProjects, refreshWorkspaces, refreshBackends]);
 
   useEffect(() => {
     if (activeWsProjectId) {
@@ -75,8 +82,13 @@ export function Workbench() {
       <TitleBar />
 
       <div className="flex flex-1 overflow-hidden" style={{ borderTop: "1px solid hsl(var(--border))" }}>
-        <ResizablePanelGroup direction="horizontal" className="h-full flex-1">
-          {layout.primarySideBarVisible && (
+        <ActivityBar />
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="h-full flex-1"
+          style={{ borderLeft: "1px solid hsl(var(--border))" }}
+        >
+          {layout.primarySideBarVisible && !collapsed && (
             <>
               <ResizablePanel
                 defaultSize={15}
@@ -113,6 +125,8 @@ export function Workbench() {
         </ResizablePanelGroup>
       </div>
 
+      <StatusBar />
+
       <QuickOpen />
       <CommandPalette />
 
@@ -143,6 +157,8 @@ export function Workbench() {
       <Suspense fallback={<OverlayFallback />}>
         <FirstRunWizard />
       </Suspense>
+
+      <Toaster />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 mod backend_detector;
 mod bootstrap;
 mod commands;
+mod pty;
+pub mod remote;
 pub mod sidecar;
 mod state;
 
@@ -62,6 +64,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        // Auto-update (P3-B). `updater` exposes `plugin:updater|check/download_and_install`
+        // to the webview (gated by the capability); `process` exposes
+        // `plugin:process|restart` so the frontend can relaunch into the new build.
+        // Desktop-only — the updater has no mobile target.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -72,6 +80,19 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
+
+            // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
+            app.manage(crate::pty::PtyManager::new());
+
+            // Companion WebSocket server: OFF by default. Managed here so the
+            // remote_* commands can reach it, but nothing binds a listener until
+            // remote_start is called explicitly. The listener stays loopback-only
+            // until enabled AND a device is paired (Companion-5 QR/Noise pairing),
+            // at which point it widens to the LAN behind the Noise auth gate.
+            // Managed as an `Arc` so the first-pair reconcile watcher can hold a
+            // cheap clone across `.await` (a borrowed `tauri::State` guard isn't
+            // `Send` and can't cross the spawned task boundary).
+            app.manage(std::sync::Arc::new(crate::remote::RemoteServer::new()));
 
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -128,7 +149,9 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            pty_close_all,
             config_load,
+            config_save,
             messages_list,
             message_append,
             skills_list,
@@ -141,7 +164,25 @@ pub fn run() {
             git_commit,
             git_branches,
             git_diff_stat,
+            git_branch_list,
+            git_checkout,
+            git_blame,
+            git_cherry_pick,
+            git_stash_apply,
+            git_stash_pop,
+            git_stash_drop,
+            git_conflicts,
+            git_resolve_conflict,
+            git_fetch,
+            git_pull,
+            git_push,
             file_tree,
+            file_read,
+            file_search,
+            fs_watch_start,
+            fs_watch_add,
+            fs_watch_remove,
+            fs_watch_stop,
             kanban_list,
             kanban_upsert,
             preset_list,
@@ -150,10 +191,30 @@ pub fn run() {
             mcp_start,
             mcp_stop,
             mcp_list,
+            mcp_logs,
+            mcp_add,
             context_usage,
+            context_record,
             attachment_create,
             automation_run,
             notify_send,
+            notify_list,
+            notify_mark_read,
+            notify_mark_all_read,
+            notify_unread_count,
+            caffeinate_start,
+            caffeinate_stop,
+            caffeinate_status,
+            instructions_resolve,
+            pr_create,
+            browser_open,
+            browser_navigate,
+            browser_set_bounds,
+            browser_show,
+            browser_hide,
+            browser_close,
+            browser_eval,
+            browser_capture,
             bootstrap_status,
             bootstrap_update_settings,
             bootstrap_complete,
@@ -162,6 +223,12 @@ pub fn run() {
             request_notification_permission,
             read_maverick_md,
             write_maverick_md,
+            remote_start,
+            remote_stop,
+            remote_status,
+            remote_pair,
+            remote_devices,
+            remote_revoke,
         ]);
 
     let app = builder
@@ -170,6 +237,14 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {
+            // Stop the companion listener first so no socket task outlives the app.
+            if let Some(server) =
+                app_handle.try_state::<std::sync::Arc<crate::remote::RemoteServer>>()
+            {
+                tauri::async_runtime::block_on(async move {
+                    server.stop().await;
+                });
+            }
             if let Some(state) = app_handle.try_state::<AppState>() {
                 let sidecar = state.sidecar.clone();
                 tauri::async_runtime::block_on(async move {

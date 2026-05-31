@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { Paperclip, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,10 @@ export interface ComposerPayload {
 
 interface Props {
   onSend: (payload: ComposerPayload) => Promise<void>;
+  defaultProjectId?: string | null;
 }
 
-export default function TaskComposer({ onSend }: Props) {
+export default function TaskComposer({ onSend, defaultProjectId }: Props) {
   const projects = useWorkbench((s) => s.projects);
   const backends = useWorkbench((s) => s.backends);
   const activeWorkspace = useWorkbench((s) =>
@@ -58,7 +59,7 @@ export default function TaskComposer({ onSend }: Props) {
       setSelectedBranch("");
       try {
         const b = await gitBranches(project.path);
-        setBranches(b);
+        setBranches(Array.isArray(b) ? b : []);
       } catch {
         setBranchError("Could not load branches");
         setBranches([]);
@@ -68,6 +69,12 @@ export default function TaskComposer({ onSend }: Props) {
     },
     [projects]
   );
+
+  useEffect(() => {
+    if (!defaultProjectId) return;
+    setSelectedProjectId(defaultProjectId);
+    fetchBranches(defaultProjectId);
+  }, [defaultProjectId, fetchBranches]);
 
   const handleProjectChange = (id: string) => {
     setSelectedProjectId(id);

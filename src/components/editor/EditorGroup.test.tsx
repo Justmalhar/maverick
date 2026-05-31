@@ -3,15 +3,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { EditorGroup } from "./EditorGroup";
 import { useWorkbench } from "@/state/store";
+import { useSettingsStore, _resetSettingsStoreForTests } from "@/lib/stores/settings";
 import { makeWorkspace } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
+  _resetSettingsStoreForTests();
   useWorkbench.setState({
-    ...initial, workspaces: [], activeWorkspaceId: null, editorModes: {}, splitTrees: {},
-    systemTabs: [], activeSystemTab: null,
+    ...initial, workspaces: [], activeWorkspaceId: null, workspaceAccessOrder: [],
+    editorModes: {}, splitTrees: {}, systemTabs: [], activeSystemTab: null,
   });
 });
 
@@ -30,6 +32,56 @@ describe("EditorGroup", () => {
     renderWithProviders(<EditorGroup />);
     expect(screen.getByTestId("workspace-editor-w1")).toBeInTheDocument();
     expect(screen.getByTestId("workspace-editor-w2")).toBeInTheDocument();
+  });
+
+  it("suspends least-recently-used workspaces beyond the LRU limit", () => {
+    useSettingsStore.setState({
+      values: { "advanced.lruLimit": 2 },
+      status: "idle",
+      lastError: null,
+    });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [
+        makeWorkspace({ id: "w1" }),
+        makeWorkspace({ id: "w2" }),
+        makeWorkspace({ id: "w3" }),
+      ],
+      // MRU first: w3, w2, w1 → with limit 2, w1 is suspended.
+      workspaceAccessOrder: ["w3", "w2", "w1"],
+      activeWorkspaceId: "w3",
+    });
+    renderWithProviders(<EditorGroup />);
+    expect(screen.getByTestId("workspace-editor-w3")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-editor-w2")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-editor-w1")).not.toBeInTheDocument();
+  });
+
+  it("re-mounts a suspended workspace when it becomes active again", () => {
+    useSettingsStore.setState({
+      values: { "advanced.lruLimit": 2 },
+      status: "idle",
+      lastError: null,
+    });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [
+        makeWorkspace({ id: "w1" }),
+        makeWorkspace({ id: "w2" }),
+        makeWorkspace({ id: "w3" }),
+      ],
+      workspaceAccessOrder: ["w3", "w2", "w1"],
+      activeWorkspaceId: "w3",
+    });
+    const { rerender } = renderWithProviders(<EditorGroup />);
+    expect(screen.queryByTestId("workspace-editor-w1")).not.toBeInTheDocument();
+
+    // Activating w1 moves it to the front of the access order → live again.
+    useWorkbench.getState().setActiveWorkspace("w1");
+    rerender(<EditorGroup />);
+    expect(screen.getByTestId("workspace-editor-w1")).toBeInTheDocument();
+    // w2 is now the LRU tail and falls out of the window.
+    expect(screen.queryByTestId("workspace-editor-w2")).not.toBeInTheDocument();
   });
 
   it("renders dashboard system tab (UsagePanel)", async () => {
@@ -60,5 +112,32 @@ describe("EditorGroup", () => {
     useWorkbench.setState({ ...initial, systemTabs: ["mcps"], activeSystemTab: "mcps", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);
     await waitFor(() => expect(screen.getByTestId("mcps-panel")).toBeInTheDocument());
+  });
+
+  it("keeps the browser mounted (hidden) when another system tab is active", async () => {
+    useWorkbench.setState({
+      ...initial,
+      systemTabs: ["browser", "kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorGroup />);
+    // The active kanban tab renders…
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // …while the browser stays in the DOM (keep-alive), just hidden.
+    const browser = await screen.findByTestId("browser-panel");
+    expect(browser).toBeInTheDocument();
+    expect(browser.closest("[aria-hidden]")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("does not mount the browser when its tab is not open", () => {
+    useWorkbench.setState({
+      ...initial,
+      systemTabs: ["kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorGroup />);
+    expect(screen.queryByTestId("browser-panel")).not.toBeInTheDocument();
   });
 });

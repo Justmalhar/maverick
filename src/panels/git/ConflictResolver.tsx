@@ -1,23 +1,14 @@
 // Side-by-side conflict view: Accept Ours / Accept Theirs / Accept Both per hunk.
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { gitConflicts, gitResolveConflict } from "@/lib/tauri";
+import type { ConflictHunk, ConflictResolution as Resolution } from "@/lib/ipc";
 
 interface Props {
   worktreePath: string;
 }
-
-interface ConflictHunk {
-  filePath: string;
-  hunkIndex: number;
-  ours: string[];
-  theirs: string[];
-  base?: string[];
-}
-
-type Resolution = "ours" | "theirs" | "both";
 
 export default function ConflictResolver({ worktreePath }: Props) {
   const [hunks, setHunks] = useState<ConflictHunk[]>([]);
@@ -29,7 +20,7 @@ export default function ConflictResolver({ worktreePath }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<ConflictHunk[]>("git_conflicts", { worktreePath });
+      const result = await gitConflicts(worktreePath);
       setHunks(result);
     } catch (e) {
       setError(String(e));
@@ -45,12 +36,7 @@ export default function ConflictResolver({ worktreePath }: Props) {
   const resolve = useCallback(
     async (hunk: ConflictHunk, resolution: Resolution) => {
       try {
-        await invoke("git_resolve_conflict", {
-          worktreePath,
-          filePath: hunk.filePath,
-          hunkIndex: hunk.hunkIndex,
-          resolution,
-        });
+        await gitResolveConflict(worktreePath, hunk.filePath, hunk.hunkIndex, resolution);
         await refresh();
       } catch (e) {
         setError(String(e));

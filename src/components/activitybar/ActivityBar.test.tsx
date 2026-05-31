@@ -34,6 +34,28 @@ describe("ActivityBar", () => {
     expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(false);
   });
 
+  it("renders the git view item", () => {
+    renderWithProviders(<ActivityBar />);
+    expect(screen.getByTestId("activitybar-git")).toBeInTheDocument();
+  });
+
+  it("sets activityView to git when the git item is clicked", async () => {
+    renderWithProviders(<ActivityBar />);
+    await userEvent.click(screen.getByTestId("activitybar-git"));
+    expect(useWorkbench.getState().layout.activityView).toBe("git");
+    expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(true);
+  });
+
+  it("toggles sidebar when git view is already active and sidebar is visible", async () => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      layout: { ...useWorkbench.getState().layout, activityView: "git", primarySideBarVisible: true },
+    });
+    renderWithProviders(<ActivityBar />);
+    await userEvent.click(screen.getByTestId("activitybar-git"));
+    expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(false);
+  });
+
   it("opens a system tab when clicking a tab item", async () => {
     renderWithProviders(<ActivityBar />);
     await userEvent.click(screen.getByTestId("activitybar-tab-kanban"));

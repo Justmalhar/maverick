@@ -4,7 +4,7 @@ import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export type BottomPanelTab = "setup" | "run";
+export type BottomPanelTab = "setup" | "run" | "terminal";
 
 interface Props {
   value: BottomPanelTab;
@@ -14,6 +14,7 @@ interface Props {
 const TABS: Array<{ value: BottomPanelTab; label: string }> = [
   { value: "setup", label: "Setup" },
   { value: "run", label: "Run" },
+  { value: "terminal", label: "Terminal" },
 ];
 
 function PreviewButton() {

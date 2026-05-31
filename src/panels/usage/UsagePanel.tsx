@@ -1,7 +1,7 @@
-// Usage Manager — shows token consumption, quota, cost estimates per backend.
-// Data placeholders today; wires to `context.usage` RPC + per-backend quota
-// rows from SQLite once those streams land.
-import { useMemo } from "react";
+// Usage Manager — shows estimated token consumption + cost per backend.
+// Figures are client-side estimates aggregated from each open workspace's
+// session usage (context.usage RPC), refreshed on context-update broadcasts.
+import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
@@ -12,16 +12,23 @@ import {
   Zap,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
+import { contextUsage } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 interface BackendUsage {
   name: string;
   tokensUsed: number;
   tokensLimit: number;
-  requestsToday: number;
-  requestsLimit: number;
+  activeSessions: number;
+  sessionsLimit: number;
   costUSD: number;
 }
+
+// Fallback context window for a backend that has not reported usage yet; the
+// live limit is the per-session contextWindow surfaced by context.usage.
+const FALLBACK_CONTEXT_WINDOW = 200_000;
+// Soft ceiling for the active-sessions meter until a backend exposes its own.
+const DEFAULT_SESSIONS_LIMIT = 50;
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -38,29 +45,76 @@ export default function UsagePanel() {
   const reduce = useReducedMotion();
   const backends = useWorkbench((s) => s.backends);
   const workspaces = useWorkbench((s) => s.workspaces);
+  const [usageByBackend, setUsageByBackend] = useState<
+    Record<string, { tokens: number; cost: number; sessions: number; window: number }>
+  >({});
 
-  // Placeholder until context-tracker streams real numbers — derived solely
-  // from store data so the panel doesn't look hard-coded.
+  useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      const acc: Record<
+        string,
+        { tokens: number; cost: number; sessions: number; window: number }
+      > = {};
+      await Promise.all(
+        workspaces.map(async (ws) => {
+          if (!ws.sessionId) return;
+          try {
+            const u = await contextUsage(ws.sessionId);
+            const key = ws.agentBackend;
+            const entry = acc[key] ?? { tokens: 0, cost: 0, sessions: 0, window: 0 };
+            entry.tokens += u.tokensUsed;
+            entry.cost += u.sessionCostEstimate;
+            // Sessions that have consumed any tokens — a coarse activity signal,
+            // not an API request count.
+            entry.sessions += u.tokensUsed > 0 ? 1 : 0;
+            // The token limit is the backend's reported context window, not a
+            // hardcoded constant; take the largest window seen for the backend.
+            entry.window = Math.max(entry.window, u.contextWindow);
+            acc[key] = entry;
+          } catch {
+            /* skip sessions without usage */
+          }
+        })
+      );
+      if (!cancelled) setUsageByBackend(acc);
+    }
+    void refresh();
+    function onUpdated() {
+      void refresh();
+    }
+    window.addEventListener("maverick:context:updated", onUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("maverick:context:updated", onUpdated);
+    };
+  }, [workspaces]);
+
   const rows: BackendUsage[] = useMemo(() => {
-    const fallback: BackendUsage[] = [
-      { name: "claude-code", tokensUsed: 0, tokensLimit: 200_000, requestsToday: 0, requestsLimit: 200, costUSD: 0 },
-      { name: "codex", tokensUsed: 0, tokensLimit: 128_000, requestsToday: 0, requestsLimit: 150, costUSD: 0 },
-      { name: "gemini", tokensUsed: 0, tokensLimit: 1_000_000, requestsToday: 0, requestsLimit: 60, costUSD: 0 },
-    ];
-    if (backends.length === 0) return fallback;
-    return backends.map((b) => ({
-      name: b.name,
-      tokensUsed: 0,
-      tokensLimit: 200_000,
-      requestsToday: 0,
-      requestsLimit: 200,
-      costUSD: 0,
-    }));
-  }, [backends]);
+    const names =
+      backends.length > 0
+        ? backends.map((b) => b.name)
+        : ["claude-code", "codex", "gemini"];
+    // Surface any backend that has recorded usage even if it isn't configured.
+    for (const key of Object.keys(usageByBackend)) {
+      if (!names.includes(key)) names.push(key);
+    }
+    return names.map((name) => {
+      const u = usageByBackend[name] ?? { tokens: 0, cost: 0, sessions: 0, window: 0 };
+      return {
+        name,
+        tokensUsed: u.tokens,
+        tokensLimit: u.window > 0 ? u.window : FALLBACK_CONTEXT_WINDOW,
+        activeSessions: u.sessions,
+        sessionsLimit: DEFAULT_SESSIONS_LIMIT,
+        costUSD: u.cost,
+      };
+    });
+  }, [backends, usageByBackend]);
 
   const totalTokens = rows.reduce((sum, r) => sum + r.tokensUsed, 0);
   const totalCost = rows.reduce((sum, r) => sum + r.costUSD, 0);
-  const totalRequests = rows.reduce((sum, r) => sum + r.requestsToday, 0);
+  const totalActiveSessions = rows.reduce((sum, r) => sum + r.activeSessions, 0);
 
   return (
     <motion.div
@@ -80,7 +134,7 @@ export default function UsagePanel() {
               Usage
             </h1>
             <p className="text-[13px] text-muted-foreground">
-              Token limits, request quotas, and session cost across backends.
+              Token limits, active sessions, and session cost across backends.
             </p>
           </div>
         </header>
@@ -97,9 +151,9 @@ export default function UsagePanel() {
           />
           <StatCard
             icon={Activity}
-            label="Requests"
-            value={String(totalRequests)}
-            hint="Across all backends"
+            label="Active sessions"
+            value={String(totalActiveSessions)}
+            hint="Sessions with token usage · estimate"
           />
           <StatCard
             icon={DollarSign}
@@ -183,7 +237,7 @@ function StatCard({
 
 function BackendRow({ row }: { row: BackendUsage }) {
   const tokensPct = pct(row.tokensUsed, row.tokensLimit);
-  const reqPct = pct(row.requestsToday, row.requestsLimit);
+  const sessionsPct = pct(row.activeSessions, row.sessionsLimit);
   const tone =
     tokensPct >= 90 ? "destructive" : tokensPct >= 70 ? "warning" : "primary";
   return (
@@ -203,11 +257,11 @@ function BackendRow({ row }: { row: BackendUsage }) {
         tone={tone}
       />
       <Meter
-        label="Requests"
-        used={String(row.requestsToday)}
-        limit={`${row.requestsLimit}/day`}
-        percent={reqPct}
-        tone={reqPct >= 90 ? "destructive" : "primary"}
+        label="Active sessions"
+        used={String(row.activeSessions)}
+        limit={String(row.sessionsLimit)}
+        percent={sessionsPct}
+        tone={sessionsPct >= 90 ? "destructive" : "primary"}
       />
     </div>
   );

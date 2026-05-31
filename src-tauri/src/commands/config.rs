@@ -14,3 +14,19 @@ pub async fn config_load(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn config_save(
+    state: State<'_, AppState>,
+    project_path: String,
+    patch: Value,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "config.save",
+            json!({ "projectPath": project_path, "patch": patch }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}

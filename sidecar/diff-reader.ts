@@ -4,6 +4,7 @@ import type { DiffFile, DiffHunk, DiffResult, Shell } from "./types";
 interface GetParams {
   worktreePath: string;
   filePath?: string;
+  staged?: boolean;
 }
 
 interface HunkParams {
@@ -24,6 +25,9 @@ export class DiffReader {
 
   async get(params: GetParams): Promise<DiffResult> {
     const cmd = ["git", "diff", "--unified=3"];
+    // `--cached` (a.k.a. --staged) diffs the index against HEAD, which is what
+    // the Staged pane needs; the default working-tree diff feeds the Unstaged pane.
+    if (params.staged) cmd.push("--cached");
     if (params.filePath) cmd.push("--", params.filePath);
     const output = await this.shell.text(cmd, params.worktreePath);
     return { files: DiffReader.parse(output) };
@@ -32,7 +36,8 @@ export class DiffReader {
   async stageHunk(params: HunkParams): Promise<{ ok: true }> {
     const { exitCode, stderr } = await this.shell.run(
       ["git", "-C", params.worktreePath, "apply", "--cached", "-"],
-      undefined
+      undefined,
+      params.patch
     );
     if (exitCode !== 0) throw new Error(stderr || "git apply --cached failed");
     return { ok: true };
@@ -41,7 +46,8 @@ export class DiffReader {
   async unstageHunk(params: HunkParams): Promise<{ ok: true }> {
     const { exitCode, stderr } = await this.shell.run(
       ["git", "-C", params.worktreePath, "apply", "--cached", "-R", "-"],
-      undefined
+      undefined,
+      params.patch
     );
     if (exitCode !== 0) throw new Error(stderr || "git apply --cached -R failed");
     return { ok: true };

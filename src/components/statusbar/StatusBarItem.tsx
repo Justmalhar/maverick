@@ -19,6 +19,7 @@ interface Props {
   testId?: string;
   onClick?: () => void;
   className?: string;
+  title?: string;
 }
 
 export function StatusBarItem({
@@ -28,6 +29,7 @@ export function StatusBarItem({
   testId,
   onClick,
   className,
+  title,
 }: Props) {
   const Tag = onClick ? "button" : "div";
   return (
@@ -35,6 +37,7 @@ export function StatusBarItem({
       type={onClick ? "button" : undefined}
       data-testid={testId}
       onClick={onClick}
+      title={title}
       className={cn(
         "mv-statusbar-item flex h-full items-center gap-1 px-1.5 text-[11px] leading-none text-statusbar-fg",
         "transition-colors duration-100",

@@ -1,28 +1,41 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen } from "@/test/utils";
 import { SplitGrid } from "./SplitGrid";
+import { __testing__ } from "./TerminalLeaf";
+import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
 
 const handle: TerminalHandle = {
-  write: vi.fn(), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
+  write: vi.fn(), onData: vi.fn(() => () => {}), onResize: vi.fn(() => () => {}), resize: vi.fn(), setTheme: vi.fn(), focus: vi.fn(), dispose: vi.fn(),
   get dimensions() { return { cols: 0, rows: 0 }; },
 };
 const provider: TerminalProvider = { mount: () => handle };
-TerminalRegistry.register(provider);
+
+const ws = makeWorkspace({ id: "w1", worktreePath: "/wt" });
+
+beforeEach(() => {
+  vi.mocked(invoke).mockReset().mockResolvedValue({ ptyId: "pty-x" } as never);
+  vi.mocked(listen).mockReset().mockResolvedValue(() => {});
+  TerminalRegistry.register(provider);
+  __testing__.leafPtyCache.clear();
+});
 
 describe("SplitGrid", () => {
-  it("renders a single terminal leaf", () => {
+  it("renders a single terminal leaf", async () => {
     renderWithProviders(
       <SplitGrid
         tree={{ type: "terminal", id: "p1", backend: "shell", ptyId: "x" }}
+        workspace={ws}
         focusedPaneId="p1"
         onFocus={() => {}}
       />
     );
-    expect(screen.getByTestId("terminal-pane-p1")).toBeInTheDocument();
+    expect(await screen.findByTestId("terminal-pane-p1")).toBeInTheDocument();
   });
 
-  it("recurses into horizontal and vertical splits", () => {
+  it("recurses into horizontal and vertical splits", async () => {
     renderWithProviders(
       <SplitGrid
         tree={{
@@ -34,12 +47,13 @@ describe("SplitGrid", () => {
             right: { type: "terminal", id: "c", backend: "shell", ptyId: "z" },
           },
         }}
+        workspace={ws}
         focusedPaneId="b"
         onFocus={() => {}}
       />
     );
-    expect(screen.getByTestId("terminal-pane-a")).toBeInTheDocument();
-    expect(screen.getByTestId("terminal-pane-b")).toBeInTheDocument();
-    expect(screen.getByTestId("terminal-pane-c")).toBeInTheDocument();
+    expect(await screen.findByTestId("terminal-pane-a")).toBeInTheDocument();
+    expect(await screen.findByTestId("terminal-pane-b")).toBeInTheDocument();
+    expect(await screen.findByTestId("terminal-pane-c")).toBeInTheDocument();
   });
 });

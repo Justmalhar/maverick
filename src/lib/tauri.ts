@@ -2,26 +2,36 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  BlameLine,
   BootstrapStatus,
+  Branch,
   Commit,
+  ConflictHunk,
+  ConflictResolution,
   ContextUsage,
   DetectedBackend,
   DiffResult,
   DiffStat,
   FileEntry,
+  FileReadResult,
+  FsChangedPayload,
   KanbanTask,
+  SearchResult,
   MaverickConfig,
   MaverickSettings,
   MCPServer,
   Message,
+  Notification,
   NotificationPermission,
   Project,
+  ResolvedInstructions,
   ProjectSettings,
   SettingsPatch,
   Skill,
   Stash,
   Workspace,
   WorkspacePreset,
+  PresetNode,
 } from "./ipc";
 
 export async function projectAdd(path: string): Promise<Project> {
@@ -38,10 +48,18 @@ export async function workspaceList(projectId?: string): Promise<Workspace[]> {
 
 export async function workspaceCreate(
   projectId: string,
+  projectPath: string,
   branch: string,
-  backend: string
+  backend: string,
+  baseBranch?: string
 ): Promise<Workspace> {
-  return invoke("workspace_create", { projectId, branch, backend });
+  return invoke("workspace_create", {
+    projectId,
+    projectPath,
+    branch,
+    backend,
+    baseBranch,
+  });
 }
 
 export async function workspaceDestroy(workspaceId: string): Promise<void> {
@@ -49,11 +67,12 @@ export async function workspaceDestroy(workspaceId: string): Promise<void> {
 }
 
 export async function ptySpawn(
-  workspaceId: string,
   command: string,
-  args: string[]
+  args: string[],
+  cwd?: string,
+  env?: Record<string, string>
 ): Promise<{ ptyId: string }> {
-  return invoke("pty_spawn", { workspaceId, command, args });
+  return invoke("pty_spawn", { command, args, cwd, env });
 }
 
 export async function ptyWrite(ptyId: string, data: string): Promise<void> {
@@ -70,6 +89,13 @@ export async function ptyKill(ptyId: string): Promise<void> {
 
 export async function configLoad(projectPath: string): Promise<MaverickConfig> {
   return invoke("config_load", { projectPath });
+}
+
+export async function configSave(
+  projectPath: string,
+  patch: Partial<MaverickConfig>
+): Promise<MaverickConfig> {
+  return invoke("config_save", { projectPath, patch });
 }
 
 export async function messagesList(
@@ -101,8 +127,12 @@ export async function skillsRun(
   return invoke("skills_run", { workspaceId, skillName, vars });
 }
 
-export async function diffGet(worktreePath: string, filePath?: string): Promise<DiffResult> {
-  return invoke("diff_get", { worktreePath, filePath });
+export async function diffGet(
+  worktreePath: string,
+  filePath?: string,
+  staged?: boolean
+): Promise<DiffResult> {
+  return invoke("diff_get", { worktreePath, filePath, staged });
 }
 
 export async function diffStageHunk(worktreePath: string, patch: string): Promise<void> {
@@ -131,6 +161,43 @@ export async function gitCommit(
 
 export async function fileTree(worktreePath: string): Promise<FileEntry[]> {
   return invoke("file_tree", { worktreePath });
+}
+
+export async function fileRead(filePath: string): Promise<FileReadResult> {
+  return invoke("file_read", { filePath });
+}
+
+export async function fileSearch(
+  worktreePath: string,
+  query: string,
+  limit?: number
+): Promise<SearchResult> {
+  return invoke("file_search", { worktreePath, query, limit });
+}
+
+export async function fsWatchStart(
+  root: string,
+  dirs?: string[]
+): Promise<{ watching: number }> {
+  return invoke("fs_watch_start", { root, dirs });
+}
+
+export async function fsWatchAdd(dirs: string[]): Promise<{ watching: number }> {
+  return invoke("fs_watch_add", { dirs });
+}
+
+export async function fsWatchRemove(dirs: string[]): Promise<{ watching: number }> {
+  return invoke("fs_watch_remove", { dirs });
+}
+
+export async function fsWatchStop(): Promise<{ ok: true }> {
+  return invoke("fs_watch_stop");
+}
+
+export function onFsChanged(
+  callback: (payload: FsChangedPayload) => void
+): Promise<UnlistenFn> {
+  return listen<FsChangedPayload>("fs:changed", (e) => callback(e.payload));
 }
 
 export async function kanbanList(projectId: string): Promise<KanbanTask[]> {
@@ -162,21 +229,27 @@ export async function projectSettingsOpenFile(projectId: string): Promise<{ path
 
 export async function presetLaunch(
   preset: WorkspacePreset,
-  projectId: string,
+  projectPath: string,
   branch?: string
 ): Promise<{ workspaceId: string }> {
-  return invoke("preset_launch", { preset, projectId, branch });
+  return invoke("preset_launch", { preset, projectPath, branch });
 }
 
 export async function presetSaveCurrent(
   workspaceId: string,
-  name: string
+  name: string,
+  layout: PresetNode,
+  description?: string
 ): Promise<WorkspacePreset> {
-  return invoke("preset_save_current", { workspaceId, name });
+  return invoke("preset_save_current", { workspaceId, name, layout, description });
 }
 
-export async function mcpStart(name: string): Promise<{ pid: number }> {
-  return invoke("mcp_start", { name });
+export async function mcpStart(
+  name: string,
+  workspaceId?: string,
+  projectPath?: string
+): Promise<{ pid: number }> {
+  return invoke("mcp_start", { name, workspaceId, projectPath });
 }
 
 export async function mcpStop(name: string): Promise<void> {
@@ -187,8 +260,51 @@ export async function mcpList(): Promise<MCPServer[]> {
   return invoke("mcp_list");
 }
 
+export interface MCPLogPage {
+  data: string;
+  nextOffset: number;
+  dropped: number;
+}
+
+export async function mcpLogs(name: string, sinceOffset = 0): Promise<MCPLogPage> {
+  return invoke("mcp_logs", { name, sinceOffset });
+}
+
+export async function mcpAdd(
+  name: string,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  workspaceId?: string,
+  projectPath?: string
+): Promise<{ ok: true }> {
+  return invoke("mcp_add", { name, command, args, env, workspaceId, projectPath });
+}
+
+export function onMcpStatus(
+  callback: (payload: {
+    name: string;
+    status: MCPServer["status"];
+    restarts: number;
+    exitCode: number;
+  }) => void
+): Promise<UnlistenFn> {
+  return listen<{ name: string; status: MCPServer["status"]; restarts: number; exitCode: number }>(
+    "mcp:status",
+    (e) => callback(e.payload)
+  );
+}
+
 export async function contextUsage(sessionId: string): Promise<ContextUsage> {
   return invoke("context_usage", { sessionId });
+}
+
+export async function contextRecord(
+  sessionId: string,
+  tokensUsed: number,
+  costEstimate: number
+): Promise<ContextUsage> {
+  return invoke("context_record", { sessionId, tokensUsed, costEstimate });
 }
 
 export async function attachmentCreate(
@@ -200,17 +316,117 @@ export async function attachmentCreate(
 
 export async function automationRun(
   automationName: string,
-  workspaceId: string
+  workspaceId?: string,
+  projectPath?: string,
+  worktreePath?: string
 ): Promise<void> {
-  return invoke("automation_run", { automationName, workspaceId });
+  return invoke("automation_run", { automationName, workspaceId, projectPath, worktreePath });
 }
 
 export async function notifySend(
   title: string,
   body: string,
-  workspaceId?: string
-): Promise<void> {
-  return invoke("notify_send", { title, body, workspaceId });
+  workspaceId?: string,
+  type?: string
+): Promise<Notification | { ok: true }> {
+  return invoke("notify_send", { title, body, workspaceId, type });
+}
+
+export async function notifyList(
+  limit?: number,
+  unreadOnly?: boolean
+): Promise<Notification[]> {
+  return invoke("notify_list", { limit, unreadOnly });
+}
+
+export async function notifyMarkRead(id: string): Promise<void> {
+  await invoke("notify_mark_read", { id });
+}
+
+export async function notifyMarkAllRead(): Promise<void> {
+  await invoke("notify_mark_all_read");
+}
+
+export async function notifyUnreadCount(): Promise<number> {
+  const result = await invoke<{ count: number }>("notify_unread_count");
+  return result.count;
+}
+
+export function onNotificationSend(
+  callback: (n: Notification) => void
+): Promise<UnlistenFn> {
+  return listen<Notification>("notification:send", (e) => callback(e.payload));
+}
+
+export async function caffeinateStart(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_start");
+}
+
+export async function caffeinateStop(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_stop");
+}
+
+export async function caffeinateStatus(): Promise<{ active: boolean }> {
+  return invoke("caffeinate_status");
+}
+
+export async function instructionsResolve(
+  worktreePath: string
+): Promise<ResolvedInstructions> {
+  return invoke("instructions_resolve", { worktreePath });
+}
+
+export async function prCreate(
+  worktreePath: string,
+  title?: string,
+  body?: string,
+  base?: string
+): Promise<{ url: string }> {
+  return invoke("pr_create", { worktreePath, title, body, base });
+}
+
+// Embedded Browser (native child webview) controls.
+export interface BrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export async function browserOpen(url: string, bounds: BrowserBounds): Promise<void> {
+  await invoke("browser_open", { url, ...bounds });
+}
+
+export async function browserNavigate(url: string): Promise<void> {
+  await invoke("browser_navigate", { url });
+}
+
+export async function browserSetBounds(bounds: BrowserBounds): Promise<void> {
+  await invoke("browser_set_bounds", { ...bounds });
+}
+
+export async function browserShow(): Promise<void> {
+  await invoke("browser_show");
+}
+
+export async function browserHide(): Promise<void> {
+  await invoke("browser_hide");
+}
+
+export async function browserClose(): Promise<void> {
+  await invoke("browser_close");
+}
+
+export async function browserEval(script: string): Promise<void> {
+  await invoke("browser_eval", { script });
+}
+
+export function onBrowserElementCaptured(
+  callback: (payload: { selector: string; text: string; html: string }) => void
+): Promise<UnlistenFn> {
+  return listen<{ selector: string; text: string; html: string }>("browser://captured", (e) =>
+    callback(e.payload)
+  );
 }
 
 export async function gitBranches(projectPath: string): Promise<string[]> {
@@ -219,6 +435,63 @@ export async function gitBranches(projectPath: string): Promise<string[]> {
 
 export async function gitDiffStat(worktreePath: string): Promise<DiffStat> {
   return invoke("git_diff_stat", { worktreePath });
+}
+
+export async function gitBranchList(worktreePath: string): Promise<Branch[]> {
+  return invoke("git_branch_list", { worktreePath });
+}
+
+export async function gitCheckout(worktreePath: string, branch: string): Promise<{ ok: true }> {
+  return invoke("git_checkout", { worktreePath, branch });
+}
+
+export async function gitBlame(worktreePath: string, filePath: string): Promise<BlameLine[]> {
+  return invoke("git_blame", { worktreePath, filePath });
+}
+
+export async function gitCherryPick(worktreePath: string, sha: string): Promise<{ ok: true }> {
+  return invoke("git_cherry_pick", { worktreePath, sha });
+}
+
+export async function gitStashApply(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_apply", { worktreePath, index });
+}
+
+export async function gitStashPop(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_pop", { worktreePath, index });
+}
+
+export async function gitStashDrop(worktreePath: string, index: number): Promise<{ ok: true }> {
+  return invoke("git_stash_drop", { worktreePath, index });
+}
+
+export async function gitConflicts(worktreePath: string): Promise<ConflictHunk[]> {
+  return invoke("git_conflicts", { worktreePath });
+}
+
+export async function gitResolveConflict(
+  worktreePath: string,
+  filePath: string,
+  hunkIndex: number,
+  resolution: ConflictResolution
+): Promise<{ ok: true }> {
+  return invoke("git_resolve_conflict", { worktreePath, filePath, hunkIndex, resolution });
+}
+
+export async function gitFetch(worktreePath: string, remote?: string): Promise<{ ok: true }> {
+  return invoke("git_fetch", { worktreePath, remote });
+}
+
+export async function gitPull(worktreePath: string): Promise<{ ok: true }> {
+  return invoke("git_pull", { worktreePath });
+}
+
+export async function gitPush(
+  worktreePath: string,
+  remote?: string,
+  branch?: string
+): Promise<{ ok: true }> {
+  return invoke("git_push", { worktreePath, remote, branch });
 }
 
 // Event subscriptions

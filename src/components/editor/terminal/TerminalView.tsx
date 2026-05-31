@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
 import type { Workspace, SplitNode } from "@/lib/ipc";
-import { splitNode, removeNode, canSplit } from "@/lib/splitnode";
+import { splitNode, removeNode, canSplit, findNeighbor, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
+import { killLeaf } from "./TerminalLeaf";
 
 interface Props {
   workspace: Workspace;
+  // False when the owning workspace editor is keep-alive-hidden. Forwarded to
+  // every leaf so dormant panes release their pooled xterm slot.
+  visible?: boolean;
 }
 
 function singlePane(workspace: Workspace): SplitNode {
@@ -17,7 +21,7 @@ function singlePane(workspace: Workspace): SplitNode {
   };
 }
 
-export function TerminalView({ workspace }: Props) {
+export function TerminalView({ workspace, visible = true }: Props) {
   const tree = useWorkbench((s) => s.splitTrees[workspace.id]);
   const setSplitTree = useWorkbench((s) => s.setSplitTree);
   const [focusedPaneId, setFocusedPaneId] = useState<string | null>(null);
@@ -46,6 +50,7 @@ export function TerminalView({ workspace }: Props) {
     function onClose() {
       const current = useWorkbench.getState().splitTrees[workspace.id];
       if (!current || !focusedPaneId) return;
+      killLeaf(focusedPaneId);
       const next = removeNode(current, focusedPaneId);
       setSplitTree(workspace.id, next ?? singlePane(workspace));
     }
@@ -60,6 +65,20 @@ export function TerminalView({ workspace }: Props) {
       window.removeEventListener("maverick:terminal:closePane", onClose);
     };
   }, [focusedPaneId, workspace, setSplitTree]);
+
+  useEffect(() => {
+    function onFocusDirection(e: Event) {
+      const direction = (e as CustomEvent<FocusDirection>).detail;
+      const current = useWorkbench.getState().splitTrees[workspace.id];
+      if (!current || !focusedPaneId) return;
+      const neighbour = findNeighbor(current, focusedPaneId, direction);
+      if (neighbour) setFocusedPaneId(neighbour);
+    }
+    window.addEventListener("maverick:terminal:focusDirection", onFocusDirection);
+    return () => {
+      window.removeEventListener("maverick:terminal:focusDirection", onFocusDirection);
+    };
+  }, [focusedPaneId, workspace.id]);
 
   if (!tree) {
     return (
@@ -76,8 +95,10 @@ export function TerminalView({ workspace }: Props) {
     >
       <SplitGrid
         tree={tree}
+        workspace={workspace}
         focusedPaneId={focusedPaneId}
         onFocus={setFocusedPaneId}
+        visible={visible}
       />
     </section>
   );

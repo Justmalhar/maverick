@@ -133,12 +133,15 @@ export interface AutomationStep {
   [key: string]: unknown;
 }
 
+export type MCPStatus = "running" | "stopped" | "error" | "crashed" | "restarting";
+
 export interface MCPServer {
   name: string;
   command: string;
   args: string[];
-  status: "running" | "stopped" | "error";
+  status: MCPStatus;
   pid?: number;
+  restarts?: number;
 }
 
 export interface ContextUsage {
@@ -194,6 +197,33 @@ export interface Stash {
   timestamp: number;
 }
 
+export interface Branch {
+  name: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface BlameLine {
+  sha: string;
+  author: string;
+  timestamp: number;
+  lineNumber: number;
+  content: string;
+}
+
+export interface ConflictHunk {
+  filePath: string;
+  hunkIndex: number;
+  ours: string[];
+  theirs: string[];
+  base?: string[];
+}
+
+export type ConflictResolution = "ours" | "theirs" | "both";
+
 export interface FileEntry {
   path: string;
   name: string;
@@ -228,6 +258,31 @@ export type ActivityView =
 
 export type AuxiliaryView = "files" | "diff" | "preview" | "none";
 
+export interface FileReadResult {
+  content: string;
+  size: number;
+  binary: boolean;
+  unreadable: boolean;
+}
+
+export interface SearchHit {
+  rel: string;
+  name: string;
+  // QuickOpen is a files-only finder; the sidecar never emits directory hits,
+  // so this is always false. Kept for IPC-type parity with FileEntry.
+  isDirectory: false;
+}
+
+export interface SearchResult {
+  hits: SearchHit[];
+  truncated: boolean;
+}
+
+export interface FsChangedPayload {
+  root: string;
+  paths: string[];
+}
+
 // ---------- Settings ----------
 
 export type SettingsKey =
@@ -236,6 +291,7 @@ export type SettingsKey =
   | "general.defaultBranch"
   | "general.namingScheme"
   | "general.restoreSession"
+  | "general.env"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"
@@ -269,6 +325,7 @@ export type SettingsKey =
   | "advanced.largeTextThreshold"
   | "advanced.lruLimit"
   | "advanced.caffeinate"
+  | "browser.engine"
   | "version.updateChannel";
 
 export type SettingsValue = string | number | boolean;
@@ -305,9 +362,35 @@ export interface MaverickSettings {
   theme: string;
   defaultBackend: string | null;
   notificationsRequestedAt: number | null;
+  /**
+   * Global environment variables merged into every PTY spawn. Per-workspace /
+   * per-project env overrides these when keys collide. Persisted in the
+   * settings store under the `general.env` key as a JSON-encoded string, so
+   * it is absent from the bootstrap payload (hence optional here).
+   */
+  globalEnv?: Record<string, string>;
 }
 
 export type NotificationPermission = "granted" | "denied" | "default" | "unavailable";
+
+export interface Notification {
+  id: string;
+  workspaceId: string | null;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: number;
+}
+
+export interface ResolvedInstructions {
+  /** Project-local instructions (MAVERICK.md → CLAUDE.md → AGENTS.md), comments stripped. */
+  project: string;
+  /** Which project file matched, or null if none. */
+  projectSource: string | null;
+  /** Global ~/.maverick/MAVERICK.md instructions, comments stripped. */
+  global: string;
+}
 
 export interface BootstrapPaths {
   configRoot: string;

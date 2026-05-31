@@ -5,6 +5,7 @@ export interface ManagedProc {
   kill(signal?: string | number): void;
   stdin?: { write(data: string | Uint8Array): unknown | Promise<unknown>; flush?(): unknown };
   stdout?: ReadableStream<Uint8Array>;
+  stderr?: ReadableStream<Uint8Array>;
   exitCode: number | null;
   exited: Promise<number>;
 }
@@ -89,9 +90,20 @@ export class ProcessManager {
   }
 
   async spawnOnce(opts: { cwd: string; command: string; args: string[]; env?: Record<string, string> }): Promise<{ code: number }> {
-    const proc = this.spawner([opts.command, ...opts.args], { cwd: opts.cwd, env: opts.env });
-    const code = await proc.exited;
+    const { exited } = this.spawnOnceHandle(opts);
+    const code = await exited;
     return { code };
+  }
+
+  // Returns the live child alongside its exit promise so a caller racing a
+  // timeout can kill() the still-running process instead of leaking it. Callers
+  // that don't need the handle should use spawnOnce, which discards it.
+  spawnOnceHandle(opts: { cwd: string; command: string; args: string[]; env?: Record<string, string> }): {
+    proc: ManagedProc;
+    exited: Promise<number>;
+  } {
+    const proc = this.spawner([opts.command, ...opts.args], { cwd: opts.cwd, env: opts.env });
+    return { proc, exited: proc.exited };
   }
 
   has(ptyId: string): boolean {

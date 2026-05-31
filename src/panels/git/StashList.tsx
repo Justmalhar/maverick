@@ -12,14 +12,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Stash } from "@/lib/ipc";
-import { gitStashList } from "@/lib/tauri";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  gitStashApply,
+  gitStashDrop,
+  gitStashList,
+  gitStashPop,
+} from "@/lib/tauri";
 
 interface Props {
   worktreePath: string;
 }
 
 type StashAction = "apply" | "pop" | "drop";
+
+const STASH_ACTIONS: Record<
+  StashAction,
+  (worktreePath: string, index: number) => Promise<{ ok: true }>
+> = {
+  apply: gitStashApply,
+  pop: gitStashPop,
+  drop: gitStashDrop,
+};
 
 export default function StashList({ worktreePath }: Props) {
   const [stashes, setStashes] = useState<Stash[]>([]);
@@ -48,10 +61,7 @@ export default function StashList({ worktreePath }: Props) {
   const confirm = useCallback(async () => {
     if (!pending) return;
     try {
-      await invoke(`git_stash_${pending.action}`, {
-        worktreePath,
-        index: pending.stash.index,
-      });
+      await STASH_ACTIONS[pending.action](worktreePath, pending.stash.index);
       setPending(null);
       await refresh();
     } catch (e) {

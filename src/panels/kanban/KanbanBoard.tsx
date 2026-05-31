@@ -6,8 +6,8 @@ import {
   gitDiffStat,
   kanbanList,
   kanbanUpsert,
-  workspaceCreate,
 } from "@/lib/tauri";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
 import KanbanTaskDialog from "./KanbanTaskDialog";
@@ -23,8 +23,7 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
 
 export default function KanbanBoard() {
   const workspaces = useWorkbench((s) => s.workspaces);
-  const addWorkspace = useWorkbench((s) => s.addWorkspace);
-  const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const { create } = useWorkspace();
 
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [dialogTask, setDialogTask] = useState<Partial<KanbanTask> | null>(null);
@@ -120,6 +119,30 @@ export default function KanbanBoard() {
     [refresh]
   );
 
+  const handleStart = useCallback(
+    async (task: KanbanTask) => {
+      const branch = task.branch || "main";
+      const backend =
+        task.agentBackend ||
+        useWorkbench.getState().backends.find((b) => b.active)?.id ||
+        useWorkbench.getState().backends[0]?.id ||
+        "claude-code";
+      await create(task.projectId, branch, backend);
+      const prompt = task.description
+        ? `${task.title}\n\n${task.description}`
+        : task.title;
+      window.dispatchEvent(
+        new CustomEvent("maverick:input-append", { detail: { text: prompt } })
+      );
+      await kanbanUpsert({
+        ...task,
+        status: "in_progress",
+      });
+      await refresh();
+    },
+    [create, refresh]
+  );
+
   const onSend = useCallback(
     async (payload: ComposerPayload) => {
       const maxOrder = tasks
@@ -139,11 +162,7 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      const ws = await workspaceCreate(
-        payload.projectId,
-        payload.branch,
-        payload.agentBackend
-      );
+      const ws = await create(payload.projectId, payload.branch, payload.agentBackend);
 
       await kanbanUpsert({
         id: task.id,
@@ -158,11 +177,9 @@ export default function KanbanBoard() {
         workspaceId: ws.id,
       });
 
-      addWorkspace(ws);
-      setActiveWorkspace(ws.id);
       await refresh();
     },
-    [tasks, addWorkspace, setActiveWorkspace, refresh]
+    [tasks, create, refresh]
   );
 
   return (
@@ -173,7 +190,7 @@ export default function KanbanBoard() {
       transition={{ type: "spring", stiffness: 240, damping: 28 }}
       className="flex h-full w-full flex-col bg-background"
     >
-      <TaskComposer onSend={onSend} />
+      <TaskComposer onSend={onSend} defaultProjectId={filterProjectId} />
       <ProjectFilterTabs
         filterProjectId={filterProjectId}
         onFilterChange={setFilterProjectId}
@@ -192,6 +209,7 @@ export default function KanbanBoard() {
                 .sort((a, b) => a.columnOrder - b.columnOrder)}
               diffStatCache={diffStatCache}
               onEdit={(task) => setDialogTask(task)}
+              onStart={handleStart}
             />
           ))}
         </div>

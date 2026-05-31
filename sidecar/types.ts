@@ -110,12 +110,15 @@ export interface MCPServerConfig {
   env?: Record<string, string>;
 }
 
+export type MCPStatus = "running" | "stopped" | "error" | "crashed" | "restarting";
+
 export interface MCPServer {
   name: string;
   command: string;
   args: string[];
-  status: "running" | "stopped" | "error";
+  status: MCPStatus;
   pid?: number;
+  restarts: number;
 }
 
 export interface DiffResult {
@@ -150,6 +153,39 @@ export interface Stash {
   branch: string;
   timestamp: number;
 }
+
+export interface Branch {
+  name: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface BlameLine {
+  sha: string;
+  author: string;
+  timestamp: number;
+  lineNumber: number;
+  content: string;
+}
+
+export interface ConflictHunk {
+  filePath: string;
+  hunkIndex: number;
+  ours: string[];
+  theirs: string[];
+  base?: string[];
+  /**
+   * Set when the conflicted working-tree file could not be read as text (binary
+   * content or an unreadable path). The resolver UI surfaces this as a
+   * needs-manual-resolution entry instead of silently dropping the file.
+   */
+  binary?: boolean;
+}
+
+export type ConflictResolution = "ours" | "theirs" | "both";
 
 export interface Attachment {
   name: string;
@@ -186,6 +222,16 @@ export interface ContextUsage {
   sessionCostEstimate: number;
 }
 
+export interface Notification {
+  id: string;
+  workspaceId: string | null;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: number;
+}
+
 export interface FileEntry {
   path: string;
   name: string;
@@ -209,7 +255,11 @@ export interface Notifier {
 
 export interface Shell {
   text(cmd: string[], cwd?: string): Promise<string>;
-  run(cmd: string[], cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  run(
+    cmd: string[],
+    cwd?: string,
+    stdin?: string
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 export interface IdProvider {

@@ -20,19 +20,25 @@ new file mode 100644
 +hello
 `;
 
-function shellWith(stdout: string, exitCode = 0, stderr = ""): { shell: Shell; calls: string[][] } {
+function shellWith(
+  stdout: string,
+  exitCode = 0,
+  stderr = ""
+): { shell: Shell; calls: string[][]; stdins: Array<string | undefined> } {
   const calls: string[][] = [];
+  const stdins: Array<string | undefined> = [];
   const shell: Shell = {
     async text(cmd) {
       calls.push(cmd);
       return stdout;
     },
-    async run(cmd) {
+    async run(cmd, _cwd, stdin) {
       calls.push(cmd);
+      stdins.push(stdin);
       return { stdout, stderr, exitCode };
     },
   };
-  return { shell, calls };
+  return { shell, calls, stdins };
 }
 
 describe("DiffReader", () => {
@@ -97,10 +103,39 @@ rename to new.txt
     expect(calls[0]).not.toContain("--");
   });
 
+  test("get adds --cached for the staged pane", async () => {
+    const { shell, calls } = shellWith(SAMPLE_DIFF);
+    const r = await new DiffReader({ shell }).get({ worktreePath: "/wt", staged: true });
+    expect(calls[0]).toContain("--cached");
+    expect(r.files).toHaveLength(2);
+  });
+
+  test("get omits --cached by default (working-tree diff)", async () => {
+    const { shell, calls } = shellWith("");
+    await new DiffReader({ shell }).get({ worktreePath: "/wt" });
+    expect(calls[0]).not.toContain("--cached");
+  });
+
   test("stageHunk succeeds when git apply returns 0", async () => {
     const { shell } = shellWith("");
     const r = await new DiffReader({ shell }).stageHunk({ worktreePath: "/wt", patch: "x" });
     expect(r.ok).toBe(true);
+  });
+
+  test("stageHunk pipes the patch to git apply --cached via stdin", async () => {
+    const { shell, calls, stdins } = shellWith("");
+    const patch = "diff --git a/f b/f\n@@ -1 +1 @@\n-a\n+b\n";
+    await new DiffReader({ shell }).stageHunk({ worktreePath: "/wt", patch });
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "apply", "--cached", "-"]);
+    expect(stdins[0]).toBe(patch);
+  });
+
+  test("unstageHunk pipes the patch to git apply --cached -R via stdin", async () => {
+    const { shell, calls, stdins } = shellWith("");
+    const patch = "diff --git a/f b/f\n@@ -1 +1 @@\n-a\n+b\n";
+    await new DiffReader({ shell }).unstageHunk({ worktreePath: "/wt", patch });
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "apply", "--cached", "-R", "-"]);
+    expect(stdins[0]).toBe(patch);
   });
 
   test("stageHunk throws on failure", async () => {

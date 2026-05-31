@@ -73,7 +73,7 @@ describe("AutomationsPanel", () => {
     await waitFor(() => expect(screen.getByText(/cfg/)).toBeInTheDocument());
   });
 
-  it("upsert keeps existing entries when index matches (edit selected)", async () => {
+  it("upsert keeps existing entries when index matches (edit selected) and persists via config_save", async () => {
     useWorkbench.setState({
       ...initial,
       projects: [makeProject({ id: "p1", path: "/p" })],
@@ -83,10 +83,54 @@ describe("AutomationsPanel", () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       version: 1, backends: { default: "x", available: [] },
       automations: [makeAutomation({ name: "old", steps: [] })],
-    } as never);
+    } as never).mockResolvedValue({ version: 1, backends: { default: "x", available: [] } } as never);
     renderWithProviders(<AutomationsPanel />);
     await userEvent.click(await screen.findByTestId("automation-item"));
     await userEvent.click(screen.getByTestId("automation-add-step"));
     await userEvent.click(screen.getByText("shell"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "config_save",
+        expect.objectContaining({ projectPath: "/p" })
+      )
+    );
+  });
+
+  it("persists a brand-new automation through config_save", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", path: "/p" })],
+      workspaces: [makeWorkspace({ id: "w1", projectId: "p1" })],
+      activeWorkspaceId: "w1",
+    });
+    vi.mocked(invoke).mockResolvedValue({
+      version: 1, backends: { default: "x", available: [] },
+      automations: [],
+    } as never);
+    renderWithProviders(<AutomationsPanel />);
+    // Let the initial config_load settle so upsert's closure carries activeProject.
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("config_load", { projectPath: "/p" }));
+    await userEvent.click(screen.getByTestId("automation-new"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("config_save", expect.anything()));
+  });
+
+  it("surfaces a config_save failure", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", path: "/p" })],
+      workspaces: [makeWorkspace({ id: "w1", projectId: "p1" })],
+      activeWorkspaceId: "w1",
+    });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        version: 1, backends: { default: "x", available: [] },
+        automations: [],
+      } as never)
+      .mockRejectedValue(new Error("savefail"));
+    renderWithProviders(<AutomationsPanel />);
+    await waitFor(() => expect(screen.getByTestId("automations-panel")).toBeInTheDocument());
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("config_load", { projectPath: "/p" }));
+    await userEvent.click(screen.getByTestId("automation-new"));
+    await waitFor(() => expect(screen.getByText(/savefail/)).toBeInTheDocument());
   });
 });

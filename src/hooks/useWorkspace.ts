@@ -6,7 +6,14 @@ import {
   workspaceList,
   projectAdd,
   projectList,
+  detectBackends,
+  bootstrapStatus,
 } from "@/lib/tauri";
+import { brandFor } from "@/lib/backend-brand";
+import { killAgentPty } from "@/components/editor/agent/AgentTerminal";
+import { killBottomPty } from "@/components/panel/BottomTerminal";
+import { killWorkspaceLeaves } from "@/components/editor/terminal/TerminalLeaf";
+import type { Backend } from "@/lib/ipc";
 
 export function useWorkspace() {
   const addWorkspace = useWorkbench((s) => s.addWorkspace);
@@ -15,10 +22,15 @@ export function useWorkspace() {
   const addProject = useWorkbench((s) => s.addProject);
   const setProjects = useWorkbench((s) => s.setProjects);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const setBackends = useWorkbench((s) => s.setBackends);
 
   const create = useCallback(
-    async (projectId: string, branch: string, backend: string) => {
-      const ws = await workspaceCreate(projectId, branch, backend);
+    async (projectId: string, branch: string, backend: string, baseBranch?: string) => {
+      const project = useWorkbench.getState().projects.find((p) => p.id === projectId);
+      if (!project) {
+        throw new Error(`Cannot create workspace: project ${projectId} not found`);
+      }
+      const ws = await workspaceCreate(projectId, project.path, branch, backend, baseBranch);
       addWorkspace(ws);
       setActiveWorkspace(ws.id);
       return ws;
@@ -28,6 +40,12 @@ export function useWorkspace() {
 
   const destroy = useCallback(
     async (workspaceId: string) => {
+      // Kill the workspace's PTYs first — their cwd is the worktree that
+      // workspaceDestroy is about to remove. ptyKill had zero callers before,
+      // so every destroyed workspace leaked an OS process + reader thread.
+      killAgentPty(workspaceId);
+      killBottomPty(workspaceId);
+      killWorkspaceLeaves(workspaceId);
       await workspaceDestroy(workspaceId);
       removeWorkspace(workspaceId);
     },
@@ -58,11 +76,29 @@ export function useWorkspace() {
     return list;
   }, [setProjects]);
 
+  const refreshBackends = useCallback(async () => {
+    const [detected, status] = await Promise.all([detectBackends(), bootstrapStatus()]);
+    const defaultName = status?.settings?.defaultBackend ?? null;
+    const backends: Backend[] = detected
+      .filter((d) => d.installed)
+      .map((d) => ({
+        id: d.name,
+        name: brandFor(d.name)?.label ?? d.name,
+        command: d.path ?? d.command,
+        args: [],
+        env: {},
+        active: d.name === defaultName,
+      }));
+    setBackends(backends);
+    return backends;
+  }, [setBackends]);
+
   return {
     create,
     destroy,
     refreshWorkspaces,
     addProjectFromPath,
     refreshProjects,
+    refreshBackends,
   };
 }

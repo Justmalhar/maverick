@@ -16,15 +16,27 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
+import { FsWatcher } from "./fs-watcher";
+import { FileSearch } from "./file-search";
+import { FileReader } from "./file-reader";
 import { ProjectSettingsStore } from "./project-settings-store";
+import { Caffeinate } from "./caffeinate";
+import { InstructionsResolver } from "./instructions-resolver";
 import { stdoutNotifier } from "./deps";
-import type { Notifier } from "./types";
+import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
 const StringParam = z.object({}).passthrough();
 
+// Rust forwards omitted optional command args as JSON `null` (serde serializes
+// Option::None as null), but z.optional() only accepts `undefined`. Use this for
+// any field fed by a Rust `Option<T>` so `null` is accepted and normalized away.
+function nullishOptional<T extends z.ZodTypeAny>(schema: T) {
+  return schema.nullish().transform((v) => (v == null ? undefined : v));
+}
+
 const Schemas = {
-  projectAdd: z.object({ path: z.string(), name: z.string().optional() }),
+  projectAdd: z.object({ path: z.string(), name: nullishOptional(z.string()) }),
   projectSettingsGet: z.object({ projectId: z.string() }),
   projectSettingsUpdate: z.object({
     projectId: z.string(),
@@ -36,16 +48,16 @@ const Schemas = {
     projectPath: z.string(),
     branch: z.string(),
     backend: z.string(),
-    baseBranch: z.string().optional(),
+    baseBranch: nullishOptional(z.string()),
   }),
   workspaceDestroy: z.object({ workspaceId: z.string() }),
-  workspaceList: z.object({ projectId: z.string().optional() }),
+  workspaceList: z.object({ projectId: nullishOptional(z.string()) }),
   ptySpawn: z.object({
     workspaceId: z.string(),
     command: z.string(),
     args: z.array(z.string()).default([]),
-    cwd: z.string().optional(),
-    env: z.record(z.string(), z.string()).optional(),
+    cwd: nullishOptional(z.string()),
+    env: nullishOptional(z.record(z.string(), z.string())),
   }),
   ptyWrite: z.object({ ptyId: z.string(), data: z.string() }),
   ptyResize: z.object({ ptyId: z.string(), cols: z.number(), rows: z.number() }),
@@ -53,62 +65,134 @@ const Schemas = {
   configLoad: z.object({ projectPath: z.string() }),
   messagesList: z.object({
     sessionId: z.string(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
+    limit: nullishOptional(z.number()),
+    offset: nullishOptional(z.number()),
   }),
   messageAppend: z.object({
     sessionId: z.string(),
     role: RoleSchema,
     content: z.string(),
-    toolCallsJson: z.string().optional(),
+    toolCallsJson: nullishOptional(z.string()),
   }),
   skillsList: z.object({ projectPath: z.string() }),
   skillsRun: z.object({
-    projectPath: z.string(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
     skillName: z.string(),
     vars: z.record(z.string(), z.string()).default({}),
   }),
-  diffGet: z.object({ worktreePath: z.string(), filePath: z.string().optional() }),
+  diffGet: z.object({
+    worktreePath: z.string(),
+    filePath: nullishOptional(z.string()),
+    staged: nullishOptional(z.boolean()),
+  }),
   diffStageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
   diffUnstageHunk: z.object({ worktreePath: z.string(), patch: z.string() }),
-  gitLog: z.object({ worktreePath: z.string(), limit: z.number().optional() }),
+  gitLog: z.object({ worktreePath: z.string(), limit: nullishOptional(z.number()) }),
   gitStashList: z.object({ worktreePath: z.string() }),
   gitCommit: z.object({
     worktreePath: z.string(),
     message: z.string(),
-    files: z.array(z.string()).optional(),
+    files: nullishOptional(z.array(z.string())),
   }),
   gitBranches: z.object({ projectPath: z.string() }),
   gitDiffStat: z.object({ worktreePath: z.string() }),
-  fileTree: z.object({ worktreePath: z.string(), maxDepth: z.number().optional() }),
+  gitBranchList: z.object({ worktreePath: z.string() }),
+  gitCheckout: z.object({ worktreePath: z.string(), branch: z.string() }),
+  gitBlame: z.object({ worktreePath: z.string(), filePath: z.string() }),
+  gitCherryPick: z.object({ worktreePath: z.string(), sha: z.string() }),
+  gitStashIndex: z.object({ worktreePath: z.string(), index: z.number().int().nonnegative() }),
+  gitConflicts: z.object({ worktreePath: z.string() }),
+  gitResolveConflict: z.object({
+    worktreePath: z.string(),
+    filePath: z.string(),
+    hunkIndex: z.number().int().nonnegative(),
+    resolution: z.enum(["ours", "theirs", "both"]),
+  }),
+  gitFetch: z.object({ worktreePath: z.string(), remote: nullishOptional(z.string()) }),
+  gitPull: z.object({ worktreePath: z.string() }),
+  gitPush: z.object({
+    worktreePath: z.string(),
+    remote: nullishOptional(z.string()),
+    branch: nullishOptional(z.string()),
+  }),
+  fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
+  fileRead: z.object({ filePath: z.string() }),
+  fileSearch: z.object({
+    worktreePath: z.string(),
+    query: z.string(),
+    limit: nullishOptional(z.number().int().positive()),
+  }),
+  fsWatchStart: z.object({
+    root: z.string(),
+    dirs: nullishOptional(z.array(z.string())),
+  }),
+  fsWatchDirs: z.object({ dirs: z.array(z.string()).default([]) }),
   kanbanList: z.object({ projectId: z.string() }),
   kanbanUpsert: StringParam,
-  presetList: z.object({ projectPath: z.string().optional() }),
+  presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
     projectPath: z.string(),
-    branch: z.string().optional(),
+    branch: nullishOptional(z.string()),
   }),
   presetSaveCurrent: z.object({
     workspaceId: z.string(),
     name: z.string(),
     layout: z.record(z.string(), z.unknown()),
-    description: z.string().optional(),
+    description: nullishOptional(z.string()),
+    baseBranch: nullishOptional(z.string()),
   }),
-  mcpStart: z.object({ name: z.string(), projectPath: z.string().optional() }),
+  mcpStart: z.object({
+    name: z.string(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+  }),
   mcpStop: z.object({ name: z.string() }),
+  mcpLogs: z.object({ name: z.string(), sinceOffset: nullishOptional(z.number().int().nonnegative()) }),
+  mcpAdd: z.object({
+    name: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).default([]),
+    env: nullishOptional(z.record(z.string(), z.string())),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+  }),
+  configSave: z.object({
+    projectPath: z.string(),
+    patch: z.record(z.string(), z.unknown()),
+  }),
   contextUsage: z.object({ sessionId: z.string() }),
+  contextRecord: z.object({
+    sessionId: z.string(),
+    tokensUsed: z.number().int().nonnegative(),
+    costEstimate: z.number().nonnegative(),
+  }),
   attachmentCreate: z.object({ worktreePath: z.string(), text: z.string() }),
   automationRun: z.object({
     automationName: z.string(),
-    projectPath: z.string(),
-    worktreePath: z.string(),
-    vars: z.record(z.string(), z.string()).optional(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+    worktreePath: nullishOptional(z.string()),
+    vars: nullishOptional(z.record(z.string(), z.string())),
   }),
   notifySend: z.object({
     title: z.string(),
     body: z.string(),
-    workspaceId: z.string().optional(),
+    workspaceId: nullishOptional(z.string()),
+    type: nullishOptional(z.string()),
+  }),
+  notifyList: z.object({
+    limit: nullishOptional(z.number().int().positive()),
+    unreadOnly: nullishOptional(z.boolean()),
+  }),
+  notifyMarkRead: z.object({ id: z.string() }),
+  instructionsResolve: z.object({ worktreePath: z.string() }),
+  prCreate: z.object({
+    worktreePath: z.string(),
+    title: nullishOptional(z.string()),
+    body: nullishOptional(z.string()),
+    base: nullishOptional(z.string()),
   }),
 };
 
@@ -128,7 +212,12 @@ export interface RpcHandlersOptions {
   context?: ContextTracker;
   attachments?: AttachmentStore;
   fileTree?: FileTree;
+  fsWatcher?: FsWatcher;
+  fileSearch?: FileSearch;
+  fileReader?: FileReader;
   projectSettings?: ProjectSettingsStore;
+  caffeinate?: Caffeinate;
+  instructions?: InstructionsResolver;
   notifier?: Notifier;
 }
 
@@ -148,7 +237,12 @@ export class RpcHandlers {
   readonly context: ContextTracker;
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
+  readonly fsWatcher: FsWatcher;
+  readonly fileSearch: FileSearch;
+  readonly fileReader: FileReader;
   readonly projectSettings: ProjectSettingsStore;
+  readonly caffeinate: Caffeinate;
+  readonly instructions: InstructionsResolver;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -162,17 +256,44 @@ export class RpcHandlers {
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
     this.presets =
-      opts.presets ?? new PresetLauncher({ loader: this.config, worktree: this.worktree, process: this.process });
+      opts.presets ??
+      new PresetLauncher({
+        loader: this.config,
+        worktree: this.worktree,
+        process: this.process,
+        store: this.store,
+      });
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
     this.automations =
       opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
-    this.notifications = opts.notifications ?? new NotificationService();
+    this.notifications =
+      opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
     this.context = opts.context ?? new ContextTracker(this.store);
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
-    this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
     this.notifier = opts.notifier ?? stdoutNotifier;
+    this.fsWatcher = opts.fsWatcher ?? new FsWatcher({ notifier: this.notifier });
+    this.fileSearch = opts.fileSearch ?? new FileSearch();
+    this.fileReader = opts.fileReader ?? new FileReader();
+    this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
+    this.caffeinate = opts.caffeinate ?? new Caffeinate();
+    this.instructions = opts.instructions ?? new InstructionsResolver();
+  }
+
+  // Frontend panels address a workspace by id; skills/automation/mcp need the
+  // on-disk project root and worktree path. Resolve them from the store so the
+  // three layers (React -> Rust -> sidecar) agree on a single contract.
+  private requireWorkspacePaths(workspaceId: string | undefined): {
+    projectPath: string;
+    worktreePath: string;
+  } {
+    if (!workspaceId) throw new Error("workspaceId or projectPath is required");
+    const ws = this.store.workspaceGet(workspaceId);
+    if (!ws) throw new Error(`workspace ${workspaceId} not found`);
+    const project = this.store.projectGet(ws.projectId);
+    if (!project) throw new Error(`project ${ws.projectId} not found`);
+    return { projectPath: project.path, worktreePath: ws.worktreePath };
   }
 
   private emitProjectSettingsChanged(projectId: string, settings: unknown): void {
@@ -208,6 +329,13 @@ export class RpcHandlers {
         this.watchedProjects.delete(projectId);
       }
     }
+  }
+
+  // Drives MCP backoff-gated auto-restarts. The server loop calls this on a
+  // fixed interval; each tick re-spawns any crashed server whose backoff window
+  // has elapsed (until the per-server retry cap is hit).
+  pollMcpHealth(): void {
+    this.mcp.tick();
   }
 
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
@@ -258,14 +386,21 @@ export class RpcHandlers {
           worktreePath,
         });
         if (settings && settings.scripts.setup.trim() !== "") {
+          let setupError: string | undefined;
           try {
-            await this.process.spawnOnce({
+            const { code } = await this.process.spawnOnce({
               cwd: worktreePath,
               command: "/bin/sh",
               args: ["-c", settings.scripts.setup],
             });
+            if (code !== 0) setupError = `setup script exited with code ${code}`;
           } catch (err) {
-            console.error(`[workspace.create] scripts.setup failed:`, err);
+            setupError = err instanceof Error ? err.message : String(err);
+          }
+          if (setupError) {
+            console.error(`[workspace.create] scripts.setup failed:`, setupError);
+            this.store.workspaceSetStatus(ws.id, "error");
+            return { ...ws, status: "error" as const, setupError };
           }
         }
         return ws;
@@ -273,30 +408,47 @@ export class RpcHandlers {
       case "workspace.destroy": {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
-        if (ws) {
-          const project = this.store.projectGet(ws.projectId);
-          if (project) {
-            const settings = this.projectSettings.read(project.path);
-            if (settings.scripts.archive.trim() !== "") {
-              const archive = this.process
-                .spawnOnce({
-                  cwd: ws.worktreePath,
-                  command: "/bin/sh",
-                  args: ["-c", settings.scripts.archive],
-                })
-                .catch((err) => {
-                  console.error(`[workspace.destroy] archive failed:`, err);
-                  return { code: -1 };
-                });
-              const timeout = new Promise<{ code: number }>((resolve) =>
-                setTimeout(() => resolve({ code: -2 }), 30_000)
-              );
-              await Promise.race([archive, timeout]);
-            }
+        if (!ws) return { ok: true };
+        const project = this.store.projectGet(ws.projectId);
+        if (project) {
+          const settings = this.projectSettings.read(project.path);
+          if (settings.scripts.archive.trim() !== "") {
+            const { proc, exited } = this.process.spawnOnceHandle({
+              cwd: ws.worktreePath,
+              command: "/bin/sh",
+              args: ["-c", settings.scripts.archive],
+            });
+            const archive = exited
+              .then((code) => ({ code }))
+              .catch((err) => {
+                console.error(`[workspace.destroy] archive failed:`, err);
+                return { code: -1 };
+              });
+            // Kill the lingering script if the timeout wins the race; otherwise
+            // a hung archive command would leak a child for the process lifetime.
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<{ code: number }>((resolve) => {
+              timer = setTimeout(() => {
+                try {
+                  proc.kill();
+                } catch {
+                  /* already exited */
+                }
+                resolve({ code: -2 });
+              }, 30_000);
+            });
+            await Promise.race([archive, timeout]);
+            if (timer) clearTimeout(timer);
           }
         }
-        const { worktreePath } = this.store.workspaceDestroy(p.workspaceId);
-        await this.worktree.destroy({ worktreePath });
+        // Remove the worktree (with a prune fallback) BEFORE deleting the DB row:
+        // if removal throws, the row survives so the worktree stays recoverable
+        // rather than becoming an orphaned, unreferenced directory.
+        await this.worktree.destroy({
+          worktreePath: ws.worktreePath,
+          projectPath: project?.path,
+        });
+        this.store.workspaceDestroy(p.workspaceId);
         return { ok: true };
       }
       case "workspace.list": {
@@ -305,6 +457,10 @@ export class RpcHandlers {
       }
       case "pty.spawn": {
         const p = Schemas.ptySpawn.parse(params);
+        if (!p.cwd) {
+          const ws = this.store.workspaceGet(p.workspaceId);
+          if (ws) p.cwd = ws.worktreePath;
+        }
         return this.process.spawn(p);
       }
       case "pty.write": {
@@ -323,6 +479,10 @@ export class RpcHandlers {
         const p = Schemas.configLoad.parse(params);
         return this.config.load(p.projectPath);
       }
+      case "config.save": {
+        const p = Schemas.configSave.parse(params);
+        return this.config.save(p.projectPath, p.patch as Partial<MaverickConfig>);
+      }
       case "messages.list": {
         const p = Schemas.messagesList.parse(params);
         return this.store.messagesList(p);
@@ -337,7 +497,8 @@ export class RpcHandlers {
       }
       case "skills.run": {
         const p = Schemas.skillsRun.parse(params);
-        return this.skills.run(p);
+        const projectPath = p.projectPath ?? this.requireWorkspacePaths(p.workspaceId).projectPath;
+        return this.skills.run({ projectPath, skillName: p.skillName, vars: p.vars });
       }
       case "diff.get": {
         const p = Schemas.diffGet.parse(params);
@@ -371,9 +532,88 @@ export class RpcHandlers {
         const p = Schemas.gitDiffStat.parse(params);
         return this.git.diffStat({ worktreePath: p.worktreePath });
       }
+      case "git.branch_list": {
+        const p = Schemas.gitBranchList.parse(params);
+        return this.git.branchList({ worktreePath: p.worktreePath });
+      }
+      case "git.checkout": {
+        const p = Schemas.gitCheckout.parse(params);
+        return this.git.checkoutBranch(p);
+      }
+      case "git.blame": {
+        const p = Schemas.gitBlame.parse(params);
+        return this.git.blame(p);
+      }
+      case "git.cherry_pick": {
+        const p = Schemas.gitCherryPick.parse(params);
+        return this.git.cherryPick(p);
+      }
+      case "git.stash_apply": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashApply(p);
+      }
+      case "git.stash_pop": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashPop(p);
+      }
+      case "git.stash_drop": {
+        const p = Schemas.gitStashIndex.parse(params);
+        return this.git.stashDrop(p);
+      }
+      case "git.conflicts": {
+        const p = Schemas.gitConflicts.parse(params);
+        return this.git.conflicts({ worktreePath: p.worktreePath });
+      }
+      case "git.resolve_conflict": {
+        const p = Schemas.gitResolveConflict.parse(params);
+        return this.git.resolveConflict(p);
+      }
+      case "git.fetch": {
+        const p = Schemas.gitFetch.parse(params);
+        return this.git.fetch(p);
+      }
+      case "git.pull": {
+        const p = Schemas.gitPull.parse(params);
+        return this.git.pull(p);
+      }
+      case "git.push": {
+        const p = Schemas.gitPush.parse(params);
+        return this.git.push(p);
+      }
+      case "pr.create": {
+        const p = Schemas.prCreate.parse(params);
+        return this.git.prCreate(p);
+      }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);
         return this.fileTree.tree(p);
+      }
+      case "file.read": {
+        const p = Schemas.fileRead.parse(params);
+        return this.fileReader.read(p);
+      }
+      case "file.search": {
+        const p = Schemas.fileSearch.parse(params);
+        return this.fileSearch.search({
+          worktreePath: p.worktreePath,
+          query: p.query,
+          limit: p.limit,
+        });
+      }
+      case "fs.watch.start": {
+        const p = Schemas.fsWatchStart.parse(params);
+        return this.fsWatcher.start({ root: p.root, dirs: p.dirs });
+      }
+      case "fs.watch.add": {
+        const p = Schemas.fsWatchDirs.parse(params);
+        return this.fsWatcher.add({ dirs: p.dirs });
+      }
+      case "fs.watch.remove": {
+        const p = Schemas.fsWatchDirs.parse(params);
+        return this.fsWatcher.remove({ dirs: p.dirs });
+      }
+      case "fs.watch.stop": {
+        return this.fsWatcher.stop();
       }
       case "kanban.list": {
         const p = Schemas.kanbanList.parse(params);
@@ -388,7 +628,10 @@ export class RpcHandlers {
       }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);
-        return this.presets.list(p);
+        const projectId = p.projectPath
+          ? this.store.projectByPath(p.projectPath)?.id
+          : undefined;
+        return this.presets.list({ projectPath: p.projectPath, projectId });
       }
       case "preset.launch": {
         const p = Schemas.presetLaunch.parse(params);
@@ -404,12 +647,14 @@ export class RpcHandlers {
           workspaceId: p.workspaceId,
           name: p.name,
           layout: p.layout as never,
-          description: p.description,
+          description: p.description ?? undefined,
+          baseBranch: p.baseBranch ?? undefined,
         });
       }
       case "mcp.start": {
         const p = Schemas.mcpStart.parse(params);
-        if (p.projectPath) this.mcp.setProjectPath(p.projectPath);
+        const projectPath = p.projectPath ?? (p.workspaceId ? this.requireWorkspacePaths(p.workspaceId).projectPath : undefined);
+        if (projectPath) this.mcp.setProjectPath(projectPath);
         return this.mcp.start(p.name);
       }
       case "mcp.stop": {
@@ -418,9 +663,28 @@ export class RpcHandlers {
       }
       case "mcp.list":
         return this.mcp.list();
+      case "mcp.logs": {
+        const p = Schemas.mcpLogs.parse(params);
+        return this.mcp.logs(p.name, p.sinceOffset ?? 0);
+      }
+      case "mcp.add": {
+        const p = Schemas.mcpAdd.parse(params);
+        const projectPath =
+          p.projectPath ?? (p.workspaceId ? this.requireWorkspacePaths(p.workspaceId).projectPath : undefined);
+        if (!projectPath) throw new Error("mcp.add requires workspaceId or projectPath");
+        const config = this.config.load(projectPath);
+        const mcps = (config.mcps ?? []).filter((m) => m.name !== p.name);
+        mcps.push({ name: p.name, command: p.command, args: p.args, env: p.env });
+        this.config.save(projectPath, { mcps });
+        return { ok: true };
+      }
       case "context.usage": {
         const p = Schemas.contextUsage.parse(params);
         return this.context.usage(p.sessionId);
+      }
+      case "context.record": {
+        const p = Schemas.contextRecord.parse(params);
+        return this.context.record(p.sessionId, p.tokensUsed, p.costEstimate);
       }
       case "attachment.create": {
         const p = Schemas.attachmentCreate.parse(params);
@@ -428,11 +692,56 @@ export class RpcHandlers {
       }
       case "automation.run": {
         const p = Schemas.automationRun.parse(params);
-        return this.automations.run(p);
+        let { projectPath, worktreePath } = p;
+        if (!projectPath || !worktreePath) {
+          if (!p.workspaceId) {
+            throw new Error(
+              "automation.run requires workspaceId or projectPath + worktreePath"
+            );
+          }
+          const resolved = this.requireWorkspacePaths(p.workspaceId);
+          projectPath ??= resolved.projectPath;
+          worktreePath ??= resolved.worktreePath;
+        }
+        return this.automations.run({
+          automationName: p.automationName,
+          projectPath,
+          worktreePath,
+          vars: p.vars,
+        });
       }
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);
         return this.notifications.send(p);
+      }
+      case "notify.list": {
+        const p = Schemas.notifyList.parse(params);
+        return this.notifications.list(p);
+      }
+      case "notify.markRead": {
+        const p = Schemas.notifyMarkRead.parse(params);
+        return this.notifications.markRead(p);
+      }
+      case "notify.markAllRead": {
+        return this.notifications.markAllRead();
+      }
+      case "notify.unreadCount": {
+        return { count: this.notifications.unreadCount() };
+      }
+      case "caffeinate.start": {
+        const r = this.caffeinate.start();
+        return { ...r, active: this.caffeinate.active() };
+      }
+      case "caffeinate.stop": {
+        const r = this.caffeinate.stop();
+        return { ...r, active: this.caffeinate.active() };
+      }
+      case "caffeinate.status": {
+        return { active: this.caffeinate.active() };
+      }
+      case "instructions.resolve": {
+        const p = Schemas.instructionsResolve.parse(params);
+        return this.instructions.resolve(p);
       }
       default:
         throw new Error(`Unknown method: ${method}`);

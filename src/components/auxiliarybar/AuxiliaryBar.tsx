@@ -9,11 +9,12 @@ import {
 import { Panel } from "@/components/panel/Panel";
 import { FilesView } from "./FilesView";
 import { DiffView } from "./DiffView";
+import { PreviewView } from "./PreviewView";
 
 const TABS: Array<{ value: AuxiliaryView; label: string }> = [
   { value: "files", label: "Files" },
   { value: "diff", label: "Changes" },
-  { value: "preview", label: "Checks" },
+  { value: "preview", label: "Preview" },
 ];
 
 export function AuxiliaryBar() {
@@ -50,12 +51,7 @@ export function AuxiliaryBar() {
               <DiffView />
             </TabsContent>
             <TabsContent value="preview" className="flex-1 overflow-hidden">
-              <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
-                <span className="text-foreground">No checks configured</span>
-                <p className="max-w-xs">
-                  Run your test suite or linter to see pass/fail summaries here.
-                </p>
-              </div>
+              <PreviewView />
             </TabsContent>
           </Tabs>
         </ResizablePanel>

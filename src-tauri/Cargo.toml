@@ -16,10 +16,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `unstable` enables embedded child webviews (Window::add_child) used by the Browser panel.
+tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+# Auto-update plumbing (P3-B). The plugin compiles and registers unconditionally;
+# signature verification only runs at runtime against a real signed release, so a
+# placeholder pubkey in tauri.conf.json keeps dev/CI builds green while never
+# silently accepting an unsigned update (an empty/invalid pubkey just fails the
+# check, it does not bypass verification).
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
@@ -31,6 +39,60 @@ dashmap = "6"
 once_cell = "1"
 which = "6"
 dirs = "5"
+portable-pty = "0.8"
+# remote: faithful serde port of the Swift MaverickProtocol wire contract.
+base64 = "0.22"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+# Companion-3 WebSocket server. tokio-tungstenite is a thin (~80 KB compiled)
+# async binding over tungstenite (RFC 6455) on the tokio runtime Tauri already
+# pulls in via `tokio = { features = ["full"] }`; no new TLS stack (loopback-only,
+# plaintext). futures-util gives StreamExt/SinkExt to split the socket.
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# async trait methods on the SidecarRequest abstraction (lets unit tests inject a
+# deterministic fake sidecar instead of a live Bun process). Compile-time only.
+async-trait = "0.1"
+# Companion-5 pairing/auth. `snow` (~120 KB compiled) is the vetted pure-Rust
+# Noise Protocol Framework implementation; we drive Noise_XX_25519_ChaChaPoly_SHA256
+# as the RESPONDER, wire-compatible with the RN client's @noble-based initiator
+# (empty prologue, HKDF-SHA256, ChaCha20-Poly1305). It pulls curve25519-dalek +
+# chacha20poly1305 + sha2 (already transitively present). No new TLS stack.
+# Only the exact cipher-suite the client uses is enabled (curve25519 + chacha20poly1305
+# + sha2), trimming aes-gcm/blake2/p256 from snow's default crypto to keep it lean.
+# `std` is intentionally OFF: it transitively activates snow's optional `ring`
+# (~4 MB) + `blake2` deps via `ring/std`/`blake2/std`, which the XX/ChaChaPoly/
+# SHA256 suite never touches. snow builds fine on just `alloc` (always present in
+# this std binary); the dalek/chacha20poly1305/sha2 resolver is pure Rust.
+snow = { version = "0.10", default-features = false, features = [
+    "use-curve25519",
+    "use-chacha20poly1305",
+    "use-sha2",
+    "use-getrandom",
+] }
+# mDNS-SD advertisement of `_maverick._tcp` for LAN discovery (Tier-1 transport).
+# ~300 KB, no async-runtime dependency (its own thread), pure Rust.
+mdns-sd = "0.13"
+# SHA-256 for the static-key safety-number / short fingerprint (matches the
+# client's hash() over the static public key). Already transitively present.
+sha2 = "0.10"
+# getrandom for the 128-bit single-use pairing token (CSPRNG, no extra dep — it
+# is already pulled in transitively; pinned here so the import is first-party).
+getrandom = "0.2"
+# hex for rendering the short fingerprint (`f` QR field) as the client expects.
+hex = "0.4"
+# curve25519-dalek (already pulled by snow) is used directly to derive the static
+# identity's X25519 public key from its private scalar — bit-identical to what the
+# Noise handshake presents. subtle gives the constant-time token compare. Both are
+# transitive deps of snow, so this adds no new crate to the graph.
+curve25519-dalek = "4"
+subtle = "2"
 
 [dev-dependencies]
 tempfile = "3"
+# `test` enables tauri::test::mock_app for exercising commands headlessly.
+tauri = { version = "2", features = ["test"] }
+# `test-util` enables tokio's paused-clock (`time::advance`, `start_paused`) so
+# the hook-bridge permission-timeout test asserts the 30 s auto-deny in virtual
+# time, deterministically and instantly (no real 30 s wait). Dev/test only.
+tokio = { version = "1", features = ["full", "test-util"] }

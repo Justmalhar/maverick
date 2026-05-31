@@ -75,6 +75,83 @@ describe("AutomationRunner.run", () => {
     });
     expect(r.stepsRun).toBe(2);
   });
+
+  test("emits a running→ok step event per step", async () => {
+    const { shell } = transcript([{ exitCode: 0 }]);
+    const events: Array<{ stepIndex: number; status: string }> = [];
+    const notifier = {
+      write(line: string) {
+        const msg = JSON.parse(line) as { method: string; params: { stepIndex: number; status: string } };
+        if (msg.method === "automation.step") events.push(msg.params);
+      },
+    };
+    const loader = loaderWith([
+      { name: "do", trigger: "manual", steps: [{ type: "shell", command: "echo hi" }] },
+    ]);
+    await new AutomationRunner({ loader, shell, notifier }).run({
+      projectPath: "/r",
+      automationName: "do",
+      worktreePath: "/wt",
+    });
+    expect(events).toEqual([
+      { automation: "do", stepIndex: 0, status: "running" },
+      { automation: "do", stepIndex: 0, status: "ok", output: "shell ok" },
+    ] as never);
+  });
+
+  test("emits a running→error step event then rethrows on failure", async () => {
+    const { shell } = transcript([{ exitCode: 2, stderr: "boom" }]);
+    const events: Array<{ status: string; output?: string }> = [];
+    const notifier = {
+      write(line: string) {
+        const msg = JSON.parse(line) as { method: string; params: { status: string; output?: string } };
+        if (msg.method === "automation.step") events.push(msg.params);
+      },
+    };
+    const loader = loaderWith([
+      { name: "do", trigger: "manual", steps: [{ type: "shell", command: "false" }] },
+    ]);
+    await expect(
+      new AutomationRunner({ loader, shell, notifier }).run({
+        projectPath: "/r",
+        automationName: "do",
+        worktreePath: "/wt",
+      })
+    ).rejects.toThrow(/boom/);
+    expect(events[0].status).toBe("running");
+    expect(events[1].status).toBe("error");
+    expect(events[1].output).toContain("boom");
+  });
+
+  test("error path stringifies a non-Error throw", async () => {
+    const events: Array<{ status: string; output?: string }> = [];
+    const notifier = {
+      write(line: string) {
+        const msg = JSON.parse(line) as { method: string; params: { status: string; output?: string } };
+        if (msg.method === "automation.step") events.push(msg.params);
+      },
+    };
+    const throwingShell: Shell = {
+      async text() {
+        return "";
+      },
+      async run() {
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw "string failure";
+      },
+    };
+    const loader = loaderWith([
+      { name: "do", trigger: "manual", steps: [{ type: "shell", command: "x" }] },
+    ]);
+    await expect(
+      new AutomationRunner({ loader, shell: throwingShell, notifier }).run({
+        projectPath: "/r",
+        automationName: "do",
+        worktreePath: "/wt",
+      })
+    ).rejects.toBe("string failure");
+    expect(events[1].output).toBe("string failure");
+  });
 });
 
 describe("AutomationRunner.executeStep", () => {
@@ -101,13 +178,26 @@ describe("AutomationRunner.executeStep", () => {
     ).rejects.toThrow(/no/);
   });
 
-  test("skill step runs SkillsEngine.run", async () => {
+  test("skill step runs SkillsEngine.run (name field)", async () => {
     const loader = loaderWith([], [
       { name: "review", description: "d", prompt: "p {{x}}" },
     ]);
     const skills = new SkillsEngine({ loader });
     await new AutomationRunner({ loader, skills }).executeStep(
       { type: "skill", name: "review" } as AutomationStep,
+      "/wt",
+      "/r",
+      { x: "1" }
+    );
+  });
+
+  test("skill step accepts the builder's `skill` field", async () => {
+    const loader = loaderWith([], [
+      { name: "review", description: "d", prompt: "p {{x}}" },
+    ]);
+    const skills = new SkillsEngine({ loader });
+    await new AutomationRunner({ loader, skills }).executeStep(
+      { type: "skill", skill: "review" } as AutomationStep,
       "/wt",
       "/r",
       { x: "1" }

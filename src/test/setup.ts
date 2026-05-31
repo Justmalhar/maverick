@@ -14,6 +14,28 @@ vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(),
 }));
 
+// useWindowFocus (mounted app-wide via Toaster/StatusBar) calls
+// getCurrentWindow().onFocusChanged; without a mock it reaches into
+// window.__TAURI_INTERNALS__.metadata and throws under jsdom. Focus-specific
+// tests provide their own richer mock that drives focus events.
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    onFocusChanged: vi.fn().mockResolvedValue(() => {}),
+  }),
+}));
+
+// Auto-update plugins (P3-B). VersionSettings mounts useUpdater on every
+// settings render, so a default no-op mock keeps unrelated tests green.
+// `check()` resolves to null (up to date) by default; the dedicated
+// useUpdater/VersionSettings specs override these per-test with vi.mocked(...).
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@tauri-apps/plugin-process", () => ({
+  relaunch: vi.fn().mockResolvedValue(undefined),
+}));
+
 // The shell plugin reaches into `window.__TAURI_INTERNALS__` directly instead
 // of going through `@tauri-apps/api/core::invoke`, so our existing mock above
 // doesn't catch its `open(url)` calls. Provide a separate spy.
@@ -29,11 +51,12 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   },
 }));
 
-// matchMedia polyfill
+// matchMedia polyfill. Defaults to the desktop-wide branch (matches:true) so
+// the responsive icon-collapse stays expanded unless a test opts into compact.
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
+    matches: true,
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -224,12 +247,26 @@ vi.mock("@xterm/xterm", () => {
     cols = 80;
     rows = 24;
     options: Record<string, unknown> = {};
-    open = vi.fn();
+    element: HTMLElement | null = null;
+    buffer = { active: { type: "normal" as "normal" | "alternate" } };
+    open = vi.fn((el?: HTMLElement) => {
+      this.element = el ?? document.createElement("div");
+    });
     write = vi.fn();
-    resize = vi.fn();
+    onData = vi.fn((_cb: (d: string) => void) => ({ dispose: vi.fn() }));
+    resize = vi.fn((cols: number, rows: number) => {
+      this.cols = cols;
+      this.rows = rows;
+    });
     focus = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
+    clear = vi.fn();
+    reset = vi.fn();
+    refresh = vi.fn();
+    paste = vi.fn();
+    getSelection = vi.fn(() => "");
+    hasSelection = vi.fn(() => false);
     constructor(opts?: Record<string, unknown>) {
       this.options = { ...(opts ?? {}) };
       (globalThis as Record<string, unknown>).__xtermLast = this;
@@ -247,7 +284,14 @@ vi.mock("@xterm/addon-web-links", () => ({
   WebLinksAddon: class {},
 }));
 vi.mock("@xterm/addon-search", () => ({
-  SearchAddon: class {},
+  SearchAddon: class {
+    findNext = vi.fn();
+  },
+}));
+vi.mock("@xterm/addon-serialize", () => ({
+  SerializeAddon: class {
+    serialize = vi.fn(() => "");
+  },
 }));
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 
@@ -281,6 +325,7 @@ vi.mock("tinykeys", () => ({
 import { TerminalRegistry, type TerminalHandle } from "@/lib/terminal-provider";
 const fakeHandle = (): TerminalHandle => ({
   write: () => {},
+  onData: () => () => {}, onResize: () => () => {},
   resize: () => {},
   setTheme: () => {},
   focus: () => {},

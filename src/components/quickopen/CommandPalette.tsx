@@ -13,6 +13,8 @@ import {
   PanelBottom,
   Sparkles,
   TerminalSquare,
+  FileSearch,
+  Eye,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { KEYBINDINGS } from "@/shortcuts/registry";
@@ -44,6 +46,8 @@ export function CommandPalette() {
   const togglePanel = useWorkbench((s) => s.togglePanel);
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
+  const setQuickOpenOpen = useWorkbench((s) => s.setQuickOpenOpen);
+  const setAuxiliaryView = useWorkbench((s) => s.setAuxiliaryView);
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const toggleEditorMode = useWorkbench((s) => s.toggleEditorMode);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
@@ -59,6 +63,26 @@ export function CommandPalette() {
           setOpen(false);
         },
         shortcutId: "project.new",
+      },
+      {
+        id: "global.quickOpen",
+        label: "Go to File…",
+        icon: FileSearch,
+        run: () => {
+          setQuickOpenOpen(true);
+          setOpen(false);
+        },
+        shortcutId: "global.quickOpen",
+      },
+      {
+        id: "preview.open",
+        label: "View: Open Preview",
+        icon: Eye,
+        run: () => {
+          setAuxiliaryView("preview");
+          setOpen(false);
+        },
+        shortcutId: "preview.open",
       },
       {
         id: "view.git",
@@ -187,8 +211,10 @@ export function CommandPalette() {
       activeId,
       openProjectSettings,
       setActivityView,
+      setAuxiliaryView,
       setOpen,
       setPresetLauncherOpen,
+      setQuickOpenOpen,
       setSettingsOpen,
       toggleAuxiliaryBar,
       toggleEditorMode,

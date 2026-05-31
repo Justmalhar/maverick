@@ -81,6 +81,19 @@ describe("FileTree", () => {
     expect(removed?.status).toBe("D");
   });
 
+  test("paths are RELATIVE to the worktree (porcelain-status mapping depends on it)", async () => {
+    const status = " M src/index.ts\n";
+    const entries = await makeTree(makeFs(), status).tree({ worktreePath: "/r" });
+    const src = entries.find((e) => e.name === "src");
+    // Top-level dir path is the bare relative segment, not an absolute path.
+    expect(src?.path).toBe("src");
+    const idx = src?.children?.find((c) => c.name === "index.ts");
+    // Nested path is relative and forward-slash joined; this is exactly the key
+    // `git status --porcelain` reports, so the M status attaches correctly.
+    expect(idx?.path).toBe("src/index.ts");
+    expect(idx?.status).toBe("M");
+  });
+
   test("respects maxDepth", async () => {
     const fs = makeFs();
     fs.dirs.add("/r/src/deep");

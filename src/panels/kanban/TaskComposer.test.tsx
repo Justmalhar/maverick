@@ -191,4 +191,59 @@ describe("TaskComposer", () => {
     expect(screen.getByTestId("composer-error").textContent).toContain("too large");
     expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
   });
+
+  it("defaultProjectId pre-populates project and fetches branches", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(["main", "dev"] as never);
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
+      backends: [makeBackend({ id: "claude", name: "Claude", active: true })],
+    });
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(<TaskComposer onSend={onSend} defaultProjectId="p1" />);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" })
+    );
+    expect(screen.getByTestId("composer-project")).toHaveTextContent("Alpha");
+  });
+
+  it("defaultProjectId null does not auto-populate project", () => {
+    vi.mocked(invoke).mockReset();
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
+      backends: [makeBackend({ id: "claude", name: "Claude", active: true })],
+    });
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(<TaskComposer onSend={onSend} defaultProjectId={null} />);
+    expect(invoke).not.toHaveBeenCalledWith("git_branches", expect.anything());
+  });
+
+  it("re-populates when defaultProjectId changes to a different project", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [
+        makeProject({ id: "p1", name: "Alpha", path: "/alpha" }),
+        makeProject({ id: "p2", name: "Beta", path: "/beta" }),
+      ],
+      backends: [makeBackend({ id: "claude", name: "Claude", active: true })],
+    });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(["main"] as never)
+      .mockResolvedValueOnce(["feat"] as never);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = renderWithProviders(
+      <TaskComposer onSend={onSend} defaultProjectId="p1" />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" })
+    );
+
+    rerender(<TaskComposer onSend={onSend} defaultProjectId="p2" />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/beta" })
+    );
+    expect(screen.getByTestId("composer-project")).toHaveTextContent("Beta");
+  });
 });

@@ -16,4 +16,14 @@ describe("keybinding registry", () => {
     expect(getKeybinding("workspace.next")?.label).toBe("Next workspace");
     expect(getKeybinding("nonexistent")).toBeUndefined();
   });
+
+  it("workspace index jumps 1-9 are registered for discovery in the help/palette", () => {
+    for (let i = 1; i <= 9; i++) {
+      const def = getKeybinding(`workspace.jump.${i}`);
+      expect(def).toBeDefined();
+      expect(def?.keys).toBe(`$mod+${i}`);
+      expect(def?.display).toBe(`⌘${i}`);
+      expect(def?.category).toBe("Workspace");
+    }
+  });
 });

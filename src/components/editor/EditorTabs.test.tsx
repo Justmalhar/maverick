@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTabs } from "./EditorTabs";
 import { useWorkbench } from "@/state/store";
-import { makeWorkspace } from "@/test/fixtures";
+import { makeWorkspace, makePreset } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
@@ -34,6 +35,21 @@ describe("EditorTabs", () => {
     await userEvent.click(screen.getByTestId("editor-tabs-new"));
     // The dropdown should render at least the Browser item
     expect(screen.getByTestId("editor-tabs-open-browser")).toBeInTheDocument();
+  });
+
+  it("clicking a workspace tab while a system tab is active switches to the workspace", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      systemTabs: ["kanban"],
+      activeSystemTab: "kanban",
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<EditorTabs />);
+    await userEvent.click(screen.getByTestId("editor-tab-w1"));
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
+    // The system tab must be deactivated so the workspace editor shows.
+    expect(useWorkbench.getState().activeSystemTab).toBeNull();
   });
 
   it("inactive system tab click activates it", async () => {
@@ -99,5 +115,67 @@ describe("EditorTabs", () => {
     await userEvent.click(screen.getByTestId("editor-tabs-new"));
     await userEvent.click(screen.getByText(/All commands/i));
     expect(useWorkbench.getState().commandPaletteOpen).toBe(true);
+  });
+
+  it("New Terminal item shows panel and dispatches maverick:panel:tab terminal", async () => {
+    renderWithProviders(<EditorTabs />);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("editor-tabs-new"));
+    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "maverick:panel:tab", detail: "terminal" })
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it("New Terminal item does not double-toggle panel when already visible", async () => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      layout: { ...useWorkbench.getState().layout, panelVisible: true },
+    });
+    renderWithProviders(<EditorTabs />);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    await userEvent.click(screen.getByTestId("editor-tabs-new"));
+    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal"));
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    dispatchSpy.mockRestore();
+  });
+
+  it("right-clicking a workspace tab saves the layout as a preset", async () => {
+    vi.mocked(invoke).mockReset().mockImplementation((cmd: string) => {
+      if (cmd === "preset_save_current") return Promise.resolve(makePreset({ name: "Saved" })) as never;
+      return Promise.resolve([]) as never;
+    });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", agentBackend: "claude" })],
+      activeWorkspaceId: "w1",
+    });
+    renderWithProviders(<EditorTabs />);
+    fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
+    expect(await screen.findByTestId("save-layout-dialog")).toBeInTheDocument();
+    await userEvent.type(screen.getByTestId("save-layout-name"), "Saved");
+    await userEvent.click(screen.getByTestId("save-layout-confirm"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "preset_save_current",
+        expect.objectContaining({ workspaceId: "w1", name: "Saved" })
+      )
+    );
+  });
+
+  it("closing the save-layout dialog clears the target", async () => {
+    vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      activeWorkspaceId: "w1",
+    });
+    renderWithProviders(<EditorTabs />);
+    fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
+    expect(await screen.findByTestId("save-layout-dialog")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("save-layout-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("save-layout-dialog")).toBeNull());
   });
 });
