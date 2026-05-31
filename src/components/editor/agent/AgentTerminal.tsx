@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkbench } from "@/state/store";
-import { ptySpawn, ptyKill } from "@/lib/tauri";
-import type { Workspace } from "@/lib/ipc";
+import { ptySpawn, ptyKill, messageAppend, messagesList } from "@/lib/tauri";
+import { recordUsageEstimate } from "@/hooks/useContextUsage";
+import type { Message, Workspace } from "@/lib/ipc";
 import { TerminalPane } from "@/components/editor/terminal/TerminalPane";
 
 interface Props {
@@ -35,9 +36,67 @@ export function killAgentPty(workspaceId: string): void {
   void ptyKill(ptyId).catch(() => {});
 }
 
+// Carriage return (Enter) or line feed terminates a submitted prompt.
+const SUBMIT_KEYS = /[\r\n]/;
+
+/**
+ * Tracks prompts a user submits into the agent PTY and keeps the session's
+ * estimated token/cost usage current. The PTY is a raw stream — there is no
+ * structured "submit" — so we tap the keystroke bytes, buffer printable input,
+ * and on Enter persist the line as a user message and re-estimate usage. The
+ * figure is always surfaced as an estimate (StatusBar renders "~N tok").
+ */
+function useAgentUsageRecorder(workspace: Workspace): (data: string) => void {
+  const inputRef = useRef("");
+  const messagesRef = useRef<Pick<Message, "content">[]>([]);
+  const sessionId = workspace.sessionId;
+  const backend = workspace.agentBackend;
+
+  useEffect(() => {
+    inputRef.current = "";
+    if (!sessionId) {
+      messagesRef.current = [];
+      return;
+    }
+    let cancelled = false;
+    messagesList(sessionId)
+      .then((list) => {
+        if (cancelled) return;
+        messagesRef.current = list.map((m) => ({ content: m.content }));
+        void recordUsageEstimate(sessionId, messagesRef.current, backend).catch(() => {});
+      })
+      .catch(() => {
+        if (!cancelled) messagesRef.current = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, backend]);
+
+  return useCallback(
+    (data: string) => {
+      if (!sessionId) return;
+      const submitIndex = data.search(SUBMIT_KEYS);
+      if (submitIndex === -1) {
+        inputRef.current += data;
+        return;
+      }
+      // Bytes before the Enter complete the prompt; anything after seeds the next.
+      const prompt = (inputRef.current + data.slice(0, submitIndex)).trim();
+      inputRef.current = data.slice(submitIndex + 1).replace(SUBMIT_KEYS, "");
+      if (prompt === "") return;
+      messagesRef.current = [...messagesRef.current, { content: prompt }];
+      void messageAppend(sessionId, "user", prompt).catch(() => {});
+      void recordUsageEstimate(sessionId, messagesRef.current, backend).catch(() => {});
+    },
+    [sessionId, backend]
+  );
+}
+
 /** Live terminal running the workspace's backend CLI in its worktree. */
 export function AgentTerminal({ workspace }: Props) {
   const backend = useWorkbench((s) => s.backends.find((b) => b.id === workspace.agentBackend));
+  const recordInput = useAgentUsageRecorder(workspace);
   const [state, setState] = useState<SpawnState>({ status: "idle" });
 
   useEffect(() => {
@@ -100,6 +159,7 @@ export function AgentTerminal({ workspace }: Props) {
         paneId={`agent-${workspace.id}`}
         isFocused
         onFocus={() => {}}
+        onData={recordInput}
       />
     </div>
   );

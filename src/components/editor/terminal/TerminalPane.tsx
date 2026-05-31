@@ -24,6 +24,10 @@ interface Props {
   // slot is released (scrollback serialized, slot recycled); the PTY/session
   // survives and re-binds without losing output when this flips back to true.
   visible?: boolean;
+  // Fires with raw keystroke bytes the user types into this pane (before they
+  // reach the PTY). The agent path taps this to detect submitted prompts for
+  // token-usage estimation; the regular terminal leaves it unset.
+  onData?: (data: string) => void;
 }
 
 export function TerminalPane({
@@ -32,10 +36,13 @@ export function TerminalPane({
   isFocused,
   onFocus,
   visible = true,
+  onData,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<TerminalHandle | null>(null);
   const pooledRef = useRef<PooledTerminalHandle | null>(null);
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
   const { theme } = useThemeContext();
   // Pooled path routes pty:data through the session (slot or dormant ring).
   const { write, resize, kick } = usePty(ptyId, {
@@ -59,7 +66,10 @@ export function TerminalPane({
 
     if (provider.acquireLeaf) {
       const bridge: PtyBridge = {
-        writeToPty: (data) => void write(data),
+        writeToPty: (data) => {
+          onDataRef.current?.(data);
+          void write(data);
+        },
         resizePty: (cols, rows) => void resize(cols, rows),
         kickPty: (cols, rows) => void kick(cols, rows),
       };
@@ -79,7 +89,10 @@ export function TerminalPane({
       const handle = provider.mount(container, options);
       handleRef.current = handle;
       handle.focus();
-      const offData = handle.onData((data) => void write(data));
+      const offData = handle.onData((data) => {
+        onDataRef.current?.(data);
+        void write(data);
+      });
       const offResize = handle.onResize((cols, rows) => void resize(cols, rows));
       cleanup = () => {
         offData();

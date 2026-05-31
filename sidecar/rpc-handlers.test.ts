@@ -440,6 +440,103 @@ describe("RpcHandlers", () => {
     expect(r.stepsRun).toBe(1);
   });
 
+  test("automation.run accepts a null workspaceId with explicit paths", async () => {
+    // Mirrors the Rust automation_run(workspace_id: Option<String>) None → JSON
+    // null path; the schema's nullishOptional must coerce null away and run
+    // from the supplied projectPath + worktreePath.
+    const r = (await h.dispatch("automation.run", {
+      automationName: "auto",
+      workspaceId: null,
+      projectPath: "/r",
+      worktreePath: "/wt",
+    })) as { stepsRun: number };
+    expect(r.stepsRun).toBe(1);
+  });
+
+  test("automation.run reports its accepted inputs when none are resolvable", async () => {
+    await expect(
+      h.dispatch("automation.run", { automationName: "auto" })
+    ).rejects.toThrow(/workspaceId or projectPath \+ worktreePath/);
+  });
+
+  describe("workspaceId → {projectPath, worktreePath} contract resolution", () => {
+    // Pins the field names the frontend panels send (workspaceId) through to the
+    // schema the sidecar engines require (projectPath/worktreePath). Each command
+    // must resolve the workspace from the store rather than ZodError on the
+    // missing path fields.
+    async function seedWorkspace(): Promise<{ workspaceId: string }> {
+      const proj = (await h.dispatch("project.add", { path: "/r" })) as { id: string };
+      const ws = (await h.dispatch("workspace.create", {
+        projectId: proj.id,
+        projectPath: "/r",
+        branch: "feat",
+        backend: "claude",
+      })) as { id: string };
+      return { workspaceId: ws.id };
+    }
+
+    test("skills.run resolves projectPath from workspaceId", async () => {
+      const { workspaceId } = await seedWorkspace();
+      const r = (await h.dispatch("skills.run", {
+        workspaceId,
+        skillName: "review",
+        vars: { x: "1" },
+      })) as { prompt: string };
+      expect(r.prompt).toBe("p 1");
+    });
+
+    test("automation.run resolves projectPath + worktreePath from workspaceId", async () => {
+      const { workspaceId } = await seedWorkspace();
+      const r = (await h.dispatch("automation.run", {
+        automationName: "auto",
+        workspaceId,
+      })) as { stepsRun: number };
+      expect(r.stepsRun).toBe(1);
+    });
+
+    test("mcp.start resolves projectPath from workspaceId", async () => {
+      const { workspaceId } = await seedWorkspace();
+      const r = (await h.dispatch("mcp.start", { name: "fs", workspaceId })) as { pid?: number };
+      expect(r).toBeDefined();
+      await h.dispatch("mcp.stop", { name: "fs" });
+    });
+
+    test("skills.run throws a clear error when neither workspaceId nor projectPath is given", async () => {
+      await expect(
+        h.dispatch("skills.run", { skillName: "review", vars: {} })
+      ).rejects.toThrow(/workspaceId or projectPath is required/);
+    });
+
+    test("automation.run throws when the workspace cannot be resolved", async () => {
+      await expect(
+        h.dispatch("automation.run", { automationName: "auto", workspaceId: "missing" })
+      ).rejects.toThrow(/workspace missing not found/);
+    });
+
+    test("mcp.start without a projectPath or workspaceId still starts (no project scope)", async () => {
+      const r = (await h.dispatch("mcp.start", { name: "fs" })) as { pid?: number };
+      expect(r).toBeDefined();
+      await h.dispatch("mcp.stop", { name: "fs" });
+    });
+
+    test("skills.run throws when the workspace's project row is gone (orphan)", async () => {
+      const proj = (await h.dispatch("project.add", { path: "/orphan" })) as { id: string };
+      const ws = (await h.dispatch("workspace.create", {
+        projectId: proj.id,
+        projectPath: "/orphan",
+        branch: "feat",
+        backend: "claude",
+      })) as { id: string };
+      // Drop the project out from under the workspace (FK off so the orphan persists).
+      h.store.db.run("PRAGMA foreign_keys=OFF");
+      h.store.db.query("DELETE FROM projects WHERE id = ?").run(proj.id);
+      h.store.db.run("PRAGMA foreign_keys=ON");
+      await expect(
+        h.dispatch("skills.run", { workspaceId: ws.id, skillName: "review", vars: {} })
+      ).rejects.toThrow(new RegExp(`project ${proj.id} not found`));
+    });
+  });
+
   test("notify.send", async () => {
     const r = (await h.dispatch("notify.send", { title: "t", body: "b" })) as { ok: boolean };
     expect(r.ok).toBe(true);

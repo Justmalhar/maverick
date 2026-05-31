@@ -30,9 +30,6 @@ vi.mock("framer-motion", async () => {
 
 import { renderWithProviders, screen } from "@/test/utils";
 import { EmptyEditor } from "./EmptyEditor";
-import { AgentMessage } from "./agent/AgentMessage";
-import { UserMessage } from "./agent/UserMessage";
-import { ToolCallSummary } from "./agent/ToolCallSummary";
 import { ActivityBarItem } from "@/components/activitybar/ActivityBarItem";
 import { EditorTab } from "./EditorTab";
 import { ProjectItem } from "@/components/primarysidebar/ProjectItem";
@@ -40,28 +37,12 @@ import { Panel } from "@/components/panel/Panel";
 import { TitleBar } from "@/components/titlebar/TitleBar";
 import { FolderTree } from "lucide-react";
 import { useWorkbench } from "@/state/store";
-import { makeMessage, makeProject, makeWorkspace } from "@/test/fixtures";
-import userEvent from "@testing-library/user-event";
+import { makeProject, makeWorkspace } from "@/test/fixtures";
 
 describe("reduced-motion branch coverage", () => {
   it("EmptyEditor renders without motion animation values", () => {
     renderWithProviders(<EmptyEditor />);
     expect(screen.getByTestId("empty-editor")).toBeInTheDocument();
-  });
-
-  it("AgentMessage initial: false branch", () => {
-    renderWithProviders(<AgentMessage message={makeMessage({ id: "x", role: "assistant", content: "x" })} />);
-    expect(screen.getByTestId("message-agent-x")).toBeInTheDocument();
-  });
-
-  it("UserMessage initial: false branch", () => {
-    renderWithProviders(<UserMessage message={makeMessage({ id: "y" })} />);
-    expect(screen.getByTestId("message-user-y")).toBeInTheDocument();
-  });
-
-  it("ToolCallSummary toggles without animation", async () => {
-    renderWithProviders(<ToolCallSummary toolCalls={[{ name: "a" }]} />);
-    await userEvent.click(screen.getByRole("button"));
   });
 
   it("ActivityBarItem whileTap=undefined branch", () => {

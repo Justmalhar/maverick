@@ -73,7 +73,8 @@ const Schemas = {
   }),
   skillsList: z.object({ projectPath: z.string() }),
   skillsRun: z.object({
-    projectPath: z.string(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
     skillName: z.string(),
     vars: z.record(z.string(), z.string()).default({}),
   }),
@@ -127,7 +128,11 @@ const Schemas = {
     layout: z.record(z.string(), z.unknown()),
     description: nullishOptional(z.string()),
   }),
-  mcpStart: z.object({ name: z.string(), projectPath: nullishOptional(z.string()) }),
+  mcpStart: z.object({
+    name: z.string(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+  }),
   mcpStop: z.object({ name: z.string() }),
   contextUsage: z.object({ sessionId: z.string() }),
   contextRecord: z.object({
@@ -138,8 +143,9 @@ const Schemas = {
   attachmentCreate: z.object({ worktreePath: z.string(), text: z.string() }),
   automationRun: z.object({
     automationName: z.string(),
-    projectPath: z.string(),
-    worktreePath: z.string(),
+    workspaceId: nullishOptional(z.string()),
+    projectPath: nullishOptional(z.string()),
+    worktreePath: nullishOptional(z.string()),
     vars: nullishOptional(z.record(z.string(), z.string())),
   }),
   notifySend: z.object({
@@ -230,6 +236,21 @@ export class RpcHandlers {
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
     this.notifier = opts.notifier ?? stdoutNotifier;
+  }
+
+  // Frontend panels address a workspace by id; skills/automation/mcp need the
+  // on-disk project root and worktree path. Resolve them from the store so the
+  // three layers (React -> Rust -> sidecar) agree on a single contract.
+  private requireWorkspacePaths(workspaceId: string | undefined): {
+    projectPath: string;
+    worktreePath: string;
+  } {
+    if (!workspaceId) throw new Error("workspaceId or projectPath is required");
+    const ws = this.store.workspaceGet(workspaceId);
+    if (!ws) throw new Error(`workspace ${workspaceId} not found`);
+    const project = this.store.projectGet(ws.projectId);
+    if (!project) throw new Error(`project ${ws.projectId} not found`);
+    return { projectPath: project.path, worktreePath: ws.worktreePath };
   }
 
   private emitProjectSettingsChanged(projectId: string, settings: unknown): void {
@@ -398,7 +419,8 @@ export class RpcHandlers {
       }
       case "skills.run": {
         const p = Schemas.skillsRun.parse(params);
-        return this.skills.run(p);
+        const projectPath = p.projectPath ?? this.requireWorkspacePaths(p.workspaceId).projectPath;
+        return this.skills.run({ projectPath, skillName: p.skillName, vars: p.vars });
       }
       case "diff.get": {
         const p = Schemas.diffGet.parse(params);
@@ -522,7 +544,8 @@ export class RpcHandlers {
       }
       case "mcp.start": {
         const p = Schemas.mcpStart.parse(params);
-        if (p.projectPath) this.mcp.setProjectPath(p.projectPath);
+        const projectPath = p.projectPath ?? (p.workspaceId ? this.requireWorkspacePaths(p.workspaceId).projectPath : undefined);
+        if (projectPath) this.mcp.setProjectPath(projectPath);
         return this.mcp.start(p.name);
       }
       case "mcp.stop": {
@@ -545,7 +568,23 @@ export class RpcHandlers {
       }
       case "automation.run": {
         const p = Schemas.automationRun.parse(params);
-        return this.automations.run(p);
+        let { projectPath, worktreePath } = p;
+        if (!projectPath || !worktreePath) {
+          if (!p.workspaceId) {
+            throw new Error(
+              "automation.run requires workspaceId or projectPath + worktreePath"
+            );
+          }
+          const resolved = this.requireWorkspacePaths(p.workspaceId);
+          projectPath ??= resolved.projectPath;
+          worktreePath ??= resolved.worktreePath;
+        }
+        return this.automations.run({
+          automationName: p.automationName,
+          projectPath,
+          worktreePath,
+          vars: p.vars,
+        });
       }
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);

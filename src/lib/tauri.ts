@@ -194,8 +194,12 @@ export async function presetSaveCurrent(
   return invoke("preset_save_current", { workspaceId, name });
 }
 
-export async function mcpStart(name: string): Promise<{ pid: number }> {
-  return invoke("mcp_start", { name });
+export async function mcpStart(
+  name: string,
+  workspaceId?: string,
+  projectPath?: string
+): Promise<{ pid: number }> {
+  return invoke("mcp_start", { name, workspaceId, projectPath });
 }
 
 export async function mcpStop(name: string): Promise<void> {
@@ -227,7 +231,7 @@ export async function attachmentCreate(
 
 export async function automationRun(
   automationName: string,
-  workspaceId: string
+  workspaceId?: string
 ): Promise<void> {
   return invoke("automation_run", { automationName, workspaceId });
 }

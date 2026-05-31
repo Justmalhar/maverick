@@ -4,10 +4,22 @@ use tauri::State;
 use crate::state::AppState;
 
 #[tauri::command]
-pub async fn mcp_start(state: State<'_, AppState>, name: String) -> Result<Value, String> {
+pub async fn mcp_start(
+    state: State<'_, AppState>,
+    name: String,
+    workspace_id: Option<String>,
+    project_path: Option<String>,
+) -> Result<Value, String> {
     state
         .sidecar
-        .request("mcp.start", json!({ "name": name }))
+        .request(
+            "mcp.start",
+            json!({
+                "name": name,
+                "workspaceId": workspace_id,
+                "projectPath": project_path,
+            }),
+        )
         .await
         .map_err(|e| e.to_string())
 }

@@ -35,9 +35,12 @@ describe("recordUsageEstimate", () => {
       expect.objectContaining({ sessionId: "s1", tokensUsed: 2 })
     );
     expect(result).toEqual(recorded);
-    expect(dispatchSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "maverick:context:updated" })
-    );
+    const event = dispatchSpy.mock.calls[0][0] as CustomEvent<
+      ContextUsage & { sessionId?: string }
+    >;
+    expect(event.type).toBe("maverick:context:updated");
+    expect(event.detail.sessionId).toBe("s1");
+    expect(event.detail.tokensUsed).toBe(4);
     dispatchSpy.mockRestore();
   });
 });
@@ -56,7 +59,7 @@ describe("useContextUsage", () => {
     expect(invoke).toHaveBeenCalledWith("context_usage", { sessionId: "s1" });
   });
 
-  it("refreshes when a context-updated event fires", async () => {
+  it("refreshes when a context-updated event for the same session fires", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(usage({ tokensUsed: 10 }) as never);
     const { result } = renderHook(() => useContextUsage("s1"));
     await waitFor(() => expect(result.current.tokensUsed).toBe(10));
@@ -64,10 +67,45 @@ describe("useContextUsage", () => {
     vi.mocked(invoke).mockResolvedValueOnce(usage({ tokensUsed: 99 }) as never);
     act(() => {
       window.dispatchEvent(
-        new CustomEvent("maverick:context:updated", { detail: usage({ tokensUsed: 99 }) })
+        new CustomEvent("maverick:context:updated", {
+          detail: { ...usage({ tokensUsed: 99 }), sessionId: "s1" },
+        })
       );
     });
     await waitFor(() => expect(result.current.tokensUsed).toBe(99));
+  });
+
+  it("ignores a context-updated event for a foreign session (no re-fetch)", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(usage({ tokensUsed: 10 }) as never);
+    const { result } = renderHook(() => useContextUsage("s1"));
+    await waitFor(() => expect(result.current.tokensUsed).toBe(10));
+    expect(invoke).toHaveBeenCalledTimes(1); // mount fetch only
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:context:updated", {
+          detail: { ...usage({ tokensUsed: 99 }), sessionId: "other-session" },
+        })
+      );
+    });
+
+    // No additional context_usage IPC was issued for the foreign session.
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(result.current.tokensUsed).toBe(10);
+  });
+
+  it("refreshes for an event without a sessionId (wildcard, no over-suppression)", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(usage({ tokensUsed: 10 }) as never);
+    const { result } = renderHook(() => useContextUsage("s1"));
+    await waitFor(() => expect(result.current.tokensUsed).toBe(10));
+
+    vi.mocked(invoke).mockResolvedValueOnce(usage({ tokensUsed: 77 }) as never);
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:context:updated", { detail: usage({ tokensUsed: 77 }) })
+      );
+    });
+    await waitFor(() => expect(result.current.tokensUsed).toBe(77));
   });
 
   it("falls back to zeroed usage when the fetch fails", async () => {

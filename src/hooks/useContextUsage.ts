@@ -8,6 +8,13 @@ import type { ContextUsage, Message } from "@/lib/ipc";
 
 const UPDATED_EVENT = "maverick:context:updated";
 
+/**
+ * Payload carried by {@link UPDATED_EVENT}. `sessionId` lets a listening hook
+ * skip the re-fetch for foreign sessions so N mounted instances don't each
+ * re-issue a context_usage RPC on every broadcast (N× IPC amplification).
+ */
+type ContextUpdatedDetail = ContextUsage & { sessionId?: string };
+
 const ZERO: ContextUsage = {
   workspaceId: "",
   tokensUsed: 0,
@@ -29,7 +36,9 @@ export async function recordUsageEstimate(
   const cost = estimateCost(tokens, backend);
   const usage = await contextRecord(sessionId, tokens, cost);
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(UPDATED_EVENT, { detail: usage }));
+    window.dispatchEvent(
+      new CustomEvent(UPDATED_EVENT, { detail: { ...usage, sessionId } })
+    );
   }
   return usage;
 }
@@ -53,14 +62,18 @@ export function useContextUsage(sessionId: string | undefined): ContextUsage {
       });
 
     function onUpdated(e: Event) {
-      const detail = (e as CustomEvent<ContextUsage>).detail;
-      if (detail && detail.workspaceId !== undefined) {
-        contextUsage(sessionId!)
-          .then((u) => {
-            if (!cancelled) setUsage(u);
-          })
-          .catch(() => {});
+      const detail = (e as CustomEvent<ContextUpdatedDetail>).detail;
+      // Skip the re-fetch when the event names a different session; an event
+      // without a sessionId is treated as a wildcard and always refreshes so we
+      // never over-suppress legitimate updates.
+      if (detail?.sessionId !== undefined && detail.sessionId !== sessionId) {
+        return;
       }
+      contextUsage(sessionId!)
+        .then((u) => {
+          if (!cancelled) setUsage(u);
+        })
+        .catch(() => {});
     }
     window.addEventListener(UPDATED_EVENT, onUpdated);
     return () => {

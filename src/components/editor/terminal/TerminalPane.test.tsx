@@ -84,16 +84,20 @@ describe("TerminalPane", () => {
     expect(mountedHandle.dispose).toHaveBeenCalled();
   });
 
-  it("pipes user keystrokes back to the PTY via pty_write", async () => {
+  it("pipes user keystrokes back to the PTY via pty_write and taps onData", async () => {
     const { provider, mountedHandle } = makeProvider();
     TerminalRegistry.register(provider);
-    renderWithProviders(<TerminalPane ptyId="p9" paneId="pane-k" isFocused onFocus={() => {}} />);
+    const onData = vi.fn();
+    renderWithProviders(
+      <TerminalPane ptyId="p9" paneId="pane-k" isFocused onFocus={() => {}} onData={onData} />
+    );
 
     // The pane subscribes to terminal input on mount.
     expect(mountedHandle.onData).toHaveBeenCalled();
     const inputCb = mountedHandle.onData.mock.calls[0][0] as (d: string) => void;
     inputCb("ls\r");
 
+    expect(onData).toHaveBeenCalledWith("ls\r");
     await vi.waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "p9", data: "ls\r" })
     );
@@ -215,13 +219,15 @@ describe("TerminalPane (pooled renderer path)", () => {
   it("the bridge forwards keystrokes, resizes, and SIGWINCH kicks to the PTY", async () => {
     const { provider, lastBridge } = makePooledProvider();
     TerminalRegistry.register(provider);
+    const onData = vi.fn();
     renderWithProviders(
-      <TerminalPane ptyId="p2" paneId="leaf-2" isFocused onFocus={() => {}} visible />
+      <TerminalPane ptyId="p2" paneId="leaf-2" isFocused onFocus={() => {}} visible onData={onData} />
     );
     const bridge = lastBridge()!;
     bridge.writeToPty("ls\r");
     bridge.resizePty(120, 40);
     bridge.kickPty(120, 40);
+    expect(onData).toHaveBeenCalledWith("ls\r");
     await vi.waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "p2", data: "ls\r" });
       expect(invoke).toHaveBeenCalledWith("pty_resize", { ptyId: "p2", cols: 120, rows: 40 });

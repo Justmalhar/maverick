@@ -58,7 +58,7 @@ describe("UsagePanel", () => {
   it("renders all three summary stat cards", () => {
     renderWithProviders(<UsagePanel />);
     expect(screen.getByTestId("usage-stat-tokens-today")).toBeInTheDocument();
-    expect(screen.getByTestId("usage-stat-requests")).toBeInTheDocument();
+    expect(screen.getByTestId("usage-stat-active-sessions")).toBeInTheDocument();
     expect(screen.getByTestId("usage-stat-session-cost")).toBeInTheDocument();
   });
 
@@ -95,6 +95,29 @@ describe("UsagePanel", () => {
       expect(screen.getByTestId("usage-stat-tokens-today")).toHaveTextContent("2.0k")
     );
     expect(screen.getByTestId("usage-stat-session-cost")).toHaveTextContent("$0.08");
+  });
+
+  it("counts sessions with token usage as active sessions", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude", name: "claude" })],
+      workspaces: [
+        makeWorkspace({ id: "w1", sessionId: "s1", agentBackend: "claude" }),
+        makeWorkspace({ id: "w2", sessionId: "s2", agentBackend: "claude" }),
+      ],
+    });
+    vi.mocked(invoke).mockImplementation(((cmd: string, args: { sessionId: string }) => {
+      if (cmd === "context_usage") {
+        // s1 has tokens (active), s2 has none (idle) → only 1 active session.
+        return Promise.resolve(args.sessionId === "s1" ? usageFor(900, 0.04) : usageFor(0, 0));
+      }
+      return Promise.resolve(undefined);
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<UsagePanel />);
+    await waitFor(() =>
+      expect(screen.getByTestId("usage-stat-active-sessions")).toHaveTextContent("1")
+    );
   });
 
   it("surfaces a backend that has usage even if it is not configured", async () => {

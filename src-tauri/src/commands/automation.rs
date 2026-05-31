@@ -7,7 +7,7 @@ use crate::state::AppState;
 pub async fn automation_run(
     state: State<'_, AppState>,
     automation_name: String,
-    workspace_id: String,
+    workspace_id: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar

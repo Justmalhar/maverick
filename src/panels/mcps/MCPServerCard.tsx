@@ -9,9 +9,11 @@ import { mcpStart, mcpStop } from "@/lib/tauri";
 interface Props {
   server: MCPServer;
   onChange: () => void;
+  // Active workspace; lets the sidecar resolve the project's MCP config.
+  workspaceId?: string;
 }
 
-export default function MCPServerCard({ server, onChange }: Props) {
+export default function MCPServerCard({ server, onChange, workspaceId }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +21,7 @@ export default function MCPServerCard({ server, onChange }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await mcpStart(server.name);
+      await mcpStart(server.name, workspaceId);
       onChange();
     } catch (e) {
       setError(String(e));
@@ -46,7 +48,7 @@ export default function MCPServerCard({ server, onChange }: Props) {
     setError(null);
     try {
       await mcpStop(server.name);
-      await mcpStart(server.name);
+      await mcpStart(server.name, workspaceId);
       onChange();
     } catch (e) {
       setError(String(e));
