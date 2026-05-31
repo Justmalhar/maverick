@@ -78,6 +78,12 @@ pub fn run() {
             // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
             app.manage(crate::pty::PtyManager::new());
 
+            // Companion WebSocket server (Companion-3): loopback-only, OFF by
+            // default. Managed here so remote_start/stop/status can reach it, but
+            // nothing binds a listener until remote_start is called explicitly
+            // (auth/pairing arrives in Companion-5).
+            app.manage(crate::remote::RemoteServer::new());
+
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
             let app_data = handle
@@ -201,6 +207,9 @@ pub fn run() {
             request_notification_permission,
             read_maverick_md,
             write_maverick_md,
+            remote_start,
+            remote_stop,
+            remote_status,
         ]);
 
     let app = builder
@@ -209,6 +218,12 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {
+            // Stop the companion listener first so no socket task outlives the app.
+            if let Some(server) = app_handle.try_state::<crate::remote::RemoteServer>() {
+                tauri::async_runtime::block_on(async move {
+                    server.stop().await;
+                });
+            }
             if let Some(state) = app_handle.try_state::<AppState>() {
                 let sidecar = state.sidecar.clone();
                 tauri::async_runtime::block_on(async move {

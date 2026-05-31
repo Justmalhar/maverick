@@ -180,6 +180,14 @@ impl Ring {
     fn subscriber_count(&self) -> usize {
         self.inner.lock().unwrap().subscribers.len()
     }
+
+    /// Live subscriber count — exposed crate-wide under `cfg(test)` so the
+    /// Companion-3 connection tests can assert that a detached/dropped consumer's
+    /// `Sender` is pruned on the next push.
+    #[cfg(test)]
+    pub(crate) fn subscriber_count_for_test(&self) -> usize {
+        self.subscriber_count()
+    }
 }
 
 #[cfg(test)]

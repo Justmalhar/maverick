@@ -37,6 +37,15 @@ portable-pty = "0.8"
 base64 = "0.22"
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+# Companion-3 WebSocket server. tokio-tungstenite is a thin (~80 KB compiled)
+# async binding over tungstenite (RFC 6455) on the tokio runtime Tauri already
+# pulls in via `tokio = { features = ["full"] }`; no new TLS stack (loopback-only,
+# plaintext). futures-util gives StreamExt/SinkExt to split the socket.
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# async trait methods on the SidecarRequest abstraction (lets unit tests inject a
+# deterministic fake sidecar instead of a live Bun process). Compile-time only.
+async-trait = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

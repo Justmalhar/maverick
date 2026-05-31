@@ -14,7 +14,6 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use self::da_filter::DaFilter;
-use self::ring::Ring;
 use self::utf8_carry::Utf8Carry;
 
 // Re-exported so Companion-3's WS server (a sibling module in this crate) can
@@ -22,7 +21,7 @@ use self::utf8_carry::Utf8Carry;
 // reaching into the private `ring` submodule. Consumer-less until Companion-3
 // lands; the re-export is part of the public surface that feature will call.
 #[allow(unused_imports)]
-pub use self::ring::{Subscription, REPLAY_CAP, RING_CAP};
+pub use self::ring::{Ring, Subscription, REPLAY_CAP, RING_CAP};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 

@@ -16,6 +16,7 @@ pub mod notify;
 pub mod pr;
 pub mod preset;
 pub mod project;
+pub mod remote;
 pub mod project_settings;
 pub mod pty;
 pub mod skills;
@@ -51,6 +52,7 @@ pub use notify::{
 pub use pr::pr_create;
 pub use preset::{preset_launch, preset_list, preset_save_current};
 pub use project::{project_add, project_list};
+pub use remote::{remote_start, remote_status, remote_stop};
 pub use project_settings::{
     project_settings_get, project_settings_open_file, project_settings_update,
 };
