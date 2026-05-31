@@ -2,6 +2,7 @@ mod backend_detector;
 mod bootstrap;
 mod commands;
 mod pty;
+pub mod remote;
 pub mod sidecar;
 mod state;
 

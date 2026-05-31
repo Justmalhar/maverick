@@ -33,6 +33,10 @@ once_cell = "1"
 which = "6"
 dirs = "5"
 portable-pty = "0.8"
+# remote: faithful serde port of the Swift MaverickProtocol wire contract.
+base64 = "0.22"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3"
