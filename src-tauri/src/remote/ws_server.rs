@@ -16,7 +16,7 @@
 //! - **16 MiB max frame.** Bounds a single inbound/outbound message so a hostile
 //!   or buggy client can't force unbounded allocation.
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
@@ -85,28 +85,42 @@ impl<R: Runtime> PtyHost for ManagedPty<R> {
 
 /// A running listener: the bound address plus a handle whose abort stops accept.
 /// `hook` is the Claude hook bridge's localhost:7789 listener (if it bound).
+/// `mdns` is the `_maverick._tcp` advertiser, present only when bound to the LAN.
 struct Running {
     addr: SocketAddr,
     accept_task: JoinHandle<()>,
     hook: Option<crate::remote::hook_server::HookListenerHandle>,
+    mdns: Option<crate::remote::transport::MdnsAdvertiser>,
+    scope: crate::remote::transport::BindScope,
 }
 
 /// Snapshot of the server for the `remote_status` command.
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteStatus {
-    /// The persisted opt-in (defaults false until Companion-5 adds auth).
+    /// The persisted opt-in (defaults false until a device is paired + enabled).
     pub enabled: bool,
     /// Whether a listener is currently bound.
     pub running: bool,
-    /// The bound loopback port, when running.
+    /// The bound port, when running.
     pub port: Option<u16>,
+    /// True when the listener is bound to the LAN (0.0.0.0), false for loopback.
+    /// The server only widens to LAN when enabled AND at least one device is paired.
+    pub lan_exposed: bool,
+    /// Count of paired companion devices.
+    pub paired_devices: usize,
 }
 
 /// Process-wide companion-server controller held in Tauri state. Owns the
-/// enabled flag and the (at most one) running listener.
+/// enabled flag, the (at most one) running listener, and the Companion-5 security
+/// state: the desktop static identity, the live pairing-session registry, and the
+/// persistent paired-device store (TOFU).
 pub struct RemoteServer {
     enabled: std::sync::atomic::AtomicBool,
     running: Mutex<Option<Running>>,
+    /// Shared security context, lazily initialized on first `start`/`pair` (it
+    /// needs the OS-resolved app-support dir from the `AppHandle`).
+    security: Mutex<Option<Arc<crate::remote::auth_session::SecurityContext>>>,
 }
 
 impl Default for RemoteServer {
@@ -118,57 +132,169 @@ impl Default for RemoteServer {
 impl RemoteServer {
     pub fn new() -> Self {
         Self {
-            // OFF by default: stays disabled until Companion-5 wires auth.
+            // OFF by default: stays disabled until a device is paired + enabled.
             enabled: std::sync::atomic::AtomicBool::new(false),
             running: Mutex::new(None),
+            security: Mutex::new(None),
         }
+    }
+
+    /// Lazily build (or fetch) the security context, rooting the device store +
+    /// identity under `<app-data>/companion`. The `AppState.paths.app_data_dir`
+    /// is the Rust-owned OS app-support location.
+    pub(crate) async fn security<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+    ) -> Result<Arc<crate::remote::auth_session::SecurityContext>, String> {
+        let mut guard = self.security.lock().await;
+        if let Some(ctx) = guard.as_ref() {
+            return Ok(ctx.clone());
+        }
+        let dir = {
+            let state = app.try_state::<AppState>().ok_or("app state unavailable")?;
+            state.inner().paths.app_data_dir.join("companion")
+        };
+        let ctx = Arc::new(crate::remote::auth_session::SecurityContext::open(dir)?);
+        *guard = Some(ctx.clone());
+        Ok(ctx)
     }
 
     pub async fn status(&self) -> RemoteStatus {
         let guard = self.running.lock().await;
+        let paired = match self.security.lock().await.as_ref() {
+            Some(ctx) => ctx.devices.list().len(),
+            None => 0,
+        };
+        let scope = guard.as_ref().map(|r| r.scope);
         RemoteStatus {
             enabled: self.enabled.load(std::sync::atomic::Ordering::Acquire),
             running: guard.is_some(),
             port: guard.as_ref().map(|r| r.addr.port()),
+            lan_exposed: matches!(scope, Some(crate::remote::transport::BindScope::Lan)),
+            paired_devices: paired,
         }
     }
 
-    /// Bind a loopback listener on `port` (0 = OS-assigned) and start accepting.
-    /// Idempotent-ish: if already running, returns the current status without
-    /// rebinding. Flips the persisted `enabled` flag to true.
+    /// Mint a new QR pairing session and return its payload string. This is the
+    /// `remote_pair` entry point. Does NOT require the server to be running, so a
+    /// user can pair before/while enabling. Initializing the security context here
+    /// also persists the static identity on first ever call.
+    pub async fn pair<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+        rendezvous: Option<String>,
+        name: Option<String>,
+    ) -> Result<crate::remote::auth_session::PairingTicket, String> {
+        let ctx = self.security(&app).await?;
+        Ok(ctx.mint_pairing(rendezvous.as_deref(), name.as_deref()))
+    }
+
+    /// List paired devices (`remote_devices`).
+    pub async fn devices<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+    ) -> Result<Vec<crate::remote::PairedDevice>, String> {
+        let ctx = self.security(&app).await?;
+        Ok(ctx.devices.list())
+    }
+
+    /// Revoke a paired device (`remote_revoke`). Removes the pinned row and tears
+    /// down any of that device's live sessions, then re-resolves the bind scope:
+    /// if the last device was revoked, the listener narrows back to loopback.
+    pub async fn revoke<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+        device_id: String,
+    ) -> Result<bool, String> {
+        let ctx = self.security(&app).await?;
+        let removed = ctx.devices.revoke(&device_id).map_err(|e| e.to_string())?;
+        if removed {
+            ctx.sessions.revoke_device(&device_id);
+            // Re-resolve exposure: dropping the last device must narrow to loopback.
+            self.reconcile_bind(app).await?;
+        }
+        Ok(removed)
+    }
+
+    /// Start (or re-bind) the listener with the bind scope resolved from the
+    /// enabled + paired state. Flips `enabled` to true. If already running with
+    /// the correct scope, this is a no-op; otherwise it rebinds.
     pub async fn start<R: Runtime>(
         &self,
         app: AppHandle<R>,
         port: Option<u16>,
     ) -> Result<RemoteStatus, String> {
+        self.enabled.store(true, std::sync::atomic::Ordering::Release);
+        self.bind(app, port, true).await?;
+        Ok(self.status().await)
+    }
+
+    /// Re-evaluate the bind scope without changing `enabled` (called after a pair
+    /// or revoke so the listener widens/narrows to match the new paired state).
+    async fn reconcile_bind<R: Runtime>(&self, app: AppHandle<R>) -> Result<(), String> {
+        let enabled = self.enabled.load(std::sync::atomic::Ordering::Acquire);
+        if enabled {
+            self.bind(app, None, false).await?;
+        }
+        Ok(())
+    }
+
+    /// Core bind routine. Resolves the desired scope from (enabled, has-paired),
+    /// and (re)binds the listener if the scope changed. Starts/stops the mDNS
+    /// advertiser to match. `keep_port` reuses the currently-bound port on a
+    /// rebind so the listener address only changes interface, not port.
+    async fn bind<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+        port: Option<u16>,
+        _explicit: bool,
+    ) -> Result<(), String> {
+        use crate::remote::transport::{BindPolicy, BindScope, MdnsAdvertiser};
+
+        let ctx = self.security(&app).await?;
+        let enabled = self.enabled.load(std::sync::atomic::Ordering::Acquire);
+        let has_paired = !ctx.devices.list().is_empty();
+        let desired = BindPolicy::resolve(enabled, has_paired);
+
         let mut guard = self.running.lock().await;
-        if guard.is_some() {
-            self.enabled.store(true, std::sync::atomic::Ordering::Release);
-            drop(guard);
-            return Ok(self.status().await);
+        // Already bound to the desired scope → nothing to do.
+        if let Some(running) = guard.as_ref() {
+            if running.scope == desired {
+                return Ok(());
+            }
         }
 
-        let bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port.unwrap_or(DEFAULT_PORT)));
+        // Determine the port: explicit arg wins, else reuse the running port, else default.
+        let chosen_port = port
+            .or_else(|| guard.as_ref().map(|r| r.addr.port()))
+            .unwrap_or(DEFAULT_PORT);
+
+        // Tear down the previous listener (and its mDNS) before re-binding.
+        if let Some(prev) = guard.take() {
+            prev.accept_task.abort();
+            if let Some(mdns) = prev.mdns {
+                mdns.stop();
+            }
+            // Keep the existing hook bridge handle by re-installing below; abort
+            // only the accept loop + mdns here.
+            if let Some(hook) = prev.hook {
+                hook.shutdown();
+            }
+        }
+
+        let bind = desired.socket_addr(chosen_port);
         let listener = TcpListener::bind(bind)
             .await
             .map_err(|e| format!("failed to bind {bind}: {e}"))?;
         let addr = listener.local_addr().map_err(|e| e.to_string())?;
 
-        // Build the bridge once; it is shared (Arc) across every accepted socket
-        // so the session registry is process-wide, like the desktop PtyManager.
         let sidecar: Arc<dyn SidecarRequest> = {
-            let state = app
-                .try_state::<AppState>()
-                .ok_or("app state unavailable")?;
+            let state = app.try_state::<AppState>().ok_or("app state unavailable")?;
             state.inner().sidecar.clone()
         };
         let pty: Arc<dyn PtyHost> = Arc::new(ManagedPty { app: app.clone() });
         let bridge = Arc::new(RemoteBridge::new(sidecar, pty));
 
-        // Bind the Claude hook bridge on 127.0.0.1:7789 and merge the hook config
-        // into ~/.claude/settings.json (idempotent, non-clobbering). A bind
-        // failure (e.g. port already taken) is non-fatal: chat-mode stream-json
-        // events still flow; only the hook-driven lifecycle events are lost.
         let hook_bridge = bridge.hook_bridge();
         if let Err(e) = crate::remote::hook_server::HookConfigWriter::install() {
             log::warn!("remote: hook config not written: {e}");
@@ -181,12 +307,25 @@ impl RemoteServer {
             }
         };
 
-        let accept_task = tokio::spawn(accept_loop(listener, bridge));
+        // Advertise over mDNS only when LAN-exposed.
+        let mdns = if desired == BindScope::Lan {
+            let instance = ctx.instance_name();
+            let host = format!("{}.local.", sanitize_host(&instance));
+            match MdnsAdvertiser::start(&instance, &host, addr.port(), &ctx.fingerprint()) {
+                Ok(adv) => Some(adv),
+                Err(e) => {
+                    log::warn!("remote: mDNS advertisement failed: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
-        *guard = Some(Running { addr, accept_task, hook });
-        self.enabled.store(true, std::sync::atomic::Ordering::Release);
-        drop(guard);
-        Ok(self.status().await)
+        let accept_task = tokio::spawn(accept_loop(listener, bridge, ctx.clone()));
+
+        *guard = Some(Running { addr, accept_task, hook, mdns, scope: desired });
+        Ok(())
     }
 
     /// Stop accepting and flip `enabled` to false. In-flight per-socket tasks
@@ -197,28 +336,53 @@ impl RemoteServer {
             if let Some(hook) = running.hook {
                 hook.shutdown();
             }
+            if let Some(mdns) = running.mdns {
+                mdns.stop();
+            }
         }
         self.enabled.store(false, std::sync::atomic::Ordering::Release);
         self.status().await
     }
 }
 
-/// Accept loop: each inbound TCP connection becomes a WS connection driven by
-/// `handle_connection`. Errors on a single accept are logged, not fatal.
-async fn accept_loop(listener: TcpListener, bridge: Arc<RemoteBridge>) {
+/// Sanitize an instance name into a DNS-safe host label (alphanumeric + dash).
+fn sanitize_host(name: &str) -> String {
+    let s: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+        .collect();
+    if s.is_empty() {
+        "maverick".to_string()
+    } else {
+        s
+    }
+}
+
+/// Accept loop: each inbound TCP connection becomes a WS connection. Loopback
+/// peers are trusted (the local webview already has full Tauri-command access)
+/// and served directly. Non-loopback (LAN) peers MUST complete the Noise pairing
+/// handshake at the `/pair` upgrade path; an unauthenticated upgrade is rejected
+/// with WS close 4401. Errors on a single accept are logged, not fatal.
+async fn accept_loop(
+    listener: TcpListener,
+    bridge: Arc<RemoteBridge>,
+    security: Arc<crate::remote::auth_session::SecurityContext>,
+) {
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
-                // Belt-and-suspenders: only ever serve loopback peers even if the
-                // bind somehow widened. Drop anything non-local without a handshake.
-                if !peer.ip().is_loopback() {
-                    log::warn!("remote: refusing non-loopback peer {peer}");
-                    continue;
-                }
                 let bridge = bridge.clone();
+                let security = security.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(stream, bridge).await {
-                        log::debug!("remote: connection ended: {e}");
+                    if crate::remote::auth::requires_auth(&peer) {
+                        if let Err(e) =
+                            crate::remote::auth_session::serve_remote(stream, bridge, security)
+                                .await
+                        {
+                            log::debug!("remote: authenticated connection ended: {e}");
+                        }
+                    } else if let Err(e) = handle_connection(stream, bridge).await {
+                        log::debug!("remote: loopback connection ended: {e}");
                     }
                 });
             }
@@ -288,7 +452,7 @@ where
         };
         match frame {
             Message::Text(text) => {
-                handle_text(&text, &bridge, &conn, &out_tx).await;
+                handle_text(&text, &bridge, &conn, &out_tx, &LOOPBACK_GATE).await;
             }
             Message::Binary(_) => {
                 // MaverickProtocol is JSON text frames; binary is not part of the
@@ -321,15 +485,24 @@ where
     Ok(())
 }
 
-/// Decode one text frame and dispatch through the bridge, sending replies and
-/// (for attach) starting the live stream. A malformed frame yields a single
-/// `Error` reply rather than dropping the connection.
-async fn handle_text(
+/// The trusted-loopback gate shared by every plaintext local connection. Built
+/// once: a loopback gate is stateless (allows the full surface).
+static LOOPBACK_GATE: once_cell::sync::Lazy<crate::remote::auth::CapabilityGate> =
+    once_cell::sync::Lazy::new(crate::remote::auth::CapabilityGate::loopback);
+
+/// Decode one text frame and dispatch through the bridge under `gate`, sending
+/// replies and (for attach) starting the live stream. A malformed frame yields a
+/// single `Error` reply rather than dropping the connection. A verb the gate
+/// denies yields an `Error` too (never silently dropped, never executed).
+pub(crate) async fn handle_text(
     text: &str,
     bridge: &Arc<RemoteBridge>,
     conn: &crate::remote::connection::ConnectionManager,
     out_tx: &UnboundedSender<ServerMessage>,
+    gate: &crate::remote::auth::CapabilityGate,
 ) {
+    use crate::remote::auth::GateDecision;
+
     let msg = match serde_json::from_str::<crate::remote::ClientMessage>(text) {
         Ok(m) => m,
         Err(e) => {
@@ -339,6 +512,14 @@ async fn handle_text(
             return;
         }
     };
+    // Capability allowlist: a remote connection may only exercise the verbs its
+    // trust tier permits. PTY write / mutating verbs stay behind a paired session.
+    if gate.allows(&msg) == GateDecision::Deny {
+        let _ = out_tx.send(ServerMessage::Error {
+            message: "capability denied for this connection".into(),
+        });
+        return;
+    }
     let outcome = bridge.handle(msg).await;
     // Start the agent-event forward BEFORE sending replies so the client can't
     // miss an event that races in between the reply and the subscription. The

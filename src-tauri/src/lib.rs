@@ -78,10 +78,11 @@ pub fn run() {
             // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
             app.manage(crate::pty::PtyManager::new());
 
-            // Companion WebSocket server (Companion-3): loopback-only, OFF by
-            // default. Managed here so remote_start/stop/status can reach it, but
-            // nothing binds a listener until remote_start is called explicitly
-            // (auth/pairing arrives in Companion-5).
+            // Companion WebSocket server: OFF by default. Managed here so the
+            // remote_* commands can reach it, but nothing binds a listener until
+            // remote_start is called explicitly. The listener stays loopback-only
+            // until enabled AND a device is paired (Companion-5 QR/Noise pairing),
+            // at which point it widens to the LAN behind the Noise auth gate.
             app.manage(crate::remote::RemoteServer::new());
 
             // Compute paths from OS-resolved roots (home + app-data dir).
@@ -210,6 +211,9 @@ pub fn run() {
             remote_start,
             remote_stop,
             remote_status,
+            remote_pair,
+            remote_devices,
+            remote_revoke,
         ]);
 
     let app = builder
