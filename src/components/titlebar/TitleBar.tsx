@@ -4,7 +4,6 @@ import { useWorkbench } from "@/state/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOSPlatform } from "@/hooks/useOSPlatform";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import { WorkspaceBadges } from "./WorkspaceBadges";
 import { WindowControls } from "./WindowControls";
 
 async function startDrag() {
@@ -81,7 +80,6 @@ export function TitleBar() {
             {primarySideBarVisible && !collapsed ? "Hide" : "Show"} Primary Side Bar
           </TooltipContent>
         </Tooltip>
-        <WorkspaceBadges />
       </div>
 
       <div data-tauri-drag-region className="drag flex h-full items-center justify-center">

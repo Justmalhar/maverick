@@ -46,7 +46,11 @@ describe("Workbench", () => {
   it("lazy-renders settings panel when settings is open and closes via Escape", async () => {
     useWorkbench.setState({ ...initial, settingsOpen: true });
     renderWithProviders(<Workbench />);
-    await waitFor(() => expect(screen.getByTestId("settings-panel")).toBeInTheDocument());
+    // The settings panel is a lazy() import; under parallel-test CPU load the
+    // dynamic chunk can take longer than waitFor's 1s default, so give it room.
+    await waitFor(() => expect(screen.getByTestId("settings-panel")).toBeInTheDocument(), {
+      timeout: 5000,
+    });
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await waitFor(() => expect(useWorkbench.getState().settingsOpen).toBe(false));
   });

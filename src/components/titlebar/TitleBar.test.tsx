@@ -83,7 +83,7 @@ describe("TitleBar", () => {
     expect(useWorkbench.getState().layout.panelVisible).toBe(!before);
   });
 
-  it("renders WorkspaceBadges for open workspaces", () => {
+  it("does not render workspace badges (the editor tabs cover workspace switching)", () => {
     useWorkbench.setState({
       workspaces: [{
         id: "ws-x", projectId: "p", branch: "main", agentBackend: "claude",
@@ -91,7 +91,8 @@ describe("TitleBar", () => {
       }],
     });
     renderWithProviders(<TitleBar />);
-    expect(screen.getByTestId("workspace-badge-ws-x")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-badges")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-badge-ws-x")).not.toBeInTheDocument();
   });
 
   describe("below the responsive breakpoint", () => {
