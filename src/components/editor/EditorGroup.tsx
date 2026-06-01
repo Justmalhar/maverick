@@ -90,12 +90,21 @@ export function EditorGroup() {
                 !active && "keep-alive-hidden content-visibility-auto"
               )}
             >
-              <TerminalPane
-                ptyId={tab.ptyId}
-                paneId={tab.id}
-                isFocused={active}
-                onFocus={() => setActiveTerminalTab(tab.id)}
-              />
+              {tab.ptyId ? (
+                <TerminalPane
+                  ptyId={tab.ptyId}
+                  paneId={tab.id}
+                  isFocused={active}
+                  onFocus={() => setActiveTerminalTab(tab.id)}
+                />
+              ) : (
+                <div
+                  data-testid={`terminal-tab-starting-${tab.id}`}
+                  className="flex h-full items-center justify-center text-xs text-muted-foreground"
+                >
+                  Starting terminal…
+                </div>
+              )}
             </div>
           );
         })}

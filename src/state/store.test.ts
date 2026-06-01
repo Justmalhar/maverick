@@ -279,6 +279,15 @@ describe("workbench store", () => {
     useWorkbench.getState().removeTerminalTab("t1");
     expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
   });
+
+  it("setTerminalTabPty binds a spawned PTY to a pending tab and ignores unknown ids", () => {
+    useWorkbench.getState().addTerminalTab({ id: "t1", cwd: "/a", title: "a", ptyId: "" });
+    useWorkbench.getState().setTerminalTabPty("t1", "pty-99");
+    expect(useWorkbench.getState().terminalTabs.find((t) => t.id === "t1")?.ptyId).toBe("pty-99");
+    // a non-matching id leaves every tab untouched
+    useWorkbench.getState().setTerminalTabPty("nope", "pty-x");
+    expect(useWorkbench.getState().terminalTabs.find((t) => t.id === "t1")?.ptyId).toBe("pty-99");
+  });
 });
 
 describe("computeLiveWorkspaceIds", () => {

@@ -180,6 +180,21 @@ describe("EditorGroup", () => {
     expect(inactive).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("shows a Starting placeholder for a pending terminal tab (no ptyId yet)", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      systemTabs: [],
+      activeSystemTab: null,
+      terminalTabs: [{ id: "t1", cwd: "/a", title: "a", ptyId: "" }],
+      activeTerminalTabId: "t1",
+    });
+    renderWithProviders(<EditorGroup />);
+    expect(screen.getByTestId("terminal-tab-starting-t1")).toBeInTheDocument();
+    expect(screen.queryByTestId("mock-terminal-pane-t1")).not.toBeInTheDocument();
+  });
+
   it("focusing a terminal pane activates its tab", async () => {
     useWorkbench.setState({
       ...initial,

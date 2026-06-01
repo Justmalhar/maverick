@@ -6,6 +6,7 @@ import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTabs } from "./EditorTabs";
 import { useWorkbench } from "@/state/store";
 import { defaultTerminalCwd } from "@/lib/default-cwd";
+import { __resetTerminalShellCacheForTests } from "@/hooks/useTerminalTab";
 import { makeWorkspace, makePreset } from "@/test/fixtures";
 
 vi.mock("@/lib/tauri", async (orig) => {
@@ -25,6 +26,7 @@ vi.mock("@/lib/default-cwd", () => ({
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
+  __resetTerminalShellCacheForTests();
   useWorkbench.setState({
     ...initial,
     workspaces: [],
@@ -89,11 +91,10 @@ describe("EditorTabs", () => {
     await userEvent.click(screen.getByTestId("editor-tabs-new"));
     await userEvent.click(screen.getByTestId("editor-tabs-open-terminal-tab"));
 
-    await new Promise((r) => setTimeout(r, 0));
-
+    await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(1));
     const state = useWorkbench.getState();
-    expect(state.terminalTabs).toHaveLength(1);
     expect(state.terminalTabs[0].cwd).toBe("/Users/test/Desktop");
+    expect(state.terminalTabs[0].ptyId).toBe("pty-1");
     expect(state.activeTerminalTabId).toBe(state.terminalTabs[0].id);
   });
 

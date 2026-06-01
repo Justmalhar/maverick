@@ -136,6 +136,8 @@ interface WorkbenchState {
   addTerminalTab: (tab: TerminalTab) => void;
   removeTerminalTab: (id: string) => void;
   setActiveTerminalTab: (id: string | null) => void;
+  /** Bind a freshly-spawned PTY to an optimistically-added terminal tab. */
+  setTerminalTabPty: (id: string, ptyId: string) => void;
 }
 
 export const useWorkbench = create<WorkbenchState>()(
@@ -304,6 +306,10 @@ export const useWorkbench = create<WorkbenchState>()(
         terminalTabs: s.terminalTabs.some((t) => t.id === tab.id)
           ? s.terminalTabs
           : [...s.terminalTabs, tab],
+      })),
+    setTerminalTabPty: (id, ptyId) =>
+      set((s) => ({
+        terminalTabs: s.terminalTabs.map((t) => (t.id === id ? { ...t, ptyId } : t)),
       })),
     removeTerminalTab: (id) =>
       set((s) => ({
