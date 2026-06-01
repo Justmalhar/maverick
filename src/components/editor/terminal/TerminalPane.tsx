@@ -10,10 +10,15 @@ import { usePty } from "@/hooks/usePty";
 import { setLeafFocused } from "@/lib/providers/terminal-session";
 import { cn } from "@/lib/utils";
 
-// Concrete stack mirroring --font-mono. xterm measures char size off this, so a
-// CSS var() (which may not resolve in its offscreen measurement) is avoided.
+// The terminal renders arbitrary program output — including Powerline / Nerd
+// Font glyphs from prompts like powerlevel10k — so it prefers an installed Nerd
+// Font (MesloLGS NF is p10k's default) for full glyph coverage, then falls back
+// to Geist Mono and the platform monospace stack when none is installed. xterm
+// measures char size off the first resolved family, so every entry is a real
+// monospace. A concrete stack is used (not a CSS var) because xterm's offscreen
+// measurement may not resolve var().
 const MONO_FONT_STACK =
-  '"Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", "Roboto Mono", Consolas, "Liberation Mono", monospace';
+  '"MesloLGS NF", "MesloLGS Nerd Font", "Hack Nerd Font", "FiraCode Nerd Font", "JetBrainsMono Nerd Font", "Symbols Nerd Font", "Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", "Roboto Mono", Consolas, "Liberation Mono", monospace';
 
 interface Props {
   ptyId: string;
