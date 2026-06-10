@@ -16,6 +16,7 @@ import { AutomationRunner } from "./automation-runner";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
+import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
@@ -88,6 +89,10 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   const mcp = new MCPManager({ spawn: (() => fakeProc()) as Spawner, loader: config, projectPath: "/r" });
   const notifications = new NotificationService({ notifier: { write: () => {} } });
   const context = new ContextTracker(store, { ids });
+  const usage = new UsageTracker({
+    claudeDir: "/nonexistent/claude",
+    codexDir: "/nonexistent/codex",
+  });
   const attachments = new AttachmentStore({
     writeFile: () => {},
     mkdir: () => {},
@@ -100,7 +105,7 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   });
   return new RpcHandlers({
     store, process: proc, worktree, config, skills, diff, git,
-    presets, kanban, automations, mcp, notifications, context, attachments, fileTree,
+    presets, kanban, automations, mcp, notifications, context, usage, attachments, fileTree,
   });
 }
 
@@ -511,6 +516,15 @@ describe("RpcHandlers", () => {
   test("context.usage", async () => {
     const u = (await h.dispatch("context.usage", { sessionId: "s" })) as { tokensUsed: number };
     expect(u.tokensUsed).toBe(0);
+  });
+
+  test("usage.summary", async () => {
+    const s = (await h.dispatch("usage.summary", {})) as {
+      date: string;
+      backends: Array<{ backend: string }>;
+    };
+    expect(s.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(s.backends.map((b) => b.backend)).toEqual(["claude-code", "codex", "antigravity"]);
   });
 
   test("attachment.create", async () => {

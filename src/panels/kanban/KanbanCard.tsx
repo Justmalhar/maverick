@@ -120,6 +120,8 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          // rbd's DraggingStyle lacks the `--radix-*` index signature our React
+          // CSSProperties augmentation requires; the values are still valid CSS.
           style={provided.draggableProps.style as React.CSSProperties}
           data-testid="kanban-card"
           className={cn(
