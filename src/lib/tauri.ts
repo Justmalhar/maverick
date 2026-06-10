@@ -50,7 +50,7 @@ export async function workspaceList(projectId?: string): Promise<Workspace[]> {
 export async function workspaceCreate(
   projectId: string,
   projectPath: string,
-  branch: string,
+  branch: string | undefined,
   backend: string,
   baseBranch?: string
 ): Promise<Workspace> {
