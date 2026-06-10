@@ -25,7 +25,7 @@ export function useWorkspace() {
   const setBackends = useWorkbench((s) => s.setBackends);
 
   const create = useCallback(
-    async (projectId: string, branch: string, backend: string, baseBranch?: string) => {
+    async (projectId: string, branch: string | undefined, backend: string, baseBranch?: string) => {
       const project = useWorkbench.getState().projects.find((p) => p.id === projectId);
       if (!project) {
         throw new Error(`Cannot create workspace: project ${projectId} not found`);

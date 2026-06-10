@@ -17,7 +17,7 @@ import type { Attachment } from "@/lib/ipc";
 export interface ComposerPayload {
   prompt: string;
   projectId: string;
-  branch: string;
+  baseBranch: string;
   agentBackend: string;
   attachments: Attachment[];
 }
@@ -39,7 +39,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     activeWorkspace?.projectId ?? ""
   );
   const [branches, setBranches] = useState<string[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState("");
+  const [selectedBaseBranch, setSelectedBaseBranch] = useState("");
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
   const [selectedBackendId, setSelectedBackendId] = useState(
@@ -56,7 +56,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
       if (!project) return;
       setIsLoadingBranches(true);
       setBranchError(null);
-      setSelectedBranch("");
+      setSelectedBaseBranch("");
       try {
         const b = await gitBranches(project.path);
         setBranches(Array.isArray(b) ? b : []);
@@ -138,7 +138,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
   const canSend =
     prompt.trim().length > 0 &&
     !!selectedProjectId &&
-    !!selectedBranch &&
+    !!selectedBaseBranch &&
     !!selectedBackendId &&
     !isSending;
 
@@ -150,7 +150,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
       await onSend({
         prompt: prompt.trim(),
         projectId: selectedProjectId,
-        branch: selectedBranch,
+        baseBranch: selectedBaseBranch,
         agentBackend: selectedBackendId,
         attachments,
       });
@@ -228,14 +228,14 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         </Select>
 
         <Select
-          value={selectedBranch}
-          onValueChange={setSelectedBranch}
+          value={selectedBaseBranch}
+          onValueChange={setSelectedBaseBranch}
           disabled={!selectedProjectId || isLoadingBranches}
         >
           <SelectTrigger className="h-7 w-40 border-border/50 text-[11px]" data-testid="composer-branch">
             <SelectValue
               placeholder={
-                isLoadingBranches ? "Loading…" : (branchError ?? "Branch / Worktree")
+                isLoadingBranches ? "Loading…" : (branchError ?? "Base Branch")
               }
             />
           </SelectTrigger>
