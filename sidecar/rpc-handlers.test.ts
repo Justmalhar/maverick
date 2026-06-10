@@ -890,6 +890,9 @@ describe("RpcHandlers", () => {
       },
     });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() {
         return { workspaceId: "ws_add", worktreePath: `${dir}/wt` };
       },
@@ -949,21 +952,16 @@ describe("RpcHandlers", () => {
     expect(res.path).toBe(`${dir}/maverick.json`);
   });
 
-  it("workspace.create runs scripts.setup when configured", async () => {
-    const { mkdirSync, existsSync, readFileSync } = await import("fs");
-    const { handlers, dir, projectId, store } = makeWithTempProject();
-
-    await handlers.dispatch("project.settings.update", {
-      projectId,
-      patch: { scripts: { setup: "echo setup-ran > .setup-marker", run: "", archive: "" } },
-    });
-
-    const baseDir = `${dir}/.worktrees`;
-    mkdirSync(baseDir, { recursive: true });
+  it("workspace.create does NOT run scripts.setup (the Setup tab streams it)", async () => {
+    const { mkdirSync, existsSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
 
     const wtPath = `${dir}/wt-setup`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_setup", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -980,19 +978,22 @@ describe("RpcHandlers", () => {
       projectPath: dir,
       branch: "feat/setup",
       backend: "claude",
-    })) as { id: string; worktreePath: string };
+    })) as { id: string; worktreePath: string; status: string };
 
     expect(ws.worktreePath).toBe(wtPath);
-    expect(existsSync(`${wtPath}/.setup-marker`)).toBe(true);
-    expect(readFileSync(`${wtPath}/.setup-marker`, "utf8").trim()).toBe("setup-ran");
+    expect(ws.status).toBe("idle");
+    expect(existsSync(`${wtPath}/.setup-marker`)).toBe(false);
   });
 
-  it("workspace.create skips setup when scripts.setup is empty", async () => {
+  it("workspace.create with no setup script still creates the workspace", async () => {
     const { mkdirSync, existsSync } = await import("fs");
     const { dir, projectId, store } = makeWithTempProject();
     const wtPath = `${dir}/wt-no-setup`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_no_setup", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -1019,6 +1020,9 @@ describe("RpcHandlers", () => {
     if (existsSync(markerPath)) unlinkSync(markerPath);
 
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_arch", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -1047,6 +1051,9 @@ describe("RpcHandlers", () => {
     const wtPath = `${dir}/wt-no-archive`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_no_arch", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -1069,6 +1076,9 @@ describe("RpcHandlers", () => {
     mkdirSync(wtPath, { recursive: true });
     const order: string[] = [];
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_order", worktreePath: wtPath }; },
       async destroy() {
         // The row must still exist when the worktree is being removed.
@@ -1095,6 +1105,9 @@ describe("RpcHandlers", () => {
     const wtPath = `${dir}/wt-orphan`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_orphan", worktreePath: wtPath }; },
       async destroy() { throw new Error("remove and prune both failed"); },
       async list() { return []; },
@@ -1114,6 +1127,9 @@ describe("RpcHandlers", () => {
   it("workspace.destroy on an unknown workspace is a no-op", async () => {
     const { store } = makeWithTempProject();
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "x", worktreePath: "/x" }; },
       async destroy() { throw new Error("should not be called"); },
       async list() { return []; },
@@ -1125,63 +1141,133 @@ describe("RpcHandlers", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("workspace.create surfaces a setup-script failure as status=error", async () => {
+  it("workspace.create generates a unique callsign branch and title when branch is omitted", async () => {
     const { mkdirSync } = await import("fs");
     const { dir, projectId, store } = makeWithTempProject();
-    const wtPath = `${dir}/wt-setup-fail`;
+    const wtPath = `${dir}/wt-named`;
+    mkdirSync(wtPath, { recursive: true });
+    let received: { branch?: string; dirName?: string; baseBranch?: string } = {};
+    const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create(params: { branch: string; dirName?: string; baseBranch?: string }) {
+        received = params;
+        return { workspaceId: "ws_named", worktreePath: wtPath };
+      },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const fakeGit = {
+      async allBranchNames() { return ["main", "origin/main"]; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      git: fakeGit as never,
+      notifier: { write: () => {} },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: null, backend: "claude",
+    })) as { branch: string; title?: string };
+
+    expect(ws.branch.length).toBeGreaterThan(0);
+    expect(ws.branch).not.toBe("main");
+    expect(ws.title).toBeDefined();
+    expect(ws.title!.toLowerCase().replace(/ /g, "-")).toBe(ws.branch);
+    expect(received.branch).toBe(ws.branch);
+    expect(received.dirName).toBe(ws.branch);
+    // origin/main came from default settings branchFrom.
+    expect(received.baseBranch).toBe("origin/main");
+    expect(store.workspaceGet("ws_named")?.title).toBe(ws.title);
+  });
+
+  it("workspace.create generates a name even when branch listing fails", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-named-2`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
-      async create() { return { workspaceId: "ws_setup_fail", worktreePath: wtPath }; },
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create() { return { workspaceId: "ws_named_2", worktreePath: wtPath }; },
+      async destroy() { return { ok: true as const }; },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const fakeGit = {
+      async allBranchNames() { throw new Error("not a git repo"); },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({
+      store,
+      worktree: fakeWorktree as never,
+      git: fakeGit as never,
+      notifier: { write: () => {} },
+    });
+    const ws = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, backend: "claude",
+    })) as { branch: string };
+    expect(ws.branch.length).toBeGreaterThan(0);
+  });
+
+  it("workspace.create passes an explicit baseBranch ahead of settings", async () => {
+    const { mkdirSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const wtPath = `${dir}/wt-base`;
+    mkdirSync(wtPath, { recursive: true });
+    let received: { baseBranch?: string; base?: string } = {};
+    const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create(params: { baseBranch?: string; base?: string }) {
+        received = params;
+        return { workspaceId: "ws_base", worktreePath: wtPath };
+      },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
       async prune() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
-    await h.dispatch("project.settings.update", {
-      projectId,
-      patch: { scripts: { setup: "exit 7", run: "", archive: "" } },
+    await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/x", backend: "claude", baseBranch: "develop",
     });
-    const ws = (await h.dispatch("workspace.create", {
-      projectId, projectPath: dir, branch: "feat/setup-fail", backend: "claude",
-    })) as { id: string; status: string; setupError?: string };
-    expect(ws.status).toBe("error");
-    expect(ws.setupError).toContain("code 7");
-    // The error status is persisted, not just returned.
-    expect(store.workspaceGet(ws.id)?.status).toBe("error");
+    expect(received.baseBranch).toBe("develop");
+    // Worktrees default to the home-rooted base, outside the user's checkout.
+    expect(received.base).toContain("/.maverick/");
+    expect(received.base).toContain("/worktrees");
+    expect(received.base!.startsWith(dir)).toBe(false);
   });
 
-  it("workspace.create surfaces a setup-script spawn error", async () => {
-    const { mkdirSync } = await import("fs");
-    const { dir, projectId, store } = makeWithTempProject();
-    const wtPath = `${dir}/wt-setup-throw`;
-    mkdirSync(wtPath, { recursive: true });
-    const fakeWorktree = {
-      async create() { return { workspaceId: "ws_setup_throw", worktreePath: wtPath }; },
-      async destroy() { return { ok: true as const }; },
-      async list() { return []; },
-      async prune() { return { ok: true as const }; },
-    };
-    const fakeProcess = {
-      async spawnOnce() { throw new Error("ENOENT: /bin/sh missing"); },
-      spawnOnceHandle() { throw new Error("unused"); },
+  it("git.remote_info dispatches to the git module", async () => {
+    const { store } = makeWithTempProject();
+    const fakeGit = {
+      async remoteInfo(p: { worktreePath: string; remote?: string }) {
+        return { provider: "bitbucket", host: "bitbucket.org", owner: "o", repo: "r", webUrl: "https://bitbucket.org/o/r", remoteUrl: "u", requested: p.remote };
+      },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
-    const h = new RpcHandlers({
-      store,
-      worktree: fakeWorktree as never,
-      process: fakeProcess as never,
-      notifier: { write: () => {} },
-    });
-    await h.dispatch("project.settings.update", {
-      projectId,
-      patch: { scripts: { setup: "anything", run: "", archive: "" } },
-    });
-    const ws = (await h.dispatch("workspace.create", {
-      projectId, projectPath: dir, branch: "feat/setup-throw", backend: "claude",
-    })) as { status: string; setupError?: string };
-    expect(ws.status).toBe("error");
-    expect(ws.setupError).toContain("ENOENT");
+    const h = new RpcHandlers({ store, git: fakeGit as never, notifier: { write: () => {} } });
+    const info = (await h.dispatch("git.remote_info", { worktreePath: "/w" })) as { provider: string };
+    expect(info.provider).toBe("bitbucket");
+  });
+
+  it("ai.commit_message dispatches to the generator", async () => {
+    const { store } = makeWithTempProject();
+    const fakeGen = {
+      async generate(p: { worktreePath: string }) {
+        return { message: `feat: from ${p.worktreePath}` };
+      },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, commitMessage: fakeGen as never, notifier: { write: () => {} } });
+    const r = (await h.dispatch("ai.commit_message", { worktreePath: "/w" })) as { message: string };
+    expect(r.message).toBe("feat: from /w");
   });
 
   it("workspace.destroy kills a hung archive child when the timeout wins", async () => {
@@ -1191,6 +1277,9 @@ describe("RpcHandlers", () => {
     mkdirSync(wtPath, { recursive: true });
     let killed = false;
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_arch_to", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -1239,6 +1328,9 @@ describe("RpcHandlers", () => {
     const wtPath = `${dir}/wt-archive-killthrow`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_arch_kt", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },
@@ -1283,6 +1375,9 @@ describe("RpcHandlers", () => {
     const wtPath = `${dir}/wt-archive-err`;
     mkdirSync(wtPath, { recursive: true });
     const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
       async create() { return { workspaceId: "ws_arch_err", worktreePath: wtPath }; },
       async destroy() { return { ok: true as const }; },
       async list() { return []; },

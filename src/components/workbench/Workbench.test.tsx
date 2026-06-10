@@ -25,8 +25,6 @@ describe("Workbench", () => {
     renderWithProviders(<Workbench />);
     expect(screen.getByTestId("workbench")).toBeInTheDocument();
     expect(screen.getByTestId("titlebar")).toBeInTheDocument();
-    expect(screen.getByTestId("activitybar")).toBeInTheDocument();
-    expect(screen.getByTestId("statusbar")).toBeInTheDocument();
     expect(screen.getByTestId("primarysidebar-panel")).toBeInTheDocument();
     expect(screen.getByTestId("auxiliarybar-panel")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("bottom-panel")).toBeInTheDocument());

@@ -131,16 +131,18 @@ describe("GitModule methods", () => {
     await expect(new GitModule({ shell }).push({ worktreePath: "/w" })).rejects.toThrow(/rejected/);
   });
 
-  test("prCreate pushes the branch then runs gh pr create --fill", async () => {
+  test("prCreate on GitHub pushes the branch then runs gh pr create --fill", async () => {
     const { shell, calls } = transcript([
       { stdout: "feature-x\n" }, // rev-parse --abbrev-ref HEAD
       {}, // git push -u origin feature-x
+      { stdout: "git@github.com:o/r.git\n" }, // remote get-url origin
       { stdout: "https://github.com/o/r/pull/3\n" }, // gh pr create
     ]);
     const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
     expect(calls[0]).toEqual(["git", "-C", "/w", "rev-parse", "--abbrev-ref", "HEAD"]);
     expect(calls[1]).toEqual(["git", "-C", "/w", "push", "-u", "origin", "feature-x"]);
-    expect(calls[2]).toEqual(["gh", "pr", "create", "--head", "feature-x", "--fill"]);
+    expect(calls[2]).toEqual(["git", "-C", "/w", "remote", "get-url", "origin"]);
+    expect(calls[3]).toEqual(["gh", "pr", "create", "--head", "feature-x", "--fill"]);
     expect(result.url).toBe("https://github.com/o/r/pull/3");
   });
 
@@ -148,6 +150,7 @@ describe("GitModule methods", () => {
     const { shell, calls } = transcript([
       { stdout: "feature-y\n" },
       {},
+      { stdout: "https://github.com/o/r.git\n" },
       { stdout: "https://github.com/o/r/pull/4\n" },
     ]);
     await new GitModule({ shell }).prCreate({
@@ -156,7 +159,7 @@ describe("GitModule methods", () => {
       body: "Details",
       base: "develop",
     });
-    expect(calls[2]).toEqual([
+    expect(calls[3]).toEqual([
       "gh", "pr", "create", "--head", "feature-y",
       "--base", "develop", "--title", "My PR", "--body", "Details",
     ]);
@@ -170,13 +173,133 @@ describe("GitModule methods", () => {
     await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/push rejected/);
   });
 
-  test("prCreate throws when gh fails", async () => {
+  test("prCreate falls back to the compare URL when gh is unauthenticated", async () => {
     const { shell } = transcript([
       { stdout: "feature-q\n" },
       {},
+      { stdout: "git@github.com:o/r.git\n" },
       { exitCode: 1, stderr: "gh: not authenticated" },
     ]);
-    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/not authenticated/);
+    const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w", base: "main" });
+    expect(result.url).toBe("https://github.com/o/r/compare/main...feature-q?expand=1");
+  });
+
+  test("prCreate throws when gh fails for a non-auth reason", async () => {
+    const { shell } = transcript([
+      { stdout: "feature-q\n" },
+      {},
+      { stdout: "git@github.com:o/r.git\n" },
+      { exitCode: 1, stderr: "gh: validation failed" },
+    ]);
+    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/validation failed/);
+  });
+
+  test("prCreate falls back to the compare URL when gh is not installed", async () => {
+    const calls: string[][] = [];
+    const steps = [
+      { stdout: "feature-q\n" },
+      {},
+      { stdout: "git@github.com:o/r.git\n" },
+    ];
+    let i = 0;
+    const shell: Shell = {
+      async text(cmd) {
+        calls.push(cmd);
+        return steps[i++]?.stdout ?? "";
+      },
+      async run(cmd) {
+        calls.push(cmd);
+        if (cmd[0] === "gh") throw new Error("spawn gh ENOENT");
+        const st = steps[i++] ?? {};
+        return { stdout: st.stdout ?? "", stderr: "", exitCode: 0 };
+      },
+    };
+    const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
+    expect(result.url).toBe("https://github.com/o/r/compare/main...feature-q?expand=1");
+  });
+
+  test("prCreate rethrows non-ENOENT spawn errors from gh", async () => {
+    const steps = [
+      { stdout: "feature-q\n" },
+      {},
+      { stdout: "git@github.com:o/r.git\n" },
+    ];
+    let i = 0;
+    const shell: Shell = {
+      async text(cmd) {
+        return steps[i++]?.stdout ?? "";
+      },
+      async run(cmd) {
+        if (cmd[0] === "gh") throw new Error("permission denied");
+        const st = steps[i++] ?? {};
+        return { stdout: st.stdout ?? "", stderr: "", exitCode: 0 };
+      },
+    };
+    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/permission denied/);
+  });
+
+  test("prCreate on Bitbucket returns the pull-requests/new URL without gh", async () => {
+    const { shell, calls } = transcript([
+      { stdout: "feature-b\n" },
+      {},
+      { stdout: "git@bitbucket.org:team/repo.git\n" },
+    ]);
+    const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w", base: "develop" });
+    expect(result.url).toBe(
+      "https://bitbucket.org/team/repo/pull-requests/new?source=feature-b&dest=develop"
+    );
+    expect(calls.some((c) => c[0] === "gh")).toBe(false);
+  });
+
+  test("prCreate on GitLab returns the merge_requests/new URL", async () => {
+    const { shell } = transcript([
+      { stdout: "feature-g\n" },
+      {},
+      { stdout: "https://gitlab.com/team/repo.git\n" },
+    ]);
+    const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
+    expect(result.url).toBe(
+      "https://gitlab.com/team/repo/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature-g"
+    );
+  });
+
+  test("prCreate throws after push when no provider is detected", async () => {
+    const { shell } = transcript([
+      { stdout: "feature-u\n" },
+      {},
+      { stdout: "git@git.internal.corp:team/repo.git\n" },
+    ]);
+    await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(
+      /no supported provider/
+    );
+  });
+
+  test("remoteInfo parses the origin URL", async () => {
+    const { shell, calls } = transcript([{ stdout: "git@github.com:o/r.git\n" }]);
+    const info = await new GitModule({ shell }).remoteInfo({ worktreePath: "/w" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "remote", "get-url", "origin"]);
+    expect(info.provider).toBe("github");
+    expect(info.owner).toBe("o");
+    expect(info.repo).toBe("r");
+  });
+
+  test("remoteInfo throws on an unparseable URL", async () => {
+    const { shell } = transcript([{ stdout: "not-a-url\n" }]);
+    await expect(new GitModule({ shell }).remoteInfo({ worktreePath: "/w" })).rejects.toThrow(
+      /unrecognized remote URL/
+    );
+  });
+
+  test("allBranchNames merges local and remote short names, skipping HEAD aliases", async () => {
+    const { shell } = transcript([
+      { stdout: "main\nfeature-a\norigin/HEAD\norigin/main\norigin/feature-b\n" },
+    ]);
+    const names = await new GitModule({ shell }).allBranchNames({ projectPath: "/p" });
+    expect(names).toContain("main");
+    expect(names).toContain("feature-a");
+    expect(names).toContain("origin/feature-b");
+    expect(names).toContain("feature-b");
+    expect(names).not.toContain("origin/HEAD");
   });
 
   test("pull runs git pull", async () => {

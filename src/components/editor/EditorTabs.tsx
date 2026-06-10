@@ -7,9 +7,9 @@ import {
   CheckSquare2,
   Zap,
   Plug,
+  Sparkles,
   TerminalSquare,
   X,
-  SquareTerminal,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
@@ -38,9 +38,11 @@ const SYSTEM_TAB_META: Record<
   kanban: { label: "Tasks", icon: CheckSquare2, shortcut: "⌘⇧K" },
   automations: { label: "Automations", icon: Zap, shortcut: "⌘⇧A" },
   mcps: { label: "MCP Servers", icon: Plug },
+  skills: { label: "Skills", icon: Sparkles },
+  "skill-editor": { label: "New Skill", icon: Sparkles },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps", "skills"];
 
 export function EditorTabs() {
   const workspaces = useWorkbench((s) => s.workspaces);
@@ -54,17 +56,9 @@ export function EditorTabs() {
   const closeSystemTab = useWorkbench((s) => s.closeSystemTab);
   const setActiveSystemTab = useWorkbench((s) => s.setActiveSystemTab);
   const setCommandPaletteOpen = useWorkbench((s) => s.setCommandPaletteOpen);
-  const layout = useWorkbench((s) => s.layout);
-  const togglePanel = useWorkbench((s) => s.togglePanel);
-
   const projectPath = useProjectSettingsStore((s) => s.data?.rootPath);
   const { saveCurrentLayout } = usePresets(projectPath);
   const [saveLayoutFor, setSaveLayoutFor] = useState<string | null>(null);
-
-  const openTerminal = () => {
-    if (!layout.panelVisible) togglePanel();
-    window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
-  };
 
   const handleTabContextMenu = (e: React.MouseEvent, workspaceId: string) => {
     e.preventDefault();
@@ -246,15 +240,6 @@ export function EditorTabs() {
                 </DropdownMenuItem>
               );
             })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={openTerminal}
-              data-testid="editor-tabs-open-terminal"
-            >
-              <SquareTerminal className="h-3.5 w-3.5" />
-              <span className="flex-1">New Terminal</span>
-              <kbd className="text-[10px] text-muted-foreground">⌘⇧T</kbd>
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
               <span className="flex-1">All commands…</span>

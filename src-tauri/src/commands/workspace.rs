@@ -8,7 +8,7 @@ pub async fn workspace_create(
     state: State<'_, AppState>,
     project_id: String,
     project_path: String,
-    branch: String,
+    branch: Option<String>,
     backend: String,
     base_branch: Option<String>,
 ) -> Result<Value, String> {

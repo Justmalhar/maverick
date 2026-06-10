@@ -24,7 +24,7 @@ interface PanelLayout {
   auxiliaryView: AuxiliaryView;
 }
 
-export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps";
+export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor";
 
 export interface PreviewFile {
   /** Absolute path of the file being previewed. */
@@ -70,6 +70,10 @@ interface WorkbenchState {
   // Active file preview shown in the AuxiliaryBar "preview" tab.
   previewFile: PreviewFile | null;
 
+  // Workspaces whose setup script should auto-run in the Panel's Setup tab the
+  // next time they are active (set right after workspace.create returns).
+  pendingSetupIds: string[];
+
   // Overlays
   commandPaletteOpen: boolean;
   quickOpenOpen: boolean;
@@ -96,6 +100,8 @@ interface WorkbenchState {
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
+  queueSetup: (workspaceId: string) => void;
+  clearPendingSetup: (workspaceId: string) => void;
 
   // Preview
   openPreview: (file: PreviewFile) => void;
@@ -169,6 +175,8 @@ export const useWorkbench = create<WorkbenchState>()(
 
     previewFile: null,
 
+    pendingSetupIds: [],
+
     commandPaletteOpen: false,
     quickOpenOpen: false,
     presetLauncherOpen: false,
@@ -228,6 +236,18 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({ splitTrees: { ...s.splitTrees, [workspaceId]: tree } })),
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
+    queueSetup: (workspaceId) =>
+      set((s) => ({
+        pendingSetupIds: s.pendingSetupIds.includes(workspaceId)
+          ? s.pendingSetupIds
+          : [...s.pendingSetupIds, workspaceId],
+        // Setup output streams in the bottom Panel; make sure it is on screen.
+        layout: { ...s.layout, auxiliaryBarVisible: true, panelVisible: true },
+      })),
+    clearPendingSetup: (workspaceId) =>
+      set((s) => ({
+        pendingSetupIds: s.pendingSetupIds.filter((id) => id !== workspaceId),
+      })),
 
     openPreview: (file) =>
       set((s) => ({

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { renderWithProviders, screen, fireEvent } from "@/test/utils";
+import { renderWithProviders, screen, fireEvent, act } from "@/test/utils";
 import { TerminalPane } from "./TerminalPane";
+import { __testing__ as fileDropTesting } from "@/lib/file-drop";
 import {
   TerminalRegistry,
   type TerminalProvider,
@@ -135,6 +136,102 @@ describe("TerminalPane", () => {
     TerminalRegistry.register(provider);
     renderWithProviders(<TerminalPane ptyId="p1" paneId="pane-2" isFocused onFocus={() => {}} />);
     expect(screen.getByTestId("terminal-pane-pane-2").className).toMatch(/ring-primary/);
+  });
+
+  it("native file drop pastes the shell-escaped path into the PTY and focuses the pane", async () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    const onFocus = vi.fn();
+    const onData = vi.fn();
+    renderWithProviders(
+      <TerminalPane ptyId="p-drop" paneId="pane-drop" isFocused={false} onFocus={onFocus} onData={onData} />
+    );
+    const pane = screen.getByTestId("terminal-pane-pane-drop");
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    act(() => {
+      fileDropTesting.handleEvent({
+        type: "drop",
+        paths: ["/tmp/Screenshot 2026-06-10 at 9.37.39 PM.png"],
+        position: { x: 100, y: 100 },
+      });
+    });
+
+    const expected = "'/tmp/Screenshot 2026-06-10 at 9.37.39 PM.png' ";
+    expect(onData).toHaveBeenCalledWith(expected);
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "p-drop", data: expected })
+    );
+    expect(onFocus).toHaveBeenCalledWith("pane-drop");
+    // Mount auto-focus + post-drop focus.
+    expect(mountedHandle.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops multiple files as space-separated escaped paths", async () => {
+    const { provider } = makeProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(
+      <TerminalPane ptyId="p-multi" paneId="pane-multi" isFocused={false} onFocus={() => {}} />
+    );
+    const pane = screen.getByTestId("terminal-pane-pane-multi");
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    act(() => {
+      fileDropTesting.handleEvent({
+        type: "drop",
+        paths: ["/a/one.png", "/b two/img.png"],
+        position: { x: 10, y: 10 },
+      });
+    });
+
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_write", {
+        ptyId: "p-multi",
+        data: "/a/one.png '/b two/img.png' ",
+      })
+    );
+  });
+
+  it("shows the drop overlay while a drag hovers the pane and hides it after", () => {
+    const { provider } = makeProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(
+      <TerminalPane ptyId="p-ovl" paneId="pane-ovl" isFocused={false} onFocus={() => {}} />
+    );
+    const pane = screen.getByTestId("terminal-pane-pane-ovl");
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    act(() => {
+      fileDropTesting.handleEvent({ type: "enter", paths: ["/x"], position: { x: 10, y: 10 } });
+    });
+    expect(screen.getByTestId("terminal-pane-drop-pane-ovl")).toBeInTheDocument();
+    expect(screen.getByText(/Drop to insert path/)).toBeInTheDocument();
+
+    act(() => {
+      fileDropTesting.handleEvent({ type: "leave" });
+    });
+    expect(screen.queryByTestId("terminal-pane-drop-pane-ovl")).not.toBeInTheDocument();
+  });
+
+  it("unregisters its drop target on unmount", () => {
+    const { provider } = makeProvider();
+    TerminalRegistry.register(provider);
+    const before = fileDropTesting.targetCount();
+    const { unmount } = renderWithProviders(
+      <TerminalPane ptyId="p-un" paneId="pane-un" isFocused={false} onFocus={() => {}} />
+    );
+    expect(fileDropTesting.targetCount()).toBe(before + 1);
+    unmount();
+    expect(fileDropTesting.targetCount()).toBe(before);
   });
 });
 

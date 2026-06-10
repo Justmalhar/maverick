@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FileDown } from "lucide-react";
 import {
   TerminalRegistry,
   type TerminalHandle,
@@ -8,6 +9,7 @@ import {
 import { useThemeContext } from "@/themes/theme-provider";
 import { usePty } from "@/hooks/usePty";
 import { setLeafFocused } from "@/lib/providers/terminal-session";
+import { registerFileDropTarget, shellEscapePaths } from "@/lib/file-drop";
 import { cn } from "@/lib/utils";
 
 // The terminal renders arbitrary program output — including Powerline / Nerd
@@ -51,9 +53,11 @@ export function TerminalPane({
   onOutput,
   onExit,
 }: Props) {
+  const paneRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<TerminalHandle | null>(null);
   const pooledRef = useRef<PooledTerminalHandle | null>(null);
+  const [dropActive, setDropActive] = useState(false);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
   const onOutputRef = useRef(onOutput);
@@ -149,6 +153,30 @@ export function TerminalPane({
     else if (!visible) pooled.release();
   }, [visible]);
 
+  // Native OS file drops (Tauri swallows DOM drag events): paste the dropped
+  // paths into this PTY shell-escaped, exactly like dropping onto Terminal.app.
+  // CLIs like `claude` read images/files by path, so this is how attachments
+  // reach the agent. Routed through the same path as keystrokes so the usage
+  // recorder sees it as typed input.
+  const onFocusRef = useRef(onFocus);
+  onFocusRef.current = onFocus;
+  useEffect(() => {
+    const el = paneRef.current;
+    /* v8 ignore next — ref is always attached before effects run */
+    if (!el) return;
+    return registerFileDropTarget(el, {
+      onDragState: setDropActive,
+      onPaths: (paths) => {
+        const text = `${shellEscapePaths(paths)} `;
+        onDataRef.current?.(text);
+        void write(text);
+        onFocusRef.current(paneId);
+        if (pooledRef.current) pooledRef.current.focus();
+        else handleRef.current?.focus();
+      },
+    });
+  }, [paneId, write]);
+
   // Refocus when this pane becomes the active one (e.g. tab/pane switch). Mark
   // the leaf focused so the renderer pool never evicts the active terminal's
   // slot under pressure; clear it on blur/unmount.
@@ -163,6 +191,7 @@ export function TerminalPane({
 
   return (
     <div
+      ref={paneRef}
       data-testid={`terminal-pane-${paneId}`}
       onMouseDown={() => onFocus(paneId)}
       className={cn(
@@ -171,6 +200,17 @@ export function TerminalPane({
       )}
     >
       <div ref={containerRef} className="absolute inset-0" />
+      {dropActive && (
+        <div
+          data-testid={`terminal-pane-drop-${paneId}`}
+          className="pointer-events-none absolute inset-0 z-overlay flex items-center justify-center rounded-sm border border-dashed border-accent bg-accent/10"
+        >
+          <span className="flex items-center gap-1.5 rounded-md bg-background/80 px-2.5 py-1 text-[11px] font-medium text-foreground">
+            <FileDown className="h-3.5 w-3.5 text-accent" />
+            Drop to insert path
+          </span>
+        </div>
+      )}
     </div>
   );
 }

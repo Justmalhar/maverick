@@ -6,7 +6,6 @@ import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { Panel } from "./Panel";
-import { __testing__ as bottomTerminalTesting } from "./BottomTerminal";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 
 vi.mock("@/hooks/useScriptRunner");
@@ -22,7 +21,6 @@ const BASE_SETTINGS = (overrides: object = {}) => ({
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
-  bottomTerminalTesting.ptyCache.clear();
   vi.mocked(useScriptRunner).mockReturnValue({
     state: "idle", exitCode: null, startedAt: null, output: "",
     start: vi.fn(), stop: vi.fn(),
@@ -127,12 +125,11 @@ describe("Panel", () => {
     await userEvent.click(screen.getByRole("button", { name: /Open Project Settings/i }));
   });
 
-  it("maverick:panel:tab event switches to terminal tab", async () => {
-    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-bottom" } as never);
+  it("maverick:panel:tab event switches to the run tab", async () => {
     renderWithProviders(<Panel />);
-    fireEvent(window, new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+    fireEvent(window, new CustomEvent("maverick:panel:tab", { detail: "run" }));
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("pty_spawn", expect.objectContaining({ command: "/bin/zsh" }))
+      expect(screen.getByRole("button", { name: /Add run script/i })).toBeInTheDocument()
     );
   });
 
@@ -142,16 +139,43 @@ describe("Panel", () => {
     expect(screen.getByTestId("panel-tab-setup")).toBeInTheDocument();
   });
 
-  it("Terminal tab renders the bottom terminal", async () => {
-    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-bottom" } as never);
+  it("auto-runs a pending setup once when settings for the project are loaded", async () => {
+    const mockStart = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "idle", exitCode: null, startedAt: null, output: "",
+      start: mockStart, stop: vi.fn(),
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "bun install", run: "", archive: "" } }), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    useWorkbench.setState({ pendingSetupIds: ["w1"] } as never);
     renderWithProviders(<Panel />);
-    await userEvent.click(screen.getByTestId("panel-tab-terminal"));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("pty_spawn", expect.objectContaining({
-        command: "/bin/zsh",
-        args: ["-l"],
-        cwd: "/p/w",
-      }))
-    );
+    await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1));
+    expect(useWorkbench.getState().pendingSetupIds).toEqual([]);
+  });
+
+  it("does NOT auto-run setup while the loaded settings belong to another project", () => {
+    const mockStart = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "idle", exitCode: null, startedAt: null, output: "",
+      start: mockStart, stop: vi.fn(),
+    });
+    // Stale settings: store still holds project p2's data.
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS({ scripts: { setup: "rm -rf other", run: "", archive: "" } }), projectId: "p2", status: "loaded", dirty: {}, lastError: null });
+    useWorkbench.setState({ pendingSetupIds: ["w1"] } as never);
+    renderWithProviders(<Panel />);
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(useWorkbench.getState().pendingSetupIds).toEqual(["w1"]);
+  });
+
+  it("clears a pending setup without starting when the project has no setup script", async () => {
+    const mockStart = vi.fn();
+    vi.mocked(useScriptRunner).mockReturnValue({
+      state: "idle", exitCode: null, startedAt: null, output: "",
+      start: mockStart, stop: vi.fn(),
+    });
+    useProjectSettingsStore.setState({ data: BASE_SETTINGS(), projectId: "p1", status: "loaded", dirty: {}, lastError: null });
+    useWorkbench.setState({ pendingSetupIds: ["w1"] } as never);
+    renderWithProviders(<Panel />);
+    await waitFor(() => expect(useWorkbench.getState().pendingSetupIds).toEqual([]));
+    expect(mockStart).not.toHaveBeenCalled();
   });
 });

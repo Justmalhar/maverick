@@ -272,7 +272,18 @@ export type ActivityView =
   | "browser"
   | "settings";
 
-export type AuxiliaryView = "files" | "diff" | "preview" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "preview" | "none";
+
+export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
+
+export interface RemoteInfo {
+  provider: GitProvider;
+  host: string;
+  owner: string;
+  repo: string;
+  webUrl: string;
+  remoteUrl: string;
+}
 
 export interface FileReadResult {
   content: string;

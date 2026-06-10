@@ -43,9 +43,10 @@ pub use file_tree::{
     fs_watch_stop,
 };
 pub use git::{
-    git_blame, git_branch_list, git_branches, git_checkout, git_cherry_pick, git_commit,
-    git_conflicts, git_diff_stat, git_fetch, git_log, git_pull, git_push, git_resolve_conflict,
-    git_stash_apply, git_stash_drop, git_stash_list, git_stash_pop,
+    ai_commit_message, git_blame, git_branch_list, git_branches, git_checkout, git_cherry_pick,
+    git_commit, git_conflicts, git_diff_stat, git_fetch, git_log, git_pull, git_push,
+    git_remote_info, git_resolve_conflict, git_stash_apply, git_stash_drop, git_stash_list,
+    git_stash_pop,
 };
 pub use instructions::instructions_resolve;
 pub use kanban::{kanban_list, kanban_upsert};
@@ -65,6 +66,6 @@ pub use project_settings::{
 };
 pub use pty::{pty_close_all, pty_kill, pty_resize, pty_spawn, pty_write};
 pub use shell::default_shell;
-pub use skills::{skills_list, skills_run};
+pub use skills::{skills_create_global, skills_list, skills_list_global, skills_run};
 pub use usage::usage_summary;
 pub use workspace::{workspace_create, workspace_destroy, workspace_list};

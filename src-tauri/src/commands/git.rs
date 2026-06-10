@@ -267,3 +267,31 @@ pub async fn git_push(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn git_remote_info(
+    state: State<'_, AppState>,
+    worktree_path: String,
+    remote: Option<String>,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "git.remote_info",
+            json!({ "worktreePath": worktree_path, "remote": remote }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_commit_message(
+    state: State<'_, AppState>,
+    worktree_path: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("ai.commit_message", json!({ "worktreePath": worktree_path }))
+        .await
+        .map_err(|e| e.to_string())
+}

@@ -24,6 +24,16 @@ vi.mock("@tauri-apps/api/window", () => ({
   }),
 }));
 
+// TerminalPane registers a native file-drop target (src/lib/file-drop.ts)
+// which subscribes via getCurrentWebview().onDragDropEvent; under jsdom that
+// would reach into window.__TAURI_INTERNALS__ and throw. Drop-specific tests
+// drive the manager through its __testing__ surface instead.
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: vi.fn().mockResolvedValue(() => {}),
+  }),
+}));
+
 // Auto-update plugins (P3-B). VersionSettings mounts useUpdater on every
 // settings render, so a default no-op mock keeps unrelated tests green.
 // `check()` resolves to null (up to date) by default; the dedicated

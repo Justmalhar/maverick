@@ -37,3 +37,35 @@ pub async fn skills_run(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn skills_list_global(state: State<'_, AppState>) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("skills.listGlobal", json!({}))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn skills_create_global(
+    state: State<'_, AppState>,
+    name: String,
+    description: String,
+    prompt: Option<String>,
+    backend: Option<String>,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "skills.createGlobal",
+            json!({
+                "name": name,
+                "description": description,
+                "prompt": prompt,
+                "backend": backend,
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}

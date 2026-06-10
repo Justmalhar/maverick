@@ -1,5 +1,7 @@
+import { basename } from "path";
 import { ConfigLoader } from "./config-loader";
-import { WorktreeManager } from "./worktree-manager";
+import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
+import { slugify } from "./name-generator";
 import { ProcessManager } from "./process-manager";
 import type { SQLiteStore } from "./sqlite-store";
 import type { PresetNode, WorkspacePreset } from "./types";
@@ -71,10 +73,13 @@ export class PresetLauncher {
 
   async launch(params: LaunchParams): Promise<LaunchResult> {
     const branch = params.preset.baseBranch ?? params.baseBranch ?? "main";
+    const presetBranch = `${params.preset.name}-${Date.now()}`;
     const { workspaceId, worktreePath } = await this.worktree.create({
       projectPath: params.projectPath,
-      branch: `${params.preset.name}-${Date.now()}`,
+      branch: presetBranch,
       baseBranch: branch,
+      base: defaultWorktreeRoot(basename(params.projectPath)),
+      dirName: slugify(presetBranch),
     });
     const ptyIds: string[] = [];
     const browserPanes: Array<{ url?: string }> = [];

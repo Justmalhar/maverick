@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
 import type { Workspace, SplitNode } from "@/lib/ipc";
-import { splitNode, removeNode, canSplit, findNeighbor, type FocusDirection } from "@/lib/splitnode";
+import { splitNode, removeNode, canSplit, findNeighbor, firstLeafId, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
 import { killLeaf } from "./TerminalLeaf";
 
@@ -32,7 +32,16 @@ export function TerminalView({ workspace, visible = true }: Props) {
     }
   }, [tree, workspace, setSplitTree]);
 
+  // Default the focused pane to the tree's first leaf so split/close shortcuts
+  // act on a sane target before the user has clicked a pane.
   useEffect(() => {
+    if (tree && !focusedPaneId) setFocusedPaneId(firstLeafId(tree));
+  }, [tree, focusedPaneId]);
+
+  useEffect(() => {
+    // Split events are global; only the active (visible) view should react, or
+    // a single ⌘D would split every keep-alive-mounted terminal workspace.
+    if (!visible) return;
     function onSplit(direction: "h" | "v") {
       const current = useWorkbench.getState().splitTrees[workspace.id];
       if (!current || !focusedPaneId) return;
@@ -64,9 +73,10 @@ export function TerminalView({ workspace, visible = true }: Props) {
       window.removeEventListener("maverick:terminal:splitV", splitV);
       window.removeEventListener("maverick:terminal:closePane", onClose);
     };
-  }, [focusedPaneId, workspace, setSplitTree]);
+  }, [focusedPaneId, workspace, setSplitTree, visible]);
 
   useEffect(() => {
+    if (!visible) return;
     function onFocusDirection(e: Event) {
       const direction = (e as CustomEvent<FocusDirection>).detail;
       const current = useWorkbench.getState().splitTrees[workspace.id];
@@ -78,7 +88,7 @@ export function TerminalView({ workspace, visible = true }: Props) {
     return () => {
       window.removeEventListener("maverick:terminal:focusDirection", onFocusDirection);
     };
-  }, [focusedPaneId, workspace.id]);
+  }, [focusedPaneId, workspace.id, visible]);
 
   if (!tree) {
     return (

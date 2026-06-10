@@ -45,7 +45,6 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "terminal.splitV", label: "Split vertically", category: "Terminal", keys: "$mod+Shift+d", display: "⌘⇧D" },
   { id: "terminal.closePane", label: "Close terminal pane", category: "Terminal", keys: "$mod+Shift+w", display: "⌘⇧W" },
   { id: "terminal.clear", label: "Clear terminal", category: "Terminal", keys: "$mod+k", display: "⌘K" },
-  { id: "terminal.openBottomTerminal", label: "Open bottom terminal", category: "Terminal", keys: "$mod+Shift+t", display: "⌘⇧T" },
   { id: "terminal.focusLeft", label: "Focus pane left", category: "Terminal", keys: "$mod+Alt+ArrowLeft", display: "⌘⌥←" },
   { id: "terminal.focusRight", label: "Focus pane right", category: "Terminal", keys: "$mod+Alt+ArrowRight", display: "⌘⌥→" },
   { id: "terminal.focusUp", label: "Focus pane up", category: "Terminal", keys: "$mod+Alt+ArrowUp", display: "⌘⌥↑" },

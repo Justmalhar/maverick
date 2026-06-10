@@ -20,7 +20,9 @@ export function SettingsRow({ title, description, control }: Props) {
           </div>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center">{control}</div>
+      {/* Cap the control column so a wide control (e.g. a long file path) can
+          never crush the title/description column into one-word-per-line. */}
+      <div className="flex min-w-0 max-w-[60%] shrink-0 items-center">{control}</div>
     </div>
   );
 }

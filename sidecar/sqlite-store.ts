@@ -42,6 +42,7 @@ interface WorkspaceRow {
   worktree_path: string;
   status: string;
   created_at: number;
+  title: string | null;
 }
 
 interface MessageRow {
@@ -187,6 +188,7 @@ export class SQLiteStore {
       worktreePath: row.worktree_path,
       status: row.status as Workspace["status"],
       sessionId: "",
+      title: row.title ?? undefined,
     };
   }
 
@@ -196,14 +198,15 @@ export class SQLiteStore {
     branch: string;
     agentBackend: string;
     worktreePath: string;
+    title?: string;
   }): Workspace {
     const id = input.id ?? this.ids.uuid("ws");
     const createdAt = Math.floor(this.ids.now() / 1000);
     this.db
       .query(
-        "INSERT INTO workspaces (id, project_id, branch, agent_backend, worktree_path, status, created_at) VALUES (?, ?, ?, ?, ?, 'idle', ?)"
+        "INSERT INTO workspaces (id, project_id, branch, agent_backend, worktree_path, status, created_at, title) VALUES (?, ?, ?, ?, ?, 'idle', ?, ?)"
       )
-      .run(id, input.projectId, input.branch, input.agentBackend, input.worktreePath, createdAt);
+      .run(id, input.projectId, input.branch, input.agentBackend, input.worktreePath, createdAt, input.title ?? null);
     const sessionId = this.sessionCreate(id);
     return {
       id,
@@ -213,6 +216,7 @@ export class SQLiteStore {
       worktreePath: input.worktreePath,
       status: "idle",
       sessionId,
+      title: input.title,
     };
   }
 
@@ -237,6 +241,7 @@ export class SQLiteStore {
       worktreePath: r.worktree_path,
       status: r.status as Workspace["status"],
       sessionId: this.latestSession(r.id) ?? "",
+      title: r.title ?? undefined,
     }));
   }
 

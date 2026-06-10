@@ -1,15 +1,20 @@
+import { useState } from "react";
 import { FolderPlus } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectItem } from "./ProjectItem";
+import { CreateFromDialog } from "./CreateFromDialog";
 import { pickProjectFolder } from "@/lib/dialog";
+
+const DEFAULT_BACKEND = "claude-code";
 
 export function ProjectsView() {
   const projects = useWorkbench((s) => s.projects);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
   const { addProjectFromPath, create } = useWorkspace();
+  const [createFromProjectId, setCreateFromProjectId] = useState<string | null>(null);
 
   async function onAddProject() {
     const path = await pickProjectFolder();
@@ -21,14 +26,17 @@ export function ProjectsView() {
     }
   }
 
-  async function onAddWorkspace(projectId: string) {
-    const backend = "claude-code";
+  // Branch name and base branch are resolved by the sidecar (generated
+  // callsign, branched from project settings' branchFrom).
+  async function onAddWorkspace(projectId: string, baseBranch?: string) {
     try {
-      await create(projectId, "main", backend);
+      await create(projectId, undefined, DEFAULT_BACKEND, baseBranch);
     } catch (e) {
       console.error("addWorkspace failed", e);
     }
   }
+
+  const createFromProject = projects.find((p) => p.id === createFromProjectId) ?? null;
 
   return (
     <div data-testid="projects-view" className="flex h-full flex-col">
@@ -71,14 +79,25 @@ export function ProjectsView() {
               <ProjectItem
                 key={p.id}
                 project={p}
-                onAddWorkspace={onAddWorkspace}
+                onAddWorkspace={(projectId) => void onAddWorkspace(projectId)}
                 onSettings={(projectId) => openProjectSettings({ projectId })}
+                onCreateFrom={(projectId) => setCreateFromProjectId(projectId)}
               />
             ))
           )}
         </div>
       </ScrollArea>
 
+      <CreateFromDialog
+        open={createFromProjectId !== null}
+        onOpenChange={(open) => {
+          if (!open) setCreateFromProjectId(null);
+        }}
+        projectPath={createFromProject?.path ?? null}
+        onSelect={(baseBranch) => {
+          if (createFromProjectId) void onAddWorkspace(createFromProjectId, baseBranch);
+        }}
+      />
     </div>
   );
 }

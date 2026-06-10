@@ -24,6 +24,7 @@ import type {
   Notification,
   NotificationPermission,
   Project,
+  RemoteInfo,
   ResolvedInstructions,
   ProjectSettings,
   SettingsPatch,
@@ -122,6 +123,19 @@ export async function messageAppend(
 
 export async function skillsList(projectPath: string): Promise<Skill[]> {
   return invoke("skills_list", { projectPath });
+}
+
+export async function skillsListGlobal(): Promise<Skill[]> {
+  return invoke("skills_list_global");
+}
+
+export async function skillsCreateGlobal(
+  name: string,
+  description: string,
+  prompt?: string,
+  backend?: string
+): Promise<{ ok: true; filePath: string }> {
+  return invoke("skills_create_global", { name, description, prompt, backend });
 }
 
 export async function skillsRun(
@@ -392,6 +406,19 @@ export async function prCreate(
   base?: string
 ): Promise<{ url: string }> {
   return invoke("pr_create", { worktreePath, title, body, base });
+}
+
+export async function gitRemoteInfo(
+  worktreePath: string,
+  remote?: string
+): Promise<RemoteInfo> {
+  return invoke("git_remote_info", { worktreePath, remote });
+}
+
+export async function aiCommitMessage(
+  worktreePath: string
+): Promise<{ message: string }> {
+  return invoke("ai_commit_message", { worktreePath });
 }
 
 // Embedded Browser (native child webview) controls.

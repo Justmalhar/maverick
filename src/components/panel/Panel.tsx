@@ -5,7 +5,6 @@ import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { PanelTabs, type BottomPanelTab } from "./PanelTabs";
-import { BottomTerminal } from "./BottomTerminal";
 
 interface EmptyProps {
   icon: typeof Play;
@@ -36,10 +35,27 @@ function EmptyState({ icon: Icon, title, hint, ctaLabel, onCta }: EmptyProps) {
 function ScriptPane({ kind }: { kind: "setup" | "run" }) {
   const activeWs = useWorkbench(selectActiveWorkspace);
   const settings = useProjectSettingsStore((s) => s.data);
+  const settingsProjectId = useProjectSettingsStore((s) => s.projectId);
+  const settingsStatus = useProjectSettingsStore((s) => s.status);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
+  const pendingSetupIds = useWorkbench((s) => s.pendingSetupIds);
+  const clearPendingSetup = useWorkbench((s) => s.clearPendingSetup);
 
   const script = useMemo(() => settings?.scripts?.[kind] ?? "", [settings, kind]);
   const runner = useScriptRunner(activeWs?.id ?? null, activeWs?.worktreePath ?? null, script);
+
+  // Auto-run setup for freshly created workspaces. Wait until the loaded
+  // settings belong to THIS workspace's project so a stale store can't run the
+  // previous project's script in the new worktree.
+  const pending = kind === "setup" && !!activeWs && pendingSetupIds.includes(activeWs.id);
+  const settingsReady =
+    settingsStatus === "loaded" && settingsProjectId === activeWs?.projectId;
+  const { start } = runner;
+  useEffect(() => {
+    if (!pending || !settingsReady || !activeWs) return;
+    clearPendingSetup(activeWs.id);
+    if (script.trim()) void start();
+  }, [pending, settingsReady, activeWs, script, start, clearPendingSetup]);
 
   if (!activeWs) {
     return (
@@ -104,7 +120,7 @@ export function Panel({ collapsed = false }: { collapsed?: boolean }) {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
-      if (detail === "setup" || detail === "run" || detail === "terminal") {
+      if (detail === "setup" || detail === "run") {
         setTab(detail);
       }
     };
@@ -123,7 +139,6 @@ export function Panel({ collapsed = false }: { collapsed?: boolean }) {
         <div className="flex-1 overflow-hidden">
           {tab === "setup" && <ScriptPane kind="setup" />}
           {tab === "run" && <ScriptPane kind="run" />}
-          {tab === "terminal" && <BottomTerminal />}
         </div>
       )}
     </section>

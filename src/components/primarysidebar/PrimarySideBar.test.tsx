@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
+import { renderWithProviders, screen } from "@/test/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { vi } from "vitest";
 import { PrimarySideBar } from "./PrimarySideBar";
@@ -14,20 +14,26 @@ beforeEach(() => {
     ...initial,
     systemTabs: [],
     activeSystemTab: null,
-    layout: { ...initial.layout, activityView: "projects" },
   });
 });
 
 describe("PrimarySideBar", () => {
-  it("renders all nav items in projects view", () => {
+  it("renders all nav items including Skills", () => {
     renderWithProviders(<PrimarySideBar />);
     expect(screen.getByTestId("sidebar-nav-dashboard")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-kanban")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-automations")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-mcps")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-skills")).toBeInTheDocument();
   });
 
-  it("always renders the projects list in projects view", () => {
+  it("does not render Projects or Source Control nav buttons", () => {
+    renderWithProviders(<PrimarySideBar />);
+    expect(screen.queryByTestId("sidebar-nav-projects")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-git")).not.toBeInTheDocument();
+  });
+
+  it("always renders the projects list", () => {
     renderWithProviders(<PrimarySideBar />);
     expect(screen.getByTestId("projects-view")).toBeInTheDocument();
   });
@@ -51,18 +57,5 @@ describe("PrimarySideBar", () => {
     renderWithProviders(<PrimarySideBar />);
     const btn = screen.getByTestId("sidebar-nav-dashboard");
     expect(btn.className).toMatch(/bg-sidebar-selected/);
-  });
-
-  it("renders GitPanel (lazy) when activityView is git", async () => {
-    useWorkbench.setState({
-      ...initial,
-      layout: { ...initial.layout, activityView: "git" },
-    });
-    renderWithProviders(<PrimarySideBar />);
-    // GitPanel renders a git-panel testid after Suspense resolves
-    await waitFor(() => expect(screen.getByTestId("primary-sidebar")).toBeInTheDocument());
-    // The nav items should NOT be present in git view
-    expect(screen.queryByTestId("sidebar-nav-dashboard")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("projects-view")).not.toBeInTheDocument();
   });
 });

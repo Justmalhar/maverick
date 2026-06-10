@@ -3,6 +3,7 @@ import type { ITheme } from "@xterm/xterm";
 import {
   POOL_MAX_SIZE,
   acquireSlot,
+  refitLiveSlotsForFonts,
   releaseSlot,
   getSlotForLeaf,
   writeToSlot,
@@ -746,5 +747,68 @@ describe("renderer-pool defensive paths", () => {
     expect(() => __resetPoolForTests()).not.toThrow();
     // Re-arm config for the afterEach reset.
     setPoolConfig({ theme: theme(), fontSize: 13, fontFamily: "mono", lineHeight: 1.2, scrollback: 5000 });
+  });
+});
+
+describe("renderer-pool bind-time fit guard", () => {
+  it("does NOT resize the PTY when bound against an unsized (0x0) container", () => {
+    // A bind while the workspace is display:none / pre-layout must not pin the
+    // PTY to a degenerate grid; the ResizeObserver handles it once sized.
+    const c = document.createElement("div"); // clientWidth/Height default to 0
+    document.body.appendChild(c);
+    bridges.set("a", makeBridge());
+    acquireSlot({
+      leafId: "a",
+      container: c,
+      snapshot: null,
+      altScreen: false,
+      drainRing: () => {},
+      cols: 0,
+      rows: 0,
+    });
+    expect(bridges.get("a")!.resizePty).not.toHaveBeenCalled();
+  });
+
+  it("resizes the PTY at bind when the container is laid out and dims differ", () => {
+    const slot = acquire("a", sizedContainer(800, 340));
+    // fit() left cols at the 80x24 request, so no resize fires for an equal grid…
+    expect(bridges.get("a")!.resizePty).not.toHaveBeenCalled();
+    // …but a fit that changes the grid does propagate (covered via fonts refit).
+    expect(slot.lastW).toBe(800);
+  });
+});
+
+describe("renderer-pool font-load refit", () => {
+  it("re-touches the font, refits, and resizes the PTY when fonts settle", () => {
+    const slot = acquire("a", sizedContainer(1000, 400));
+    bridges.get("a")!.resizePty = vi.fn();
+    // Simulate xterm re-measuring to a wider grid once the real font loads.
+    mfit(slot).fit = vi.fn(() => {
+      mterm(slot).cols = 150;
+    });
+    refitLiveSlotsForFonts();
+    expect(mterm(slot).options.fontFamily).toBe("mono");
+    expect(bridges.get("a")!.resizePty).toHaveBeenCalledWith(150, 24);
+  });
+
+  it("skips free slots, unsized containers, and unchanged grids", () => {
+    // Free slot: acquire then release so a slot exists with currentLeafId null.
+    const slot = acquire("a", sizedContainer(900, 300));
+    bridges.get("a")!.resizePty = vi.fn();
+    // Unchanged grid → no resize.
+    refitLiveSlotsForFonts();
+    expect(bridges.get("a")!.resizePty).not.toHaveBeenCalled();
+    // Released (free) slot → skipped entirely.
+    releaseSlot("a");
+    expect(() => refitLiveSlotsForFonts()).not.toThrow();
+    void slot;
+  });
+
+  it("swallows a fit() throw during a font refit", () => {
+    const slot = acquire("a", sizedContainer(800, 340));
+    mfit(slot).fit = vi.fn(() => {
+      throw new Error("fit boom");
+    });
+    expect(() => refitLiveSlotsForFonts()).not.toThrow();
   });
 });

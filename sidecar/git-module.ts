@@ -1,5 +1,6 @@
 import { join } from "path";
 import { defaultShell } from "./deps";
+import { parseRemoteUrl, prWebUrl } from "./git-provider";
 import type {
   BlameLine,
   Branch,
@@ -365,12 +366,54 @@ export class GitModule {
     return { ok: true };
   }
 
+  // Every local and remote branch short name; used for unique workspace-name
+  // generation (origin/HEAD alias filtered out).
+  async allBranchNames(params: { projectPath: string }): Promise<string[]> {
+    const output = await this.shell.text(
+      [
+        "git",
+        "-C",
+        params.projectPath,
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads",
+        "refs/remotes",
+      ],
+      undefined
+    );
+    const names = new Set<string>();
+    for (const line of output.split("\n")) {
+      const ref = line.trim();
+      if (!ref || ref.endsWith("/HEAD")) continue;
+      names.add(ref);
+      // origin/feature also blocks the bare name "feature".
+      const slash = ref.indexOf("/");
+      if (slash > 0) names.add(ref.slice(slash + 1));
+    }
+    return [...names];
+  }
+
+  async remoteInfo(params: { worktreePath: string; remote?: string }) {
+    const remote = params.remote ?? "origin";
+    const url = (
+      await this.shell.text(
+        ["git", "-C", params.worktreePath, "remote", "get-url", remote],
+        undefined
+      )
+    ).trim();
+    const info = parseRemoteUrl(url);
+    if (!info) throw new Error(`unrecognized remote URL for ${remote}: ${url}`);
+    return info;
+  }
+
   async prCreate(params: {
     worktreePath: string;
     title?: string;
     body?: string;
     base?: string;
+    remote?: string;
   }): Promise<{ url: string }> {
+    const remote = params.remote ?? "origin";
     const branch = (
       await this.shell.text(
         ["git", "-C", params.worktreePath, "rev-parse", "--abbrev-ref", "HEAD"],
@@ -378,24 +421,48 @@ export class GitModule {
       )
     ).trim();
 
-    // gh needs the branch on the remote before it can open a PR.
+    // Every provider needs the branch on the remote before a PR can exist.
     const push = await this.shell.run(
-      ["git", "-C", params.worktreePath, "push", "-u", "origin", branch],
+      ["git", "-C", params.worktreePath, "push", "-u", remote, branch],
       undefined
     );
     if (push.exitCode !== 0) throw new Error(push.stderr || "git push failed");
 
-    const cmd = ["gh", "pr", "create", "--head", branch];
-    if (params.base) cmd.push("--base", params.base);
-    if (params.title) {
-      cmd.push("--title", params.title);
-      cmd.push("--body", params.body ?? "");
-    } else {
-      cmd.push("--fill");
+    const info = await this.remoteInfo({ worktreePath: params.worktreePath, remote });
+
+    if (info.provider === "github") {
+      const cmd = ["gh", "pr", "create", "--head", branch];
+      if (params.base) cmd.push("--base", params.base);
+      if (params.title) {
+        cmd.push("--title", params.title);
+        cmd.push("--body", params.body ?? "");
+      } else {
+        cmd.push("--fill");
+      }
+      try {
+        const { exitCode, stdout, stderr } = await this.shell.run(cmd, params.worktreePath);
+        if (exitCode === 0) return { url: stdout.trim() };
+        // gh unauthenticated/misconfigured: the compare URL still gets the PR made.
+        if (/not found|command not found|auth/i.test(stderr)) {
+          return { url: prWebUrl(info, branch, params.base) };
+        }
+        throw new Error(stderr || "gh pr create failed");
+      } catch (err) {
+        // Bun.spawn throws ENOENT when gh is not installed at all.
+        if (err instanceof Error && /enoent|no such file/i.test(err.message)) {
+          return { url: prWebUrl(info, branch, params.base) };
+        }
+        throw err;
+      }
     }
-    const { exitCode, stdout, stderr } = await this.shell.run(cmd, params.worktreePath);
-    if (exitCode !== 0) throw new Error(stderr || "gh pr create failed");
-    return { url: stdout.trim() };
+
+    if (info.provider === "bitbucket" || info.provider === "gitlab") {
+      return { url: prWebUrl(info, branch, params.base) };
+    }
+
+    throw new Error(
+      `branch pushed to ${remote}, but no supported provider detected for ${info.host} — open a PR manually`
+    );
   }
 
   static parseLog(output: string): Commit[] {

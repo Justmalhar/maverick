@@ -12,6 +12,8 @@ const BrowserPanel = lazy(() => import("@/panels/browser/BrowserPanel"));
 const KanbanBoard = lazy(() => import("@/panels/kanban/KanbanBoard"));
 const AutomationsPanel = lazy(() => import("@/panels/automations/AutomationsPanel"));
 const MCPsPanel = lazy(() => import("@/panels/mcps/MCPsPanel"));
+const SkillsPanel = lazy(() => import("@/panels/skills/SkillsPanel"));
+const SkillEditorPanel = lazy(() => import("@/panels/skills/SkillEditorPanel"));
 
 // The browser is keep-alive mounted separately (see below) so its page/URL/
 // history survive a tab switch — switching to it here would unmount it.
@@ -25,6 +27,10 @@ function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
       return <AutomationsPanel />;
     case "mcps":
       return <MCPsPanel />;
+    case "skills":
+      return <SkillsPanel />;
+    case "skill-editor":
+      return <SkillEditorPanel />;
   }
 }
 

@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { watch } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { ProcessManager } from "./process-manager";
-import { WorktreeManager } from "./worktree-manager";
+import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
+import { generateWorkspaceName, slugify, titleize } from "./name-generator";
+import { CommitMessageGenerator } from "./commit-message";
 import { SQLiteStore } from "./sqlite-store";
 import { ConfigLoader } from "./config-loader";
 import { SkillsEngine } from "./skills-engine";
+import { SkillsStore } from "./skills-store";
 import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
 import { PresetLauncher } from "./preset-launcher";
@@ -47,7 +50,7 @@ const Schemas = {
   workspaceCreate: z.object({
     projectId: z.string(),
     projectPath: z.string(),
-    branch: z.string(),
+    branch: nullishOptional(z.string()),
     backend: z.string(),
     baseBranch: nullishOptional(z.string()),
   }),
@@ -81,6 +84,12 @@ const Schemas = {
     projectPath: nullishOptional(z.string()),
     skillName: z.string(),
     vars: z.record(z.string(), z.string()).default({}),
+  }),
+  skillsCreateGlobal: z.object({
+    name: z.string(),
+    description: z.string(),
+    prompt: nullishOptional(z.string()),
+    backend: nullishOptional(z.string()),
   }),
   diffGet: z.object({
     worktreePath: z.string(),
@@ -194,7 +203,13 @@ const Schemas = {
     title: nullishOptional(z.string()),
     body: nullishOptional(z.string()),
     base: nullishOptional(z.string()),
+    remote: nullishOptional(z.string()),
   }),
+  gitRemoteInfo: z.object({
+    worktreePath: z.string(),
+    remote: nullishOptional(z.string()),
+  }),
+  aiCommitMessage: z.object({ worktreePath: z.string() }),
 };
 
 export interface RpcHandlersOptions {
@@ -203,6 +218,7 @@ export interface RpcHandlersOptions {
   worktree?: WorktreeManager;
   config?: ConfigLoader;
   skills?: SkillsEngine;
+  skillsStore?: SkillsStore;
   diff?: DiffReader;
   git?: GitModule;
   presets?: PresetLauncher;
@@ -220,6 +236,7 @@ export interface RpcHandlersOptions {
   projectSettings?: ProjectSettingsStore;
   caffeinate?: Caffeinate;
   instructions?: InstructionsResolver;
+  commitMessage?: CommitMessageGenerator;
   notifier?: Notifier;
 }
 
@@ -229,6 +246,7 @@ export class RpcHandlers {
   readonly worktree: WorktreeManager;
   readonly config: ConfigLoader;
   readonly skills: SkillsEngine;
+  readonly skillsStore: SkillsStore;
   readonly diff: DiffReader;
   readonly git: GitModule;
   readonly presets: PresetLauncher;
@@ -246,6 +264,7 @@ export class RpcHandlers {
   readonly projectSettings: ProjectSettingsStore;
   readonly caffeinate: Caffeinate;
   readonly instructions: InstructionsResolver;
+  readonly commitMessage: CommitMessageGenerator;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -256,6 +275,7 @@ export class RpcHandlers {
     this.worktree = opts.worktree ?? new WorktreeManager();
     this.config = opts.config ?? new ConfigLoader();
     this.skills = opts.skills ?? new SkillsEngine({ loader: this.config });
+    this.skillsStore = opts.skillsStore ?? new SkillsStore();
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
     this.presets =
@@ -283,6 +303,7 @@ export class RpcHandlers {
     this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
+    this.commitMessage = opts.commitMessage ?? new CommitMessageGenerator();
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -376,38 +397,51 @@ export class RpcHandlers {
         const p = Schemas.workspaceCreate.parse(params);
         const project = this.store.projectGet(p.projectId);
         const settings = project ? this.projectSettings.read(project.path) : null;
+        const projectName = project?.name ?? basename(p.projectPath);
+
+        // Auto-name when the caller doesn't pick a branch; the callsign is
+        // unique across local + remote branches so `worktree add -b` can't fail
+        // on an existing ref.
+        let branch = p.branch?.trim() || "";
+        let title: string | undefined;
+        if (!branch) {
+          let taken: string[] = [];
+          try {
+            taken = await this.git.allBranchNames({ projectPath: p.projectPath });
+          } catch {
+            /* not fatal — a bare repo still gets a name */
+          }
+          branch = generateWorkspaceName(taken);
+          title = titleize(branch);
+        }
+
+        const baseBranch = await this.worktree.resolveBaseBranch(p.projectPath, [
+          p.baseBranch,
+          settings?.workspaces.branchFrom,
+          "origin/main",
+          "main",
+          "master",
+        ]);
+
         const { workspaceId, worktreePath } = await this.worktree.create({
           projectPath: p.projectPath,
-          branch: p.branch,
-          baseBranch: p.baseBranch,
+          branch,
+          baseBranch,
           filesToCopy: settings?.workspaces.filesToCopy,
+          base: settings?.workspaces.basePath ?? defaultWorktreeRoot(projectName),
+          dirName: slugify(branch),
         });
-        const ws = this.store.workspaceCreate({
+        // scripts.setup is intentionally NOT run here: the frontend streams it
+        // through the Setup tab PTY so creation returns immediately and the
+        // agent terminal is usable while dependencies install.
+        return this.store.workspaceCreate({
           id: workspaceId,
           projectId: p.projectId,
-          branch: p.branch,
+          branch,
           agentBackend: p.backend,
           worktreePath,
+          title,
         });
-        if (settings && settings.scripts.setup.trim() !== "") {
-          let setupError: string | undefined;
-          try {
-            const { code } = await this.process.spawnOnce({
-              cwd: worktreePath,
-              command: "/bin/sh",
-              args: ["-c", settings.scripts.setup],
-            });
-            if (code !== 0) setupError = `setup script exited with code ${code}`;
-          } catch (err) {
-            setupError = err instanceof Error ? err.message : String(err);
-          }
-          if (setupError) {
-            console.error(`[workspace.create] scripts.setup failed:`, setupError);
-            this.store.workspaceSetStatus(ws.id, "error");
-            return { ...ws, status: "error" as const, setupError };
-          }
-        }
-        return ws;
       }
       case "workspace.destroy": {
         const p = Schemas.workspaceDestroy.parse(params);
@@ -504,6 +538,13 @@ export class RpcHandlers {
         const projectPath = p.projectPath ?? this.requireWorkspacePaths(p.workspaceId).projectPath;
         return this.skills.run({ projectPath, skillName: p.skillName, vars: p.vars });
       }
+      case "skills.listGlobal":
+        return this.skillsStore.list();
+      case "skills.createGlobal": {
+        const p = Schemas.skillsCreateGlobal.parse(params);
+        const filePath = this.skillsStore.create(p.name, p.description, p.prompt ?? "", p.backend);
+        return { ok: true, filePath };
+      }
       case "diff.get": {
         const p = Schemas.diffGet.parse(params);
         return this.diff.get(p);
@@ -587,6 +628,14 @@ export class RpcHandlers {
       case "pr.create": {
         const p = Schemas.prCreate.parse(params);
         return this.git.prCreate(p);
+      }
+      case "git.remote_info": {
+        const p = Schemas.gitRemoteInfo.parse(params);
+        return this.git.remoteInfo(p);
+      }
+      case "ai.commit_message": {
+        const p = Schemas.aiCommitMessage.parse(params);
+        return this.commitMessage.generate(p);
       }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);

@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { WorktreeManager } from "./worktree-manager";
+import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
 import type { Shell } from "./types";
 
 function fakeShellThatCreatesWorktreeDir(): { shell: Shell; calls: string[][] } {
@@ -244,5 +244,97 @@ describe("WorktreeManager", () => {
     await expect(mgr.create({ projectPath: "/repo", branch: "feat" })).rejects.toThrow(
       /escapes workspaces root/
     );
+  });
+
+  test("create throws when git worktree add fails", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text() {
+        return "";
+      },
+      async run(cmd) {
+        calls.push(cmd);
+        return { stdout: "", stderr: "fatal: a branch named 'feat' already exists", exitCode: 128 };
+      },
+    };
+    const mgr = new WorktreeManager({ shell, ids: { uuid: (p) => `${p}_1`, now: () => 0 } });
+    await expect(mgr.create({ projectPath: "/repo", branch: "feat" })).rejects.toThrow(
+      /already exists/
+    );
+  });
+
+  test("create honors a per-call base and dirName", async () => {
+    const { shell, calls } = fakeShell([{}]);
+    const mgr = new WorktreeManager({ shell, ids: { uuid: (p) => `${p}_7`, now: () => 0 } });
+    const r = await mgr.create({
+      projectPath: "/repo",
+      branch: "viper",
+      baseBranch: "origin/main",
+      base: "/home/u/.maverick/repo/worktrees",
+      dirName: "viper",
+    });
+    expect(r.worktreePath).toBe("/home/u/.maverick/repo/worktrees/viper");
+    expect(calls[0]).toEqual([
+      "git",
+      "worktree",
+      "add",
+      "-b",
+      "viper",
+      "/home/u/.maverick/repo/worktrees/viper",
+      "origin/main",
+    ]);
+  });
+
+  test("create suffixes the dirName when the directory already exists", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mvk-wt-"));
+    mkdirSync(join(dir, "viper"), { recursive: true });
+    const { shell } = fakeShell([{}]);
+    const mgr = new WorktreeManager({ shell, ids: { uuid: (p) => `${p}_abcdef`, now: () => 0 } });
+    const r = await mgr.create({
+      projectPath: "/repo",
+      branch: "viper",
+      base: dir,
+      dirName: "viper",
+    });
+    expect(r.worktreePath).toBe(join(dir, "viper-abcdef"));
+  });
+
+  test("resolveBaseBranch returns the first candidate git can verify", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text() {
+        return "";
+      },
+      async run(cmd) {
+        calls.push(cmd);
+        // origin/main is unknown; main verifies.
+        const ok = cmd.includes("main^{commit}") && !cmd.includes("origin/main^{commit}");
+        return { stdout: "", stderr: "", exitCode: ok ? 0 : 1 };
+      },
+    };
+    const mgr = new WorktreeManager({ shell });
+    const base = await mgr.resolveBaseBranch("/repo", [undefined, "  ", "origin/main", "main"]);
+    expect(base).toBe("main");
+    // Blank/undefined candidates never hit git.
+    expect(calls.every((c) => c[0] === "git" && c[1] === "rev-parse")).toBe(true);
+  });
+
+  test("resolveBaseBranch falls back to HEAD when nothing verifies", async () => {
+    const shell: Shell = {
+      async text() {
+        return "";
+      },
+      async run() {
+        return { stdout: "", stderr: "", exitCode: 1 };
+      },
+    };
+    const mgr = new WorktreeManager({ shell });
+    expect(await mgr.resolveBaseBranch("/repo", ["origin/main", "main"])).toBe("HEAD");
+  });
+
+  test("defaultWorktreeRoot lives under ~/.maverick/<slug>/worktrees", () => {
+    const root = defaultWorktreeRoot("My Project");
+    expect(root.endsWith(join(".maverick", "my-project", "worktrees"))).toBe(true);
+    expect(root.startsWith("/")).toBe(true);
   });
 });

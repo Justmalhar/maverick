@@ -14,7 +14,13 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import "@xterm/xterm/css/xterm.css";
 import type { ITheme } from "@xterm/xterm";
 
-export const POOL_MAX_SIZE = 6;
+// Must stay >= the editor's LRU live window (advanced.lruLimit, default 8) so
+// every concurrently-mounted terminal keeps its own slot. When the pool is
+// smaller than the live window, the surplus leaves are evicted and switching to
+// an evicted (slot-less) workspace shows a blank editor until unrelated churn
+// re-binds it. Each slot is a live xterm renderer, so this trades idle RSS for
+// instant, churn-free tab switching (see CLAUDE.md's RSS budget note).
+export const POOL_MAX_SIZE = 16;
 // Two-stage resize debounce: FitAddon.fit is cheap+local (~8ms), the PTY resize
 // ioctl is the expensive cross-process hop (~256ms, and only when dims change).
 // Single source of truth — any other renderer path must import these, not
@@ -363,7 +369,15 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   slot.lastRows = slot.term.rows;
   slot.lastW = p.container.clientWidth;
   slot.lastH = p.container.clientHeight;
-  if (slot.lastCols !== p.cols || slot.lastRows !== p.rows) {
+  // Only sync the PTY from a fit taken against a laid-out container. A bind that
+  // runs while the container is display:none / pre-layout (0x0) makes fit a
+  // no-op and would otherwise pin the PTY to a stale/degenerate grid; the
+  // ResizeObserver's first callback resizes once the container has real dims.
+  if (
+    slot.lastW > 0 &&
+    slot.lastH > 0 &&
+    (slot.lastCols !== p.cols || slot.lastRows !== p.rows)
+  ) {
     adapter?.resolveLeaf(p.leafId)?.resizePty(slot.lastCols, slot.lastRows);
   }
 
@@ -383,7 +397,11 @@ function rewireSlot(slot: Slot, p: AcquireParams): void {
   safeFit(slot);
   slot.lastW = p.container.clientWidth;
   slot.lastH = p.container.clientHeight;
-  if (slot.term.cols !== p.cols || slot.term.rows !== p.rows) {
+  if (
+    slot.lastW > 0 &&
+    slot.lastH > 0 &&
+    (slot.term.cols !== p.cols || slot.term.rows !== p.rows)
+  ) {
     adapter?.resolveLeaf(p.leafId)?.resizePty(slot.term.cols, slot.term.rows);
   }
   slot.lastCols = slot.term.cols;
@@ -428,6 +446,43 @@ function safeFit(slot: Slot): void {
     // container may not be sized yet; ResizeObserver refits
   }
   notifyResize(slot);
+}
+
+// xterm derives the cell size from the resolved font, and Geist Mono is a
+// bundled @font-face (font-display:swap). A terminal first fitted on a cold app
+// launch can therefore measure fallback metrics and collapse to a wrong column
+// count, and xterm does NOT re-measure on its own when a web font later loads.
+// Once fonts settle we re-touch the font family (forcing a CharSizeService
+// re-measure), refit every live+laid-out slot, and push any changed dims to the
+// owning PTY so the agent CLI reflows to the true width.
+export function refitLiveSlotsForFonts(): void {
+  for (const slot of slots) {
+    const leafId = slot.currentLeafId;
+    if (leafId === null) continue;
+    const container = slot.host.parentElement;
+    if (
+      !container ||
+      container.clientWidth === 0 ||
+      container.clientHeight === 0
+    )
+      continue;
+    if (config) slot.term.options.fontFamily = config.fontFamily;
+    try {
+      slot.fitAddon.fit();
+    } catch {
+      continue;
+    }
+    if (slot.term.cols === slot.lastCols && slot.term.rows === slot.lastRows)
+      continue;
+    slot.lastCols = slot.term.cols;
+    slot.lastRows = slot.term.rows;
+    adapter?.resolveLeaf(leafId)?.resizePty(slot.lastCols, slot.lastRows);
+    notifyResize(slot);
+  }
+}
+
+if (typeof document !== "undefined" && document.fonts?.ready) {
+  void document.fonts.ready.then(refitLiveSlotsForFonts);
 }
 
 function notifyResize(slot: Slot): void {

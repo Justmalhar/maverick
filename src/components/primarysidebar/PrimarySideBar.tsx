@@ -1,11 +1,9 @@
-import { lazy, Suspense } from "react";
-import { LayoutDashboard, CheckSquare2, Zap, Plug } from "lucide-react";
+import { LayoutDashboard, CheckSquare2, Zap, Plug, Sparkles } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { cn } from "@/lib/utils";
 import { ProjectsView } from "./ProjectsView";
 
-const GitPanel = lazy(() => import("@/panels/git/GitPanel"));
-
+// Tabs open as documents in the EditorArea.
 const NAV_ITEMS: Array<{
   tab: SystemTabId;
   icon: typeof LayoutDashboard;
@@ -15,6 +13,7 @@ const NAV_ITEMS: Array<{
   { tab: "kanban", icon: CheckSquare2, label: "Tasks" },
   { tab: "automations", icon: Zap, label: "Automations" },
   { tab: "mcps", icon: Plug, label: "MCPs" },
+  { tab: "skills", icon: Sparkles, label: "Skills" },
 ];
 
 function NavItem({
@@ -53,7 +52,6 @@ export function PrimarySideBar() {
   const systemTabs = useWorkbench((s) => s.systemTabs);
   const openSystemTab = useWorkbench((s) => s.openSystemTab);
   const setActiveSystemTab = useWorkbench((s) => s.setActiveSystemTab);
-  const activityView = useWorkbench((s) => s.layout.activityView);
 
   function onNav(tab: SystemTabId) {
     if (systemTabs.includes(tab)) {
@@ -61,25 +59,6 @@ export function PrimarySideBar() {
     } else {
       openSystemTab(tab);
     }
-  }
-
-  if (activityView === "git") {
-    return (
-      <section
-        data-testid="primary-sidebar"
-        className="mv-primarysidebar flex h-full w-full flex-col overflow-hidden bg-sidebar text-sidebar-fg"
-      >
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              Loading…
-            </div>
-          }
-        >
-          <GitPanel />
-        </Suspense>
-      </section>
-    );
   }
 
   return (
@@ -105,7 +84,7 @@ export function PrimarySideBar() {
 
       <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
 
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1">
         <ProjectsView />
       </div>
     </section>

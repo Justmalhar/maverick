@@ -21,12 +21,9 @@ describe("PanelTabs", () => {
     expect(onChange).toHaveBeenCalledWith("run");
   });
 
-  it("renders the Terminal tab and invokes onChange when clicked", async () => {
-    const onChange = vi.fn();
-    renderWithProviders(<PanelTabs value="setup" onChange={onChange} />);
-    expect(screen.getByTestId("panel-tab-terminal")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("panel-tab-terminal"));
-    expect(onChange).toHaveBeenCalledWith("terminal");
+  it("does not render a Terminal tab", () => {
+    renderWithProviders(<PanelTabs value="setup" onChange={() => {}} />);
+    expect(screen.queryByTestId("panel-tab-terminal")).not.toBeInTheDocument();
   });
 
   it("collapse button toggles panel in store", async () => {

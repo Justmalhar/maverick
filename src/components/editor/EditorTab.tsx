@@ -2,6 +2,7 @@ import { X, Bot, TerminalSquare } from "lucide-react";
 import { useWorkbench, selectEditorMode } from "@/state/store";
 import type { Workspace } from "@/lib/ipc";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { brandFor } from "@/lib/backend-brand";
 import { AgentStatusPill } from "./AgentStatusPill";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,9 @@ interface Props {
 export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu }: Props) {
   const mode = useWorkbench(selectEditorMode(workspace.id));
   const agentStatus = useAgentStatus(workspace.id);
+  // Agent mode wears the backend's brand mark (Claude, Codex, …); terminal
+  // mode keeps the terminal glyph since the icon then signals mode, not brand.
+  const brand = mode === "terminal" ? undefined : brandFor(workspace.agentBackend);
   const ModeIcon = mode === "terminal" ? TerminalSquare : Bot;
 
   return (
@@ -41,7 +45,17 @@ export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu 
           : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
       )}
     >
-      <ModeIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      {brand ? (
+        <span
+          data-testid={`editor-tab-brand-${workspace.id}`}
+          title={brand.label}
+          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+        >
+          <brand.Icon size={13} />
+        </span>
+      ) : (
+        <ModeIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      )}
       <span className="max-w-[160px] truncate">
         {workspace.title ?? workspace.branch}
       </span>

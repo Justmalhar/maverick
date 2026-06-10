@@ -37,6 +37,52 @@ describe("useWorkspace", () => {
     });
     expect(useWorkbench.getState().workspaces).toContainEqual(ws);
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w-new");
+    // Setup is queued for the Panel's Setup tab and the panel is surfaced.
+    expect(useWorkbench.getState().pendingSetupIds).toContain("w-new");
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
+  });
+
+  it("create with branch undefined lets the sidecar generate the branch", async () => {
+    const ws = makeWorkspace({ id: "w-auto", branch: "viper", title: "Viper" });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      projects: [makeProject({ id: "p1", path: "/tmp/p1" })],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(ws as never);
+    const { result } = renderHook(() => useWorkspace());
+    await act(async () => {
+      await result.current.create("p1", undefined, "claude", "origin/develop");
+    });
+    expect(invoke).toHaveBeenCalledWith("workspace_create", {
+      projectId: "p1",
+      projectPath: "/tmp/p1",
+      branch: undefined,
+      backend: "claude",
+      baseBranch: "origin/develop",
+    });
+  });
+
+  it("create dispatches the panel tab event to switch to Setup", async () => {
+    const ws = makeWorkspace({ id: "w-evt" });
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [],
+      activeWorkspaceId: null,
+      projects: [makeProject({ id: "p1", path: "/tmp/p1" })],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(ws as never);
+    const events: string[] = [];
+    const listener = (e: Event) => events.push((e as CustomEvent<string>).detail);
+    window.addEventListener("maverick:panel:tab", listener);
+    const { result } = renderHook(() => useWorkspace());
+    await act(async () => {
+      await result.current.create("p1", undefined, "claude");
+    });
+    window.removeEventListener("maverick:panel:tab", listener);
+    expect(events).toEqual(["setup"]);
   });
 
   it("create throws when the project is not in the store", async () => {

@@ -30,6 +30,30 @@ describe("EditorTab", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("wears the backend brand mark in agent mode and the terminal glyph in terminal mode", () => {
+    const ws = makeWorkspace({ id: "w1", agentBackend: "claude-code" });
+    const { rerender } = renderWithProviders(
+      <EditorTab workspace={ws} active onSelect={() => {}} onClose={() => {}} />
+    );
+    expect(screen.getByTestId("editor-tab-brand-w1")).toHaveAttribute("title", "Claude Code");
+
+    useWorkbench.setState({ ...initial, editorModes: { w1: "terminal" } });
+    rerender(<EditorTab workspace={ws} active onSelect={() => {}} onClose={() => {}} />);
+    expect(screen.queryByTestId("editor-tab-brand-w1")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the generic icon for an unknown backend", () => {
+    renderWithProviders(
+      <EditorTab
+        workspace={makeWorkspace({ id: "w2", agentBackend: "mystery-cli" })}
+        active
+        onSelect={() => {}}
+        onClose={() => {}}
+      />
+    );
+    expect(screen.queryByTestId("editor-tab-brand-w2")).not.toBeInTheDocument();
+  });
+
   it("shows terminal icon when mode is terminal and reflects the agent status", () => {
     useWorkbench.setState({ ...initial, editorModes: { w1: "terminal" } });
     useAgentStatusStore.setState({ statuses: { w1: "error" } });

@@ -32,7 +32,14 @@ export default function IdentitySection() {
         <SettingsRow
           title="Root path"
           description="The local directory backing this project. Move via your file manager and re-add — don't edit here."
-          control={<div className="font-mono text-[12px] text-muted-foreground">{data.rootPath}</div>}
+          control={
+            <div
+              data-testid="identity-root-path"
+              className="select-text break-all text-right font-mono text-[12px] text-muted-foreground"
+            >
+              {data.rootPath}
+            </div>
+          }
         />
       </SettingsGroup>
     </div>

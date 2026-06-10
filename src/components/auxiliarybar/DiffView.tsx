@@ -82,7 +82,7 @@ export function DiffView() {
 
   async function onCreatePr() {
     if (!active || prStatus.kind === "running") return;
-    if (!window.confirm("Push this branch and open a pull request with gh?")) return;
+    if (!window.confirm("Push this branch and open a pull request?")) return;
     setPrStatus({ kind: "running" });
     try {
       const { url } = await prCreate(active.worktreePath);

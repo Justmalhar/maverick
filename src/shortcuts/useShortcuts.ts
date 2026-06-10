@@ -86,11 +86,6 @@ export function useShortcuts() {
       "terminal.focusDown": () => {
         window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" }));
       },
-      "terminal.openBottomTerminal": () => {
-        const { layout, togglePanel } = useWorkbench.getState();
-        if (!layout.panelVisible) togglePanel();
-        window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
-      },
       "layout.toggleSidebar": () => useWorkbench.getState().togglePrimarySideBar(),
       "layout.toggleAuxBar": () => useWorkbench.getState().toggleAuxiliaryBar(),
       "layout.togglePanel": () => useWorkbench.getState().togglePanel(),

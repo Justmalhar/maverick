@@ -60,15 +60,49 @@ describe("ProjectsView", () => {
       projects: [makeProject({ id: "p1", name: "demo", path: "/tmp/demo" })],
       backends: [makeBackend({ id: "claude", name: "claude" })],
     });
-    vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "main", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s" } as never);
+    vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "viper", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s", title: "Viper" } as never);
     renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
+    // branch stays undefined so the sidecar generates a unique callsign.
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", {
       projectId: "p1",
       projectPath: "/tmp/demo",
-      branch: "main",
+      branch: undefined,
       backend: "claude-code",
       baseBranch: undefined,
+    }));
+    // Creation queues the setup script to stream in the Panel's Setup tab.
+    expect(useWorkbench.getState().pendingSetupIds).toContain("w-new");
+  });
+
+  it("Create from opens the branch picker and creates from the chosen branch", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "demo", path: "/tmp/demo" })],
+      backends: [makeBackend({ id: "claude", name: "claude" })],
+    });
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") {
+        return [
+          { name: "main", isRemote: false, isCurrent: true },
+          { name: "origin/develop", isRemote: true, isCurrent: false },
+        ] as never;
+      }
+      if (cmd === "workspace_create") {
+        return { id: "w-from", projectId: "p1", branch: "goose", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s" } as never;
+      }
+      return undefined as never;
+    });
+    renderWithProviders(<ProjectsView />);
+    await userEvent.click(screen.getByLabelText("Create from"));
+    const item = await screen.findByTestId("create-from-branch-origin/develop");
+    await userEvent.click(item);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", {
+      projectId: "p1",
+      projectPath: "/tmp/demo",
+      branch: undefined,
+      backend: "claude-code",
+      baseBranch: "origin/develop",
     }));
   });
 

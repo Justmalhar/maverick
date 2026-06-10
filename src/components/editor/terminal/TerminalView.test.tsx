@@ -42,42 +42,37 @@ describe("TerminalView", () => {
     setSplitTree.mockRestore();
   });
 
-  it("splitH and splitV dispatch event handlers add a pane when canSplit and focusedPaneId", async () => {
+  it("splits the default-focused first leaf without a prior click", async () => {
     renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
 
-    // No focused pane initially → splitH should no-op
+    // No click: focus defaults to the tree's first leaf, so the split applies.
+    act(() => {
+      window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
+    });
+    const tree = useWorkbench.getState().splitTrees["w1"];
+    expect(tree?.type).toBe("split");
+    // The original leaf survives as the left child of the new split.
+    expect(tree?.type === "split" && tree.left.type === "terminal" && tree.left.id).toBe("w1-1");
+
+    // closePane targets the focused (new right) pane and collapses back to one.
+    act(() => {
+      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
+    });
+    expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
+  });
+
+  it("ignores split events when not visible (inactive workspace)", async () => {
+    renderWithProviders(
+      <TerminalView workspace={makeWorkspace({ id: "w1" })} visible={false} />
+    );
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    // A global ⌘D must not split a keep-alive-hidden (inactive) terminal view.
     act(() => {
       window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
       window.dispatchEvent(new CustomEvent("maverick:terminal:splitV"));
-      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
     });
-
-    // Focus a pane by clicking it
-    const pane = await screen.findByTestId("terminal-pane-w1-1");
-    act(() => {
-      pane.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    });
-
-    act(() => {
-      window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
-    });
-    expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("split");
-
-    // Re-focus the new pane
-    const splits = useWorkbench.getState().splitTrees["w1"];
-    const newId = splits && splits.type === "split" && splits.right.type === "terminal" ? splits.right.id : "";
-    expect(newId).toBeTruthy();
-
-    // closePane on focused new pane collapses to original single
-    act(() => {
-      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
-    });
-
-    // closePane with no focus is a no-op
-    act(() => {
-      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
-    });
+    expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
   });
 
   it("focusDirection right moves focus to the right pane after a horizontal split", async () => {

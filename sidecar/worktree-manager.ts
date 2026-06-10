@@ -1,6 +1,8 @@
 import { existsSync, statSync, mkdirSync, copyFileSync, realpathSync } from "fs";
+import { homedir } from "os";
 import { join, dirname, isAbsolute, resolve, sep } from "path";
 import { defaultIds, defaultShell } from "./deps";
+import { slugify } from "./name-generator";
 import type { IdProvider, Shell } from "./types";
 
 interface CreateParams {
@@ -8,6 +10,17 @@ interface CreateParams {
   branch: string;
   baseBranch?: string;
   filesToCopy?: string[];
+  // Worktree root for this call (settings.workspaces.basePath or the
+  // ~/.maverick default); falls back to the constructor-level base.
+  base?: string;
+  // Human-readable directory name (branch slug); falls back to workspaceId.
+  dirName?: string;
+}
+
+// Worktrees live outside the repo so they never pollute the user's checkout:
+// ~/.maverick/<project-slug>/worktrees/<workspace>.
+export function defaultWorktreeRoot(projectName: string): string {
+  return join(homedir(), ".maverick", slugify(projectName), "worktrees");
 }
 
 interface DestroyParams {
@@ -74,27 +87,61 @@ export class WorktreeManager {
   // Anchors the (possibly relative) `base` at the project root so the resulting
   // worktree path is absolute and identical regardless of the sidecar process
   // cwd. create/destroy/copy all route through this so git sees the same path.
-  private worktreeRoot(projectPath: string): string {
-    return isAbsolute(this.base) ? this.base : resolve(projectPath, this.base);
+  private worktreeRoot(projectPath: string, base?: string): string {
+    const b = base ?? this.base;
+    return isAbsolute(b) ? b : resolve(projectPath, b);
   }
 
-  private resolveWorktreePath(projectPath: string, workspaceId: string): string {
-    const root = this.worktreeRoot(projectPath);
-    const wt = join(root, workspaceId);
+  private resolveWorktreePath(
+    projectPath: string,
+    workspaceId: string,
+    base?: string,
+    dirName?: string
+  ): string {
+    const root = this.worktreeRoot(projectPath, base);
+    // A stale directory from a pruned worktree may still hold the friendly
+    // name; suffix with the id tail rather than failing the create.
+    let name = dirName ?? workspaceId;
+    if (dirName && existsSync(join(root, name))) {
+      name = `${dirName}-${workspaceId.slice(-6)}`;
+    }
+    const wt = join(root, name);
     if (!isWithin(root, wt)) {
       throw new Error(`worktree path escapes workspaces root: ${wt}`);
     }
     return wt;
   }
 
+  // First candidate that resolves to a real ref wins; HEAD always resolves so
+  // a repo with no main/master still gets a valid base.
+  async resolveBaseBranch(projectPath: string, candidates: Array<string | undefined>): Promise<string> {
+    for (const candidate of candidates) {
+      if (!candidate || !candidate.trim()) continue;
+      const r = await this.shell.run(
+        ["git", "rev-parse", "--verify", "--quiet", `${candidate}^{commit}`],
+        projectPath
+      );
+      if (r.exitCode === 0) return candidate;
+    }
+    return "HEAD";
+  }
+
   async create(params: CreateParams): Promise<{ workspaceId: string; worktreePath: string }> {
     const workspaceId = this.ids.uuid("ws");
-    const worktreePath = this.resolveWorktreePath(params.projectPath, workspaceId);
+    const worktreePath = this.resolveWorktreePath(
+      params.projectPath,
+      workspaceId,
+      params.base,
+      params.dirName
+    );
     const baseBranch = params.baseBranch ?? params.branch;
-    await this.shell.run(
+    const add = await this.shell.run(
       ["git", "worktree", "add", "-b", params.branch, worktreePath, baseBranch],
       params.projectPath
     );
+    if (add.exitCode !== 0) {
+      throw new Error(add.stderr.trim() || `git worktree add exited ${add.exitCode}`);
+    }
     if (params.filesToCopy && params.filesToCopy.length > 0) {
       this.copy(params.projectPath, worktreePath, params.filesToCopy);
     }

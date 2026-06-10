@@ -21,6 +21,8 @@ describe("AuxiliaryBar", () => {
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("diff");
     await userEvent.click(screen.getByTestId("aux-tab-preview"));
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
+    await userEvent.click(screen.getByTestId("aux-tab-scm"));
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
   });
 
   it("renders panel section when panelVisible is true", () => {

@@ -64,7 +64,7 @@ const COMES_FROM_LEFT: Record<FocusDirection, boolean> = {
 };
 
 /** Return the id of the first (depth-first) leaf in a subtree. */
-function firstLeafId(node: SplitNode): string {
+export function firstLeafId(node: SplitNode): string {
   if (node.type === "terminal") return node.id;
   return firstLeafId(node.left);
 }

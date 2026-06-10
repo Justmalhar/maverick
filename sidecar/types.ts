@@ -33,6 +33,7 @@ export interface Workspace {
   worktreePath: string;
   status: "active" | "idle" | "error";
   sessionId: string;
+  title?: string;
 }
 
 export interface Message {
