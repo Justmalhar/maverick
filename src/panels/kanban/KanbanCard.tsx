@@ -120,6 +120,7 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          style={provided.draggableProps.style as React.CSSProperties}
           data-testid="kanban-card"
           className={cn(
             "rounded-md border border-border/50 bg-card p-3 text-xs transition-all",
