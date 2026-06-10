@@ -122,7 +122,7 @@ export default function UsagePanel() {
       initial={reduce ? false : { opacity: 0, y: 4 }}
       animate={reduce ? undefined : { opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className="flex h-full w-full overflow-auto bg-editor"
+      className="w-full bg-editor"
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-12 py-10">
         <header className="flex items-center gap-3">

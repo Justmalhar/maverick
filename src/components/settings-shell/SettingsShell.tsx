@@ -30,7 +30,7 @@ export function SettingsShell({ open, onOpenChange, title, description, nav, foo
         <div className="row-span-1" style={{ borderRight: "1px solid hsl(var(--border))" }}>
           {nav}
         </div>
-        <div className="overflow-y-auto px-8 py-6">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-8 py-6">{children}</div>
         <div className="col-start-2">{footer}</div>
       </DialogContent>
     </Dialog>
