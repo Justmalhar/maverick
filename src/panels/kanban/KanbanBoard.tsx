@@ -121,13 +121,13 @@ export default function KanbanBoard() {
 
   const handleStart = useCallback(
     async (task: KanbanTask) => {
-      const branch = task.branch || "main";
+      const baseBranch = task.branch || "main";
       const backend =
         task.agentBackend ||
         useWorkbench.getState().backends.find((b) => b.active)?.id ||
         useWorkbench.getState().backends[0]?.id ||
         "claude-code";
-      await create(task.projectId, branch, backend);
+      await create(task.projectId, undefined, backend, baseBranch);
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
@@ -154,7 +154,7 @@ export default function KanbanBoard() {
         title: payload.prompt.split("\n")[0].slice(0, 80),
         description: payload.prompt,
         agentBackend: payload.agentBackend,
-        branch: payload.branch,
+        branch: payload.baseBranch,
         attachments: payload.attachments,
         projectId: payload.projectId,
         columnOrder: maxOrder + 1,
@@ -162,7 +162,7 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      const ws = await create(payload.projectId, payload.branch, payload.agentBackend);
+      const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
 
       await kanbanUpsert({
         id: task.id,

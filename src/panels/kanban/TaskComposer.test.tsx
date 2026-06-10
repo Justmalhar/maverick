@@ -114,7 +114,7 @@ describe("TaskComposer", () => {
       expect.objectContaining({
         prompt: "fix the bug",
         projectId: "p1",
-        branch: "main",
+        baseBranch: "main",
         agentBackend: "claude",
       })
     ));

@@ -104,7 +104,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ projectId: "p1", projectPath: "/p1" })
+        expect.objectContaining({ projectId: "p1", projectPath: "/p1", branch: undefined, baseBranch: "main" })
       )
     );
     await waitFor(() =>
@@ -276,7 +276,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ projectId: "p1", branch: "feat/auth" })
+        expect.objectContaining({ projectId: "p1", branch: undefined, baseBranch: "feat/auth" })
       )
     );
 
@@ -367,7 +367,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ branch: "main" })
+        expect.objectContaining({ branch: undefined, baseBranch: "main" })
       )
     );
   });
