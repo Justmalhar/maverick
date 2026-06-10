@@ -151,6 +151,22 @@ export interface ContextUsage {
   sessionCostEstimate: number;
 }
 
+export interface BackendTokenUsage {
+  backend: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  sessions: number;
+}
+
+export interface UsageSummary {
+  /** Local calendar day the figures cover, YYYY-MM-DD. */
+  date: string;
+  backends: BackendTokenUsage[];
+}
+
 export interface WorkspacePreset {
   name: string;
   description?: string;

@@ -21,6 +21,7 @@ pub mod project_settings;
 pub mod pty;
 pub mod shell;
 pub mod skills;
+pub mod usage;
 pub mod workspace;
 
 pub use attachment::attachment_create;
@@ -65,4 +66,5 @@ pub use project_settings::{
 pub use pty::{pty_close_all, pty_kill, pty_resize, pty_spawn, pty_write};
 pub use shell::default_shell;
 pub use skills::{skills_list, skills_run};
+pub use usage::usage_summary;
 pub use workspace::{workspace_create, workspace_destroy, workspace_list};

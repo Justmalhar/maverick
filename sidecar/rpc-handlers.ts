@@ -14,6 +14,7 @@ import { AutomationRunner } from "./automation-runner";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
+import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { FsWatcher } from "./fs-watcher";
@@ -210,6 +211,7 @@ export interface RpcHandlersOptions {
   mcp?: MCPManager;
   notifications?: NotificationService;
   context?: ContextTracker;
+  usage?: UsageTracker;
   attachments?: AttachmentStore;
   fileTree?: FileTree;
   fsWatcher?: FsWatcher;
@@ -235,6 +237,7 @@ export class RpcHandlers {
   readonly mcp: MCPManager;
   readonly notifications: NotificationService;
   readonly context: ContextTracker;
+  readonly usage: UsageTracker;
   readonly attachments: AttachmentStore;
   readonly fileTree: FileTree;
   readonly fsWatcher: FsWatcher;
@@ -270,6 +273,7 @@ export class RpcHandlers {
     this.notifications =
       opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
     this.context = opts.context ?? new ContextTracker(this.store);
+    this.usage = opts.usage ?? new UsageTracker();
     this.attachments = opts.attachments ?? new AttachmentStore();
     this.fileTree = opts.fileTree ?? new FileTree();
     this.notifier = opts.notifier ?? stdoutNotifier;
@@ -686,6 +690,8 @@ export class RpcHandlers {
         const p = Schemas.contextRecord.parse(params);
         return this.context.record(p.sessionId, p.tokensUsed, p.costEstimate);
       }
+      case "usage.summary":
+        return this.usage.summary();
       case "attachment.create": {
         const p = Schemas.attachmentCreate.parse(params);
         return this.attachments.create(p);

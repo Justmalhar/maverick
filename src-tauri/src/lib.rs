@@ -196,6 +196,7 @@ pub fn run() {
             mcp_add,
             context_usage,
             context_record,
+            usage_summary,
             attachment_create,
             automation_run,
             notify_send,

@@ -29,6 +29,7 @@ import type {
   SettingsPatch,
   Skill,
   Stash,
+  UsageSummary,
   Workspace,
   WorkspacePreset,
   PresetNode,
@@ -301,6 +302,10 @@ export function onMcpStatus(
 
 export async function contextUsage(sessionId: string): Promise<ContextUsage> {
   return invoke("context_usage", { sessionId });
+}
+
+export async function usageSummary(): Promise<UsageSummary> {
+  return invoke("usage_summary");
 }
 
 export async function contextRecord(
