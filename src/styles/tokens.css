@@ -60,10 +60,10 @@
   --info: 213 94% 68%;                 /* #60a5fa */
 
   /* Borders */
-  --border: 240 6% 10%;                /* #18181b */
-  --border-strong: 240 5% 16%;         /* #27272a */
-  --border-glass: 240 6% 10%;
-  --border-glass-strong: 240 5% 16%;
+  --border: 240 5% 16%;                /* #27272a */
+  --border-strong: 240 5% 26%;         /* #3f3f46 */
+  --border-glass: 240 5% 16%;
+  --border-glass-strong: 240 5% 26%;
 
   --input: 240 8% 5%;                  /* #0d0d10 */
   --ring: 0 0% 100%;                   /* #ffffff */
