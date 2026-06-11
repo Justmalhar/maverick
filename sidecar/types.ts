@@ -148,6 +148,18 @@ export interface Commit {
   fileCount: number;
 }
 
+export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
+
+export interface RemoteInfo {
+  provider: GitProvider;
+  host: string;
+  owner: string;
+  repo: string;
+  // Browser-openable repo root, e.g. https://github.com/owner/repo
+  webUrl: string;
+  remoteUrl: string;
+}
+
 export interface Stash {
   index: number;
   message: string;

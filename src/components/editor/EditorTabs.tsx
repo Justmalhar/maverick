@@ -8,6 +8,7 @@ import {
   Zap,
   Plug,
   Sparkles,
+  SquarePen,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -39,7 +40,7 @@ const SYSTEM_TAB_META: Record<
   automations: { label: "Automations", icon: Zap, shortcut: "⌘⇧A" },
   mcps: { label: "MCP Servers", icon: Plug },
   skills: { label: "Skills", icon: Sparkles },
-  "skill-editor": { label: "New Skill", icon: Sparkles },
+  "skill-editor": { label: "New Skill", icon: SquarePen },
 };
 
 const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps", "skills"];
@@ -77,6 +78,12 @@ export function EditorTabs() {
     } catch (err) {
       console.error("Failed to open terminal tab", err);
     }
+  }
+
+  function onOpenPanelTerminal() {
+    const state = useWorkbench.getState();
+    if (!state.layout.panelVisible) state.togglePanel();
+    window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
   }
 
   return (
@@ -220,6 +227,14 @@ export function EditorTabs() {
             >
               <TerminalSquare className="h-3.5 w-3.5" />
               <span className="flex-1">Terminal</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={onOpenPanelTerminal}
+              data-testid="editor-tabs-open-terminal"
+            >
+              <TerminalSquare className="h-3.5 w-3.5" />
+              <span className="flex-1">New Terminal in Panel</span>
+              <kbd className="text-[10px] text-muted-foreground">⌘⇧T</kbd>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Open as tab</DropdownMenuLabel>

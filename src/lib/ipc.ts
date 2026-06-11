@@ -143,7 +143,15 @@ export interface MCPServer {
   args: string[];
   status: MCPStatus;
   pid?: number;
-  restarts?: number;
+  restarts: number;
+}
+
+/** Config-file shape persisted in maverick.json — no runtime state. */
+export interface MCPServerConfig {
+  name: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
 }
 
 export interface ContextUsage {
@@ -238,6 +246,12 @@ export interface ConflictHunk {
   ours: string[];
   theirs: string[];
   base?: string[];
+  /**
+   * Set when the conflicted working-tree file could not be read as text (binary
+   * content or an unreadable path). The resolver UI surfaces this as a
+   * needs-manual-resolution entry instead of silently dropping the file.
+   */
+  binary?: boolean;
 }
 
 export type ConflictResolution = "ours" | "theirs" | "both";
@@ -260,19 +274,9 @@ export interface MaverickConfig {
   skills?: Skill[];
   presets?: WorkspacePreset[];
   automations?: Automation[];
-  mcps?: MCPServer[];
+  mcps?: MCPServerConfig[];
+  project?: ProjectSettings;
 }
-
-export type ActivityView =
-  | "dashboard"
-  | "tasks"
-  | "projects"
-  | "automations"
-  | "mcps"
-  | "git"
-  | "kanban"
-  | "browser"
-  | "settings";
 
 export type AuxiliaryView = "files" | "diff" | "scm" | "preview" | "none";
 
@@ -285,6 +289,36 @@ export interface RemoteInfo {
   repo: string;
   webUrl: string;
   remoteUrl: string;
+}
+
+// ---------- Companion (remote) server — Rust-owned types ----------
+
+export interface RemoteStatus {
+  enabled: boolean;
+  running: boolean;
+  port: number | null;
+  lanExposed: boolean;
+  pairedDevices: number;
+}
+
+export interface PairingTicket {
+  sessionId: string;
+  /** The `maverick://pair/v1?...` QR payload string. */
+  qrPayload: string;
+  fingerprint: string;
+}
+
+/**
+ * Mirrors the Rust `PairedDevice` wire format, which serializes snake_case
+ * because the same struct is persisted on disk (renaming would orphan
+ * existing device stores).
+ */
+export interface PairedDevice {
+  device_id: string;
+  static_key: string;
+  name: string;
+  fingerprint: string;
+  paired_at: number;
 }
 
 export interface FileReadResult {

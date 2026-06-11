@@ -1,17 +1,6 @@
-import { defaultShell } from "./deps";
-import type { Shell } from "./types";
+import type { GitProvider, RemoteInfo } from "./types";
 
-export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
-
-export interface RemoteInfo {
-  provider: GitProvider;
-  host: string;
-  owner: string;
-  repo: string;
-  // Browser-openable repo root, e.g. https://github.com/owner/repo
-  webUrl: string;
-  remoteUrl: string;
-}
+export type { GitProvider, RemoteInfo } from "./types";
 
 function providerForHost(host: string): GitProvider {
   const h = host.toLowerCase();
@@ -80,23 +69,3 @@ export function prWebUrl(info: RemoteInfo, branch: string, base?: string): strin
   }
 }
 
-export class GitProviderModule {
-  private shell: Shell;
-
-  constructor(opts: { shell?: Shell } = {}) {
-    this.shell = opts.shell ?? defaultShell;
-  }
-
-  async remoteInfo(params: { worktreePath: string; remote?: string }): Promise<RemoteInfo> {
-    const remote = params.remote ?? "origin";
-    const url = (
-      await this.shell.text(
-        ["git", "-C", params.worktreePath, "remote", "get-url", remote],
-        undefined
-      )
-    ).trim();
-    const info = parseRemoteUrl(url);
-    if (!info) throw new Error(`unrecognized remote URL for ${remote}: ${url}`);
-    return info;
-  }
-}

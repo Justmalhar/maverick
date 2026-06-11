@@ -178,10 +178,13 @@ impl Sidecar {
                     }
                 }
             }
-            for entry in pending.iter() {
-                log::warn!("dropping pending id {} due to sidecar EOF", entry.key());
+            let stranded: Vec<u64> = pending.iter().map(|entry| *entry.key()).collect();
+            for id in stranded {
+                if let Some((_, tx)) = pending.remove(&id) {
+                    log::warn!("failing pending id {id} due to sidecar EOF");
+                    let _ = tx.send(Err(SidecarError::TransportClosed));
+                }
             }
-            pending.clear();
         });
 
         tokio::spawn(async move {
@@ -195,6 +198,19 @@ impl Sidecar {
     }
 
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, SidecarError> {
+        self.request_with_timeout(method, params, self.request_timeout)
+            .await
+    }
+
+    /// LLM-backed methods (e.g. `ai.commit_message` shelling out to `claude -p`)
+    /// can legitimately run past the 60s default on cold start; callers pass a
+    /// wider budget instead of inheriting a global timeout bump.
+    pub async fn request_with_timeout(
+        &self,
+        method: &str,
+        params: Value,
+        request_timeout: Duration,
+    ) -> Result<Value, SidecarError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.pending.insert(id, tx);
@@ -217,7 +233,7 @@ impl Sidecar {
             stdin.flush().await?;
         }
 
-        match timeout(self.request_timeout, rx).await {
+        match timeout(request_timeout, rx).await {
             Ok(Ok(res)) => res,
             Ok(Err(_)) => {
                 self.pending.remove(&id);

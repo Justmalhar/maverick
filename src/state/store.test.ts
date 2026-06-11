@@ -37,7 +37,6 @@ beforeEach(() => {
       auxiliaryBarWidth: 280,
       panelVisible: false,
       panelHeight: 220,
-      activityView: "projects",
       auxiliaryView: "files",
     },
   });
@@ -116,10 +115,24 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().skills).toHaveLength(1);
   });
 
+  it("queueSetup adds once and ignores duplicates; clearPendingSetup removes", () => {
+    useWorkbench.getState().queueSetup("w-setup");
+    useWorkbench.getState().queueSetup("w-setup");
+    expect(useWorkbench.getState().pendingSetupIds).toEqual(["w-setup"]);
+    expect(useWorkbench.getState().layout.panelVisible).toBe(true);
+    useWorkbench.getState().clearPendingSetup("w-setup");
+    expect(useWorkbench.getState().pendingSetupIds).toEqual([]);
+  });
+
   it("layout toggles and view setters", () => {
-    useWorkbench.getState().setActivityView("git");
-    expect(useWorkbench.getState().layout.activityView).toBe("git");
+    useWorkbench.setState({
+      layout: { ...useWorkbench.getState().layout, primarySideBarVisible: false, auxiliaryBarVisible: false },
+    });
+    useWorkbench.getState().showPrimarySideBar();
     expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(true);
+    useWorkbench.getState().openSourceControl();
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
     useWorkbench.getState().setAuxiliaryView("diff");
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("diff");
 

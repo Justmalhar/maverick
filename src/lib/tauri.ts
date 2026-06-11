@@ -23,8 +23,11 @@ import type {
   Message,
   Notification,
   NotificationPermission,
+  PairedDevice,
+  PairingTicket,
   Project,
   RemoteInfo,
+  RemoteStatus,
   ResolvedInstructions,
   ProjectSettings,
   SettingsPatch,
@@ -87,6 +90,36 @@ export async function ptyResize(ptyId: string, cols: number, rows: number): Prom
 
 export async function ptyKill(ptyId: string): Promise<void> {
   return invoke("pty_kill", { ptyId });
+}
+
+export async function ptyCloseAll(): Promise<void> {
+  await invoke("pty_close_all");
+}
+
+// Companion (remote) server commands
+
+export async function remoteStart(port?: number): Promise<RemoteStatus> {
+  return invoke("remote_start", { port });
+}
+
+export async function remoteStop(): Promise<RemoteStatus> {
+  return invoke("remote_stop");
+}
+
+export async function remoteStatus(): Promise<RemoteStatus> {
+  return invoke("remote_status");
+}
+
+export async function remotePair(rendezvous?: string, name?: string): Promise<PairingTicket> {
+  return invoke("remote_pair", { rendezvous, name });
+}
+
+export async function remoteDevices(): Promise<PairedDevice[]> {
+  return invoke("remote_devices");
+}
+
+export async function remoteRevoke(deviceId: string): Promise<boolean> {
+  return invoke("remote_revoke", { deviceId });
 }
 
 export async function defaultShell(): Promise<string> {

@@ -139,7 +139,30 @@ const Schemas = {
   }),
   fsWatchDirs: z.object({ dirs: z.array(z.string()).default([]) }),
   kanbanList: z.object({ projectId: z.string() }),
-  kanbanUpsert: StringParam,
+  kanbanUpsert: z.object({
+    id: nullishOptional(z.string()),
+    projectId: z.string().min(1),
+    title: z.string().min(1),
+    description: nullishOptional(z.string()),
+    status: nullishOptional(z.enum(["todo", "in_progress", "review", "done"])),
+    columnOrder: nullishOptional(z.number()),
+    workspaceId: nullishOptional(z.string()),
+    labels: nullishOptional(z.array(z.string())),
+    dueDate: nullishOptional(z.number()),
+    createdAt: nullishOptional(z.number()),
+    agentBackend: nullishOptional(z.string()),
+    branch: nullishOptional(z.string()),
+    attachments: nullishOptional(
+      z.array(
+        z.object({
+          name: z.string(),
+          content: z.string(),
+          encoding: z.enum(["utf8", "base64"]),
+          size: z.number(),
+        })
+      )
+    ),
+  }),
   presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
@@ -161,8 +184,8 @@ const Schemas = {
   mcpStop: z.object({ name: z.string() }),
   mcpLogs: z.object({ name: z.string(), sinceOffset: nullishOptional(z.number().int().nonnegative()) }),
   mcpAdd: z.object({
-    name: z.string(),
-    command: z.string(),
+    name: z.string().trim().min(1, "MCP server name must not be empty"),
+    command: z.string().trim().min(1, "MCP server command must not be empty"),
     args: z.array(z.string()).default([]),
     env: nullishOptional(z.record(z.string(), z.string())),
     workspaceId: nullishOptional(z.string()),
@@ -673,11 +696,8 @@ export class RpcHandlers {
         return this.kanban.list(p.projectId);
       }
       case "kanban.upsert": {
-        const taskInput = (params.task ?? params) as Record<string, unknown>;
-        const projectId = String(taskInput.projectId ?? "");
-        const title = String(taskInput.title ?? "");
-        if (!projectId || !title) throw new Error("kanban.upsert requires projectId and title");
-        return this.kanban.upsert({ ...taskInput, projectId, title } as never);
+        const task = Schemas.kanbanUpsert.parse(params.task ?? params);
+        return this.kanban.upsert(task);
       }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);

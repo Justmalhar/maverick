@@ -5,8 +5,8 @@ import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
 
 // Terminal Mode panes run a login shell in the workspace worktree (mirrors
-// BottomTerminal). Each split leaf owns its OWN shell PTY — they are not the
-// agent CLI, which is Agent Mode (AgentTerminal).
+// the Panel's Terminal tab). Each split leaf owns its OWN shell PTY — they are
+// not the agent CLI, which is Agent Mode (AgentTerminal).
 const LEAF_SHELL = "/bin/zsh";
 const LEAF_ARGS = ["-l"];
 

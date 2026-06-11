@@ -59,6 +59,23 @@ describe("SQLiteStore", () => {
     expect(ws.sessionId.startsWith("sess_")).toBe(true);
   });
 
+  test("workspaceGet returns the latest sessionId, matching workspaceList", () => {
+    const proj = store.projectAdd({ path: "/tmp/g" });
+    const ws = store.workspaceCreate({
+      projectId: proj.id,
+      branch: "feat",
+      agentBackend: "claude",
+      worktreePath: "/tmp/wtg",
+    });
+    const fetched = store.workspaceGet(ws.id);
+    expect(fetched?.sessionId).toBe(ws.sessionId);
+    expect(fetched?.sessionId).not.toBe("");
+  });
+
+  test("workspaceGet returns null for unknown id", () => {
+    expect(store.workspaceGet("ws_missing")).toBeNull();
+  });
+
   test("workspaceList filters by projectId and includes session", () => {
     const proj = store.projectAdd({ path: "/tmp/y" });
     store.workspaceCreate({
@@ -95,6 +112,35 @@ describe("SQLiteStore", () => {
     const r = store.workspaceDestroy(ws.id);
     expect(r.worktreePath).toBe("/tmp/wt-d");
     expect(store.workspaceList(proj.id)).toHaveLength(0);
+  });
+
+  test("workspaceDestroy detaches kanban tasks and deletes notifications", () => {
+    const proj = store.projectAdd({ path: "/tmp/d2" });
+    const ws = store.workspaceCreate({
+      projectId: proj.id,
+      branch: "main",
+      agentBackend: "claude",
+      worktreePath: "/tmp/wt-d2",
+    });
+    store.db
+      .query(
+        `INSERT INTO kanban_tasks
+           (id, project_id, title, description, status, column_order, workspace_id,
+            labels_json, due_date, created_at, agent_backend, branch, attachments)
+         VALUES ('task_x', ?, 't', NULL, 'todo', 0, ?, '[]', NULL, 0, '', '', '[]')`
+      )
+      .run(proj.id, ws.id);
+    store.notificationInsert({ workspaceId: ws.id, type: "agent", title: "t", body: "b" });
+
+    store.workspaceDestroy(ws.id);
+
+    const task = store.db
+      .query<{ workspace_id: string | null }, []>(
+        "SELECT workspace_id FROM kanban_tasks WHERE id = 'task_x'"
+      )
+      .get();
+    expect(task?.workspace_id).toBeNull();
+    expect(store.notificationList().filter((n) => n.workspaceId === ws.id)).toHaveLength(0);
   });
 
   test("workspaceDestroy throws on missing id", () => {

@@ -811,4 +811,17 @@ describe("renderer-pool font-load refit", () => {
     });
     expect(() => refitLiveSlotsForFonts()).not.toThrow();
   });
+
+  it("hooks the font refit to document.fonts.ready at module init", async () => {
+    const ready = Promise.resolve();
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { ready },
+    });
+    vi.resetModules();
+    await import("./renderer-pool");
+    await ready;
+    delete (document as { fonts?: unknown }).fonts;
+    vi.resetModules();
+  });
 });
