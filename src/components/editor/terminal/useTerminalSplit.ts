@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
-import type { SplitNode } from "@/lib/ipc";
+import type { SplitLeaf, SplitNode } from "@/lib/ipc";
 import {
   splitNode,
   removeNode,
@@ -20,7 +20,7 @@ interface Options {
   // workspace at once.
   active: boolean;
   makeRoot: () => SplitNode;
-  makeLeaf: () => SplitNode;
+  makeLeaf: () => SplitLeaf;
   // A leaf that must never be closed (e.g. the agent CLI pane).
   protectedLeafId?: string;
 }

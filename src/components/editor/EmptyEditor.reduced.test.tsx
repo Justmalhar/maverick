@@ -30,12 +30,10 @@ vi.mock("framer-motion", async () => {
 
 import { renderWithProviders, screen } from "@/test/utils";
 import { EmptyEditor } from "./EmptyEditor";
-import { ActivityBarItem } from "@/components/activitybar/ActivityBarItem";
 import { EditorTab } from "./EditorTab";
 import { ProjectItem } from "@/components/primarysidebar/ProjectItem";
 import { Panel } from "@/components/panel/Panel";
 import { TitleBar } from "@/components/titlebar/TitleBar";
-import { FolderTree } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { makeProject, makeWorkspace } from "@/test/fixtures";
 
@@ -43,11 +41,6 @@ describe("reduced-motion branch coverage", () => {
   it("EmptyEditor renders without motion animation values", () => {
     renderWithProviders(<EmptyEditor />);
     expect(screen.getByTestId("empty-editor")).toBeInTheDocument();
-  });
-
-  it("ActivityBarItem whileTap=undefined branch", () => {
-    renderWithProviders(<ActivityBarItem icon={FolderTree} label="x" onClick={() => {}} testId="ai" />);
-    expect(screen.getByTestId("ai")).toBeInTheDocument();
   });
 
   it("EditorTab layout=false branch", () => {

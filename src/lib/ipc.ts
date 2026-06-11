@@ -75,8 +75,10 @@ export interface Skill {
 
 export type KeybindingMap = Record<string, string>;
 
+export type SplitLeaf = { type: "terminal"; id: string; backend: string; ptyId: string };
+
 export type SplitNode =
-  | { type: "terminal"; id: string; backend: string; ptyId: string }
+  | SplitLeaf
   | {
       type: "split";
       direction: "h" | "v";
