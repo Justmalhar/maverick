@@ -133,11 +133,14 @@ export function FilesView() {
   const onOpen = (entry: FileEntry, opts: { pin?: boolean } = {}) => {
     const root = active?.worktreePath;
     if (!root) return;
+    const absFilePath = absPath(root, entry.path);
+    const isMarkdown = /\.(md|mdx|markdown)$/i.test(entry.name);
     openFileTab({
       kind: "file",
-      path: absPath(root, entry.path),
+      path: absFilePath,
       worktreePath: root,
       preview: !opts.pin,
+      mode: isMarkdown ? "view" : "edit",
     });
   };
 
