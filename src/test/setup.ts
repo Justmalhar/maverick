@@ -230,6 +230,88 @@ vi.mock("react-window", () => ({
     ),
 }));
 
+// Monaco: full editor mock. Tests assert against globalThis.__monaco spies.
+vi.mock("monaco-editor/esm/vs/editor/editor.api", () => {
+  const makeModel = (value: string, language?: string, uri?: unknown) => {
+    let v = value;
+    const listeners: Array<() => void> = [];
+    return {
+      uri: uri ?? { toString: () => `inmemory://${Math.random()}` },
+      getValue: () => v,
+      setValue: (nv: string) => {
+        v = nv;
+        listeners.forEach((l) => l());
+      },
+      getLanguageId: () => language ?? "plaintext",
+      onDidChangeContent: (cb: () => void) => {
+        listeners.push(cb);
+        return { dispose: vi.fn() };
+      },
+      isDisposed: () => false,
+      dispose: vi.fn(),
+    };
+  };
+  const models = new Map<string, ReturnType<typeof makeModel>>();
+  const editorApi = {
+    create: vi.fn(() => ({
+      setModel: vi.fn(),
+      getModel: vi.fn(),
+      updateOptions: vi.fn(),
+      onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
+      addCommand: vi.fn(),
+      layout: vi.fn(),
+      focus: vi.fn(),
+      dispose: vi.fn(),
+    })),
+    createDiffEditor: vi.fn(() => ({
+      setModel: vi.fn(),
+      updateOptions: vi.fn(),
+      getModifiedEditor: vi.fn(() => ({
+        onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
+        addCommand: vi.fn(),
+        focus: vi.fn(),
+      })),
+      layout: vi.fn(),
+      dispose: vi.fn(),
+    })),
+    createModel: vi.fn((value: string, language?: string, uri?: { toString(): string }) => {
+      const m = makeModel(value, language, uri);
+      if (uri) models.set(uri.toString(), m);
+      return m;
+    }),
+    getModel: vi.fn((uri: { toString(): string }) => models.get(uri.toString()) ?? null),
+    setModelLanguage: vi.fn(),
+    defineTheme: vi.fn(),
+    setTheme: vi.fn(),
+  };
+  const monaco = {
+    editor: editorApi,
+    languages: { register: vi.fn(), getLanguages: vi.fn(() => []) },
+    Uri: { file: (p: string) => ({ toString: () => `file://${p}`, path: p }) },
+    KeyMod: { CtrlCmd: 2048 },
+    KeyCode: { KeyS: 49 },
+  };
+  (globalThis as Record<string, unknown>).__monaco = monaco;
+  return monaco;
+});
+
+vi.mock("monaco-editor/esm/vs/editor/editor.worker?worker", () => ({
+  default: class {
+    terminate = vi.fn();
+  },
+}));
+
+vi.mock("shiki", () => ({
+  createHighlighter: vi.fn(async () => ({
+    getLoadedLanguages: vi.fn(() => ["typescript"]),
+    loadLanguage: vi.fn(async () => {}),
+  })),
+}));
+
+vi.mock("@shikijs/monaco", () => ({
+  shikiToMonaco: vi.fn(),
+}));
+
 vi.mock("pdfjs-dist", () => {
   const fakePage = {
     getViewport: ({ scale }: { scale: number }) => ({ width: 100 * scale, height: 200 * scale }),
