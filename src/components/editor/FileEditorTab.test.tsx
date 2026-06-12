@@ -1,8 +1,10 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { renderWithProviders } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
+import type { FileTab } from "@/state/store";
 import { EditorTabs } from "./EditorTabs";
+import { FileEditorTab } from "./FileEditorTab";
 
 function openTab(path = "/wt/src/a.ts", overrides: Record<string, unknown> = {}) {
   useWorkbench.getState().openFileTab({
@@ -65,5 +67,62 @@ describe("file tabs in EditorTabs", () => {
     expect(useWorkbench.getState().fileTabs).toHaveLength(1);
     fireEvent.click(await screen.findByRole("button", { name: /close without saving/i }));
     expect(useWorkbench.getState().fileTabs).toHaveLength(0);
+  });
+});
+
+describe("FileEditorTab (isolated)", () => {
+  const tab: FileTab = {
+    id: "file:/wt/src/a.ts",
+    kind: "file",
+    path: "/wt/src/a.ts",
+    worktreePath: "/wt",
+    preview: false,
+    dirty: false,
+    mode: "edit",
+    viewed: false,
+  };
+
+  it("calls onSelect when clicked", () => {
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={tab} active={false} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.click(screen.getByTestId("editor-tab-file-file:/wt/src/a.ts"));
+    expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it("calls onPin when double-clicked", () => {
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={tab} active={false} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.doubleClick(screen.getByTestId("editor-tab-file-file:/wt/src/a.ts"));
+    expect(onPin).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClose when close control is clicked", () => {
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={tab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close a.ts" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClose when Enter is pressed on the close control", () => {
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={tab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close a.ts" }), { key: "Enter" });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

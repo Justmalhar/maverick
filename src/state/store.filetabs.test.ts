@@ -108,4 +108,18 @@ describe("FileTab store", () => {
     useWorkbench.getState().openSystemTab("kanban");
     expect(useWorkbench.getState().activeFileTabId).toBeNull();
   });
+
+  it("setFileTabViewed marks a diff tab as viewed", () => {
+    open({ kind: "diff", mode: "diff" });
+    const id = useWorkbench.getState().fileTabs[0].id;
+    useWorkbench.getState().setFileTabViewed(id, true);
+    expect(useWorkbench.getState().fileTabs[0].viewed).toBe(true);
+  });
+
+  it("pinFileTab sets preview to false", () => {
+    open();
+    const id = useWorkbench.getState().fileTabs[0].id;
+    useWorkbench.getState().pinFileTab(id);
+    expect(useWorkbench.getState().fileTabs[0].preview).toBe(false);
+  });
 });

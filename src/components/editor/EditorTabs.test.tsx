@@ -37,6 +37,8 @@ beforeEach(() => {
     activeSystemTab: null,
     terminalTabs: [],
     activeTerminalTabId: null,
+    fileTabs: [],
+    activeFileTabId: null,
   });
 });
 
