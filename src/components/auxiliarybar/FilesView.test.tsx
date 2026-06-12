@@ -18,7 +18,7 @@ function routeInvoke(tree: FileEntry[], opts: { treeError?: boolean } = {}) {
         : Promise.resolve(tree as never);
     }
     if (cmd === "file_read") {
-      return Promise.resolve({ content: "x", size: 1, binary: false, unreadable: false } as never);
+      return Promise.resolve({ content: "x", size: 1, binary: false, unreadable: false, mtime: 0 } as never);
     }
     return Promise.resolve({ watching: 1 } as never);
   });

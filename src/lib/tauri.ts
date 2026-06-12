@@ -12,8 +12,10 @@ import type {
   DetectedBackend,
   DiffResult,
   DiffStat,
+  FileAtRefResult,
   FileEntry,
   FileReadResult,
+  FileWriteResult,
   FsChangedPayload,
   KanbanTask,
   SearchResult,
@@ -217,6 +219,29 @@ export async function fileTree(worktreePath: string): Promise<FileEntry[]> {
 
 export async function fileRead(filePath: string): Promise<FileReadResult> {
   return invoke("file_read", { filePath });
+}
+
+export async function fileWrite(
+  filePath: string,
+  content: string,
+  expectedMtime?: number
+): Promise<FileWriteResult> {
+  return invoke("file_write", { filePath, content, expectedMtime });
+}
+
+export async function fileReadAtRef(
+  worktreePath: string,
+  filePath: string,
+  ref: string
+): Promise<FileAtRefResult> {
+  return invoke("file_read_at_ref", { worktreePath, filePath, ref });
+}
+
+export async function gitDiscardFile(
+  worktreePath: string,
+  filePath: string
+): Promise<{ ok: true }> {
+  return invoke("git_discard_file", { worktreePath, filePath });
 }
 
 export async function fileSearch(

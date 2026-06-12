@@ -326,6 +326,17 @@ export interface FileReadResult {
   size: number;
   binary: boolean;
   unreadable: boolean;
+  /** mtimeMs at read time; echo back to file_write as expectedMtime. */
+  mtime: number;
+}
+
+export interface FileWriteResult {
+  mtime: number;
+}
+
+export interface FileAtRefResult {
+  content: string;
+  missing: boolean;
 }
 
 export interface SearchHit {
