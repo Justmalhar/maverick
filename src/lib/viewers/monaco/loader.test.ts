@@ -46,4 +46,18 @@ describe("ensureLanguage", () => {
     const lang = await ensureLanguage("/a/b.rs");
     expect(lang).toBe("rust");
   });
+
+  it("degrades to plaintext when loadLanguage throws", async () => {
+    const { createHighlighter } = await import("shiki");
+    const hlInstance = await (createHighlighter as ReturnType<typeof vi.fn>).mock.results[0].value;
+    // Override loadLanguage to throw for this call only.
+    const original = hlInstance.loadLanguage;
+    hlInstance.loadLanguage = vi.fn().mockRejectedValueOnce(new Error("grammar unavailable"));
+    // Use .go — a language in EXT_TO_LANG but not pre-loaded by the shiki mock
+    // (getLoadedLanguages returns ["typescript"] only), so loadedLangs won't
+    // already contain "go" and the try-catch block will execute.
+    const lang = await ensureLanguage("/src/main.go");
+    expect(lang).toBe("plaintext");
+    hlInstance.loadLanguage = original;
+  });
 });

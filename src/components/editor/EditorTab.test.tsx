@@ -104,4 +104,28 @@ describe("EditorTab", () => {
     fireEvent.keyDown(screen.getByTestId("editor-tab-w1"), { key: " " });
     expect(onSelect).toHaveBeenCalled();
   });
+
+  it("fires onContextMenu when provided", () => {
+    const onContextMenu = vi.fn();
+    renderWithProviders(
+      <EditorTab
+        workspace={makeWorkspace({ id: "w1" })}
+        active={false}
+        onSelect={() => {}}
+        onClose={() => {}}
+        onContextMenu={onContextMenu}
+      />
+    );
+    fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
+    expect(onContextMenu).toHaveBeenCalled();
+  });
+
+  it("inactive tab applies inactive className", () => {
+    renderWithProviders(
+      <EditorTab workspace={makeWorkspace({ id: "w1" })}
+        active={false} onSelect={() => {}} onClose={() => {}} />
+    );
+    const tab = screen.getByTestId("editor-tab-w1");
+    expect(tab.className).toMatch(/bg-tab-inactive/);
+  });
 });

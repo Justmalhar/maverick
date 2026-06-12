@@ -24,3 +24,40 @@ describe("builtin viewer registration", () => {
     expect(ids).toContain("markdown");
   });
 });
+
+describe("builtin viewer load() functions", () => {
+  it("markdown load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("markdown");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+
+  it("image load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("image");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+
+  it("video load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("video");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+
+  it("pdf load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("pdf");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+
+  it("hex load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("hex");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+});

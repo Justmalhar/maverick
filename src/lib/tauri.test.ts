@@ -133,6 +133,27 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("file_tree", { worktreePath: "/wt" });
   });
 
+  it("file write / read-at-ref / discard wrappers", async () => {
+    await api.fileWrite("/wt/a.ts", "hello");
+    expect(invoke).toHaveBeenLastCalledWith("file_write", {
+      filePath: "/wt/a.ts", content: "hello", expectedMtime: undefined,
+    });
+    await api.fileWrite("/wt/a.ts", "hello", 1234);
+    expect(invoke).toHaveBeenLastCalledWith("file_write", {
+      filePath: "/wt/a.ts", content: "hello", expectedMtime: 1234,
+    });
+
+    await api.fileReadAtRef("/wt", "a.ts", "HEAD");
+    expect(invoke).toHaveBeenLastCalledWith("file_read_at_ref", {
+      worktreePath: "/wt", filePath: "a.ts", ref: "HEAD",
+    });
+
+    await api.gitDiscardFile("/wt", "a.ts");
+    expect(invoke).toHaveBeenLastCalledWith("git_discard_file", {
+      worktreePath: "/wt", filePath: "a.ts",
+    });
+  });
+
   it("file read / search and fs watch wrappers", async () => {
     await api.fileRead("/wt/a.md");
     expect(invoke).toHaveBeenLastCalledWith("file_read", { filePath: "/wt/a.md" });

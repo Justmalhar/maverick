@@ -233,4 +233,32 @@ describe("FilesView", () => {
     // Relative entry path is resolved against /wt before being stored.
     expect(useWorkbench.getState().fileTabs[0]?.path).toBe("/wt/f0.ts");
   });
+
+  it("opens a markdown file with mode: view", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+    });
+    routeInvoke([{ path: "readme.md", name: "readme.md", isDirectory: false }]);
+    renderWithProviders(<FilesView />);
+    await waitFor(() => expect(screen.getByText("readme.md")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("file-node-readme.md"));
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab).toMatchObject({ mode: "view" });
+  });
+
+  it("opens a non-markdown file with mode: edit", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+    });
+    routeInvoke([{ path: "a.ts", name: "a.ts", isDirectory: false }]);
+    renderWithProviders(<FilesView />);
+    await waitFor(() => expect(screen.getByText("a.ts")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("file-node-a.ts"));
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab).toMatchObject({ mode: "edit" });
+  });
 });

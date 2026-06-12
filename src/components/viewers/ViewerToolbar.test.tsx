@@ -86,4 +86,34 @@ describe("ViewerToolbar", () => {
     await user.click(screen.getByText("Hex"));
     expect(useWorkbench.getState().fileTabs[0].viewerId).toBe("hex");
   });
+
+  it("cancel button in discard dialog closes without discarding", async () => {
+    const discardChanges = vi.fn(async () => {});
+    setup({}, { discardChanges });
+    fireEvent.click(screen.getByRole("button", { name: /undo changes/i }));
+    // Click Cancel instead of Discard.
+    fireEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+    expect(discardChanges).not.toHaveBeenCalled();
+  });
+
+  it("falls back to raw path when path does not start with worktreePath", () => {
+    // Render a tab whose path is not under worktreePath — hits the `else`
+    // branch of relSegments (line 30 of ViewerToolbar.tsx).
+    useWorkbench.setState({ fileTabs: [], activeFileTabId: null });
+    useWorkbench.getState().openFileTab({
+      kind: "file",
+      path: "/other/place/file.ts",
+      worktreePath: "/wt",
+      preview: false,
+    });
+    const tab = useWorkbench.getState().fileTabs[0];
+    const candidates = [
+      { id: "hex", displayName: "Hex", priority: 0, capabilities: {}, canHandle: () => true, load: async () => () => null },
+    ];
+    renderWithProviders(
+      <ViewerToolbar tab={tab} actions={{}} candidates={candidates as never} />
+    );
+    // The raw path is split by "/" and rendered as breadcrumb segments.
+    expect(screen.getByText("file.ts")).toBeInTheDocument();
+  });
 });

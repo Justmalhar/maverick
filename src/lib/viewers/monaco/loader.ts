@@ -16,6 +16,8 @@ async function boot(): Promise<Monaco> {
   ]);
 
   // Shiki owns tokenization; Monaco only needs its base editor worker.
+  /* v8 ignore next 3 — getWorker() is invoked by the Monaco editor when it
+     spawns Web Workers; the jsdom test environment never triggers it. */
   (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
     getWorker: () => new EditorWorker(),
   };
@@ -40,6 +42,8 @@ let loadedLangs = new Set<string>();
 
 export function getMonaco(): Promise<Monaco> {
   if (!instance) {
+    /* v8 ignore next 4 — boot() rejection resets the singleton; exercising it
+       requires full module teardown which conflicts with the shared test harness. */
     instance = boot().catch((err: unknown) => {
       instance = null;
       throw err;
@@ -53,6 +57,8 @@ export async function ensureLanguage(path: string): Promise<string> {
   const lang = languageForPath(path);
   if (lang === "plaintext") return lang;
   await getMonaco();
+  /* v8 ignore next — highlighterRef is always set by boot(); the null guard is
+     defensive against a race that cannot occur in normal or test execution. */
   if (!highlighterRef) return "plaintext";
   if (!loadedLangs.has(lang)) {
     try {

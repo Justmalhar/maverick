@@ -68,6 +68,46 @@ describe("file tabs in EditorTabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: /close without saving/i }));
     expect(useWorkbench.getState().fileTabs).toHaveLength(0);
   });
+
+  it("cancel in the unsaved-changes dialog keeps the tab open", async () => {
+    openTab();
+    useWorkbench.getState().setFileTabDirty("file:/wt/src/a.ts", true);
+    renderWithProviders(<EditorTabs />);
+    fireEvent.click(screen.getByRole("button", { name: "Close a.ts" }));
+    // Dialog opens.
+    expect(await screen.findByRole("button", { name: /cancel/i })).toBeInTheDocument();
+    // Click the Cancel button inside the unsaved-changes dialog.
+    const cancelButtons = screen.getAllByRole("button", { name: /cancel/i });
+    fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+    // Tab is still there.
+    expect(useWorkbench.getState().fileTabs).toHaveLength(1);
+  });
+
+  it("pressing Escape on the unsaved-changes dialog closes it without losing the tab", async () => {
+    openTab();
+    useWorkbench.getState().setFileTabDirty("file:/wt/src/a.ts", true);
+    renderWithProviders(<EditorTabs />);
+    fireEvent.click(screen.getByRole("button", { name: "Close a.ts" }));
+    // Dialog opens — confirm it's visible.
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+    // ESC triggers onOpenChange(false), which calls setConfirmCloseId(null).
+    fireEvent.keyDown(document.body, { key: "Escape", code: "Escape", bubbles: true });
+    // Tab is still there.
+    expect(useWorkbench.getState().fileTabs).toHaveLength(1);
+  });
+
+  it("clicking a file tab sets it as the active file tab", () => {
+    // Use preview: false so both tabs are kept simultaneously.
+    openTab("/wt/src/a.ts", { preview: false });
+    openTab("/wt/src/b.ts", { preview: false });
+    renderWithProviders(<EditorTabs />);
+    // Both tabs exist. Click b.ts tab to make it active.
+    fireEvent.click(screen.getByTestId("editor-tab-file-file:/wt/src/b.ts"));
+    expect(useWorkbench.getState().activeFileTabId).toBe("file:/wt/src/b.ts");
+    // Click a.ts to switch back — exercises the onSelect arrow function.
+    fireEvent.click(screen.getByTestId("editor-tab-file-file:/wt/src/a.ts"));
+    expect(useWorkbench.getState().activeFileTabId).toBe("file:/wt/src/a.ts");
+  });
 });
 
 describe("FileEditorTab (isolated)", () => {
@@ -123,6 +163,42 @@ describe("FileEditorTab (isolated)", () => {
       <FileEditorTab tab={tab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
     );
     fireEvent.keyDown(screen.getByRole("button", { name: "Close a.ts" }), { key: "Enter" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClose when Enter is pressed on the dirty-dot close control", () => {
+    const dirtyTab: FileTab = { ...tab, dirty: true };
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={dirtyTab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.keyDown(screen.getByTestId("file-tab-dirty-file:/wt/src/a.ts"), { key: "Enter" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClose when Space is pressed on the dirty-dot close control", () => {
+    const dirtyTab: FileTab = { ...tab, dirty: true };
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={dirtyTab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.keyDown(screen.getByTestId("file-tab-dirty-file:/wt/src/a.ts"), { key: " " });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClose when dirty-dot is clicked", () => {
+    const dirtyTab: FileTab = { ...tab, dirty: true };
+    const onSelect = vi.fn();
+    const onPin = vi.fn();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <FileEditorTab tab={dirtyTab} active={true} onSelect={onSelect} onPin={onPin} onClose={onClose} />
+    );
+    fireEvent.click(screen.getByTestId("file-tab-dirty-file:/wt/src/a.ts"));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
