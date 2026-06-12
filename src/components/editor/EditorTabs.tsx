@@ -24,8 +24,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { EditorTab } from "./EditorTab";
+import { FileEditorTab } from "./FileEditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
 import { useTerminalTab } from "@/hooks/useTerminalTab";
 import { defaultTerminalCwd } from "@/lib/default-cwd";
@@ -70,6 +79,13 @@ export function EditorTabs() {
   const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
   const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
   const { open: openTerminalTab, close: closeTerminal } = useTerminalTab();
+
+  const fileTabs = useWorkbench((s) => s.fileTabs);
+  const activeFileTabId = useWorkbench((s) => s.activeFileTabId);
+  const setActiveFileTab = useWorkbench((s) => s.setActiveFileTab);
+  const closeFileTab = useWorkbench((s) => s.closeFileTab);
+  const pinFileTab = useWorkbench((s) => s.pinFileTab);
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
   async function onNewTerminal() {
     try {
@@ -185,6 +201,19 @@ export function EditorTabs() {
             </button>
           );
         })}
+
+        {fileTabs.map((tab) => (
+          <FileEditorTab
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeFileTabId}
+            onSelect={() => setActiveFileTab(tab.id)}
+            onPin={() => pinFileTab(tab.id)}
+            onClose={() => {
+              if (!closeFileTab(tab.id)) setConfirmCloseId(tab.id);
+            }}
+          />
+        ))}
       </div>
 
       <div className="flex items-center gap-px pr-2">
@@ -285,6 +314,31 @@ export function EditorTabs() {
           if (saveLayoutFor) await saveCurrentLayout(saveLayoutFor, name);
         }}
       />
+
+      <Dialog open={confirmCloseId !== null} onOpenChange={(o) => !o && setConfirmCloseId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unsaved changes</DialogTitle>
+            <DialogDescription>
+              This file has unsaved changes. Close it anyway?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setConfirmCloseId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmCloseId) closeFileTab(confirmCloseId, { force: true });
+                setConfirmCloseId(null);
+              }}
+            >
+              Close without saving
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
