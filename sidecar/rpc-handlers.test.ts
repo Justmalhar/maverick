@@ -1462,3 +1462,31 @@ describe("RpcHandlers", () => {
     expect(filterChanged().length).toBeGreaterThan(0);
   });
 });
+
+describe("file.write / file.readAtRef / git.discard_file", () => {
+  test("file.write delegates to FileWriter", async () => {
+    const written: unknown[] = [];
+    const fileWriter = { write: (p: unknown) => { written.push(p); return { mtime: 42 }; } };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, fileWriter: fileWriter as never, notifier: { write: () => {} } });
+    const res = await handlers.dispatch("file.write", { filePath: "/a.txt", content: "x", expectedMtime: 7 });
+    expect(res).toEqual({ mtime: 42 });
+    expect(written[0]).toEqual({ filePath: "/a.txt", content: "x", expectedMtime: 7 });
+  });
+
+  test("file.readAtRef delegates to GitModule.showAtRef", async () => {
+    const git = { showAtRef: async () => ({ content: "c", missing: false }) };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, git: git as never, notifier: { write: () => {} } });
+    const res = await handlers.dispatch("file.readAtRef", { worktreePath: "/wt", filePath: "a.ts", ref: "HEAD" });
+    expect(res).toEqual({ content: "c", missing: false });
+  });
+
+  test("git.discard_file delegates to GitModule.discardFile", async () => {
+    const git = { discardFile: async () => ({ ok: true }) };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, git: git as never, notifier: { write: () => {} } });
+    const res = await handlers.dispatch("git.discard_file", { worktreePath: "/wt", filePath: "a.ts" });
+    expect(res).toEqual({ ok: true });
+  });
+});

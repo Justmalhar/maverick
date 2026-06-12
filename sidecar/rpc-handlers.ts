@@ -23,6 +23,7 @@ import { FileTree } from "./file-tree";
 import { FsWatcher } from "./fs-watcher";
 import { FileSearch } from "./file-search";
 import { FileReader } from "./file-reader";
+import { FileWriter } from "./file-writer";
 import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
@@ -128,6 +129,13 @@ const Schemas = {
   }),
   fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
   fileRead: z.object({ filePath: z.string() }),
+  fileWrite: z.object({
+    filePath: z.string(),
+    content: z.string(),
+    expectedMtime: nullishOptional(z.number()),
+  }),
+  fileReadAtRef: z.object({ worktreePath: z.string(), filePath: z.string(), ref: z.string() }),
+  gitDiscardFile: z.object({ worktreePath: z.string(), filePath: z.string() }),
   fileSearch: z.object({
     worktreePath: z.string(),
     query: z.string(),
@@ -256,6 +264,7 @@ export interface RpcHandlersOptions {
   fsWatcher?: FsWatcher;
   fileSearch?: FileSearch;
   fileReader?: FileReader;
+  fileWriter?: FileWriter;
   projectSettings?: ProjectSettingsStore;
   caffeinate?: Caffeinate;
   instructions?: InstructionsResolver;
@@ -284,6 +293,7 @@ export class RpcHandlers {
   readonly fsWatcher: FsWatcher;
   readonly fileSearch: FileSearch;
   readonly fileReader: FileReader;
+  readonly fileWriter: FileWriter;
   readonly projectSettings: ProjectSettingsStore;
   readonly caffeinate: Caffeinate;
   readonly instructions: InstructionsResolver;
@@ -323,6 +333,7 @@ export class RpcHandlers {
     this.fsWatcher = opts.fsWatcher ?? new FsWatcher({ notifier: this.notifier });
     this.fileSearch = opts.fileSearch ?? new FileSearch();
     this.fileReader = opts.fileReader ?? new FileReader();
+    this.fileWriter = opts.fileWriter ?? new FileWriter();
     this.projectSettings = opts.projectSettings ?? new ProjectSettingsStore();
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
@@ -667,6 +678,18 @@ export class RpcHandlers {
       case "file.read": {
         const p = Schemas.fileRead.parse(params);
         return this.fileReader.read(p);
+      }
+      case "file.write": {
+        const p = Schemas.fileWrite.parse(params);
+        return this.fileWriter.write({ filePath: p.filePath, content: p.content, expectedMtime: p.expectedMtime });
+      }
+      case "file.readAtRef": {
+        const p = Schemas.fileReadAtRef.parse(params);
+        return this.git.showAtRef(p);
+      }
+      case "git.discard_file": {
+        const p = Schemas.gitDiscardFile.parse(params);
+        return this.git.discardFile(p);
       }
       case "file.search": {
         const p = Schemas.fileSearch.parse(params);

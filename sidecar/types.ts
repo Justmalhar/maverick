@@ -140,6 +140,15 @@ export interface DiffHunk {
   patch: string;
 }
 
+export interface FileWriteResult {
+  mtime: number;
+}
+
+export interface FileAtRefResult {
+  content: string;
+  missing: boolean;
+}
+
 export interface Commit {
   sha: string;
   message: string;
