@@ -4,29 +4,30 @@ import { FileReader } from "./file-reader";
 describe("FileReader", () => {
   test("reads UTF-8 text content", () => {
     const fr = new FileReader({
-      stat: () => ({ size: 5 }),
+      stat: () => ({ size: 5, mtimeMs: 1000 }),
       readFile: () => Buffer.from("hello"),
     });
     const res = fr.read({ filePath: "/a.txt" });
-    expect(res).toEqual({ content: "hello", size: 5, binary: false, unreadable: false });
+    expect(res).toEqual({ content: "hello", size: 5, binary: false, unreadable: false, mtime: 1000 });
   });
 
   test("flags binary content (NUL byte) and omits it", () => {
     const fr = new FileReader({
-      stat: () => ({ size: 3 }),
+      stat: () => ({ size: 3, mtimeMs: 2000 }),
       readFile: () => Buffer.from([0x41, 0x00, 0x42]),
     });
     const res = fr.read({ filePath: "/a.bin" });
     expect(res.binary).toBe(true);
     expect(res.content).toBe("");
     expect(res.unreadable).toBe(false);
+    expect(res.mtime).toBe(2000);
   });
 
   test("refuses oversized files without reading them", () => {
     let readCalled = false;
     const fr = new FileReader({
       maxBytes: 10,
-      stat: () => ({ size: 11 }),
+      stat: () => ({ size: 11, mtimeMs: 3000 }),
       readFile: () => {
         readCalled = true;
         return Buffer.from("x");
@@ -36,6 +37,7 @@ describe("FileReader", () => {
     expect(res.binary).toBe(true);
     expect(res.size).toBe(11);
     expect(readCalled).toBe(false);
+    expect(res.mtime).toBe(3000);
   });
 
   test("returns unreadable when stat throws", () => {
@@ -46,12 +48,12 @@ describe("FileReader", () => {
       readFile: () => Buffer.from(""),
     });
     const res = fr.read({ filePath: "/missing" });
-    expect(res).toEqual({ content: "", size: 0, binary: false, unreadable: true });
+    expect(res).toEqual({ content: "", size: 0, binary: false, unreadable: true, mtime: 0 });
   });
 
   test("returns unreadable when readFile throws", () => {
     const fr = new FileReader({
-      stat: () => ({ size: 4 }),
+      stat: () => ({ size: 4, mtimeMs: 5000 }),
       readFile: () => {
         throw new Error("EACCES");
       },
@@ -59,6 +61,24 @@ describe("FileReader", () => {
     const res = fr.read({ filePath: "/locked" });
     expect(res.unreadable).toBe(true);
     expect(res.size).toBe(4);
+    expect(res.mtime).toBe(0);
+  });
+
+  test("read returns the file mtime", () => {
+    const fr = new FileReader({
+      stat: () => ({ size: 5, mtimeMs: 9999 }),
+      readFile: () => Buffer.from("hello"),
+    });
+    const res = fr.read({ filePath: "/a.txt" });
+    expect(res.mtime).toBeGreaterThan(0);
+    expect(res.mtime).toBe(9999);
+
+    const frUnreadable = new FileReader({
+      stat: () => { throw new Error("ENOENT"); },
+      readFile: () => Buffer.from(""),
+    });
+    const resUnreadable = frUnreadable.read({ filePath: "/missing" });
+    expect(resUnreadable.mtime).toBe(0);
   });
 
   test("default constructor builds without DI", () => {

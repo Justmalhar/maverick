@@ -9,6 +9,8 @@ export interface ReadResult {
   binary: boolean;
   /** True when the file could not be read at all (missing/permission). */
   unreadable: boolean;
+  /** mtimeMs at read time; 0 when unreadable. */
+  mtime: number;
 }
 
 // Above this size we refuse to slurp text into the preview pane: large files
@@ -17,41 +19,44 @@ const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
 export interface FileReaderOptions {
   readFile?: (path: string) => Buffer;
-  stat?: (path: string) => { size: number };
+  stat?: (path: string) => { size: number; mtimeMs: number };
   maxBytes?: number;
 }
 
 export class FileReader {
   private readFile: (path: string) => Buffer;
-  private stat: (path: string) => { size: number };
+  private stat: (path: string) => { size: number; mtimeMs: number };
   private maxBytes: number;
 
   constructor(opts: FileReaderOptions = {}) {
     this.readFile = opts.readFile ?? ((p) => readFileSync(p));
-    this.stat = opts.stat ?? ((p) => ({ size: statSync(p).size }));
+    this.stat = opts.stat ?? ((p) => statSync(p));
     this.maxBytes = opts.maxBytes ?? MAX_TEXT_BYTES;
   }
 
   /** Reads `filePath` as UTF-8 text, refusing binary or oversized content. */
   read(params: { filePath: string }): ReadResult {
     let size: number;
+    let mtime: number;
     try {
-      size = this.stat(params.filePath).size;
+      const st = this.stat(params.filePath);
+      size = st.size;
+      mtime = st.mtimeMs;
     } catch {
-      return { content: "", size: 0, binary: false, unreadable: true };
+      return { content: "", size: 0, binary: false, unreadable: true, mtime: 0 };
     }
     if (size > this.maxBytes) {
-      return { content: "", size, binary: true, unreadable: false };
+      return { content: "", size, binary: true, unreadable: false, mtime };
     }
     let buf: Buffer;
     try {
       buf = this.readFile(params.filePath);
     } catch {
-      return { content: "", size, binary: false, unreadable: true };
+      return { content: "", size, binary: false, unreadable: true, mtime: 0 };
     }
     if (buf.includes(0)) {
-      return { content: "", size, binary: true, unreadable: false };
+      return { content: "", size, binary: true, unreadable: false, mtime };
     }
-    return { content: buf.toString("utf8"), size, binary: false, unreadable: false };
+    return { content: buf.toString("utf8"), size, binary: false, unreadable: false, mtime };
   }
 }
