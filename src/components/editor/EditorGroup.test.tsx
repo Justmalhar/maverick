@@ -33,6 +33,7 @@ beforeEach(() => {
   useWorkbench.setState({
     ...initial, workspaces: [], activeWorkspaceId: null, workspaceAccessOrder: [],
     editorModes: {}, splitTrees: {}, systemTabs: [], activeSystemTab: null,
+    fileTabs: [], activeFileTabId: null,
   });
 });
 
@@ -237,5 +238,17 @@ describe("EditorGroup", () => {
     });
     renderWithProviders(<EditorGroup />);
     expect(screen.queryByTestId("empty-editor")).not.toBeInTheDocument();
+  });
+});
+
+describe("file tabs", () => {
+  it("mounts a pane per file tab, hidden when inactive (keep-alive)", async () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    renderWithProviders(<EditorGroup />);
+    const a = await screen.findByTestId("file-tab-content-file:/wt/a.ts");
+    const b = await screen.findByTestId("file-tab-content-file:/wt/b.ts");
+    expect(a).toHaveAttribute("aria-hidden", "true");
+    expect(b).toHaveAttribute("aria-hidden", "false");
   });
 });

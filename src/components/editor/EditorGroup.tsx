@@ -7,6 +7,8 @@ import { EmptyEditor } from "./EmptyEditor";
 import { TerminalPane } from "./terminal/TerminalPane";
 import { cn } from "@/lib/utils";
 
+const FileTabPane = lazy(() => import("@/components/viewers/FileTabPane"));
+
 const UsagePanel = lazy(() => import("@/panels/usage/UsagePanel"));
 const BrowserPanel = lazy(() => import("@/panels/browser/BrowserPanel"));
 const KanbanBoard = lazy(() => import("@/panels/kanban/KanbanBoard"));
@@ -45,11 +47,15 @@ export function EditorGroup() {
   const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
   const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
 
-  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0;
+  const fileTabs = useWorkbench((s) => s.fileTabs);
+  const activeFileTabId = useWorkbench((s) => s.activeFileTabId);
+
+  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0 || fileTabs.length > 0;
   const showEmpty = !hasAnyTabs;
   const showSystemTab = activeSystemTab && systemTabs.includes(activeSystemTab);
   const showTerminalTab =
     !!activeTerminalTabId && terminalTabs.some((t) => t.id === activeTerminalTabId);
+  const showFileTab = !!activeFileTabId && fileTabs.some((t) => t.id === activeFileTabId);
   // Keep the browser mounted for the lifetime of its tab. It is only torn down
   // when its tab is closed, so a page survives switching to any other tab.
   const browserOpen = systemTabs.includes("browser");
@@ -78,7 +84,7 @@ export function EditorGroup() {
             <WorkspaceEditor
               key={ws.id}
               workspace={ws}
-              active={!showSystemTab && !showTerminalTab && ws.id === activeId}
+              active={!showSystemTab && !showTerminalTab && !showFileTab && ws.id === activeId}
             />
           ))}
 
@@ -128,6 +134,27 @@ export function EditorGroup() {
             </div>
           </Suspense>
         )}
+
+        {/* File tabs: keep-alive mounted, hidden when inactive so Monaco
+            models, scroll position and undo stacks survive tab switches. */}
+        {fileTabs.map((tab) => {
+          const active = showFileTab && tab.id === activeFileTabId;
+          return (
+            <div
+              key={tab.id}
+              data-testid={`file-tab-content-${tab.id}`}
+              aria-hidden={!active}
+              className={cn(
+                "absolute inset-0 bg-editor",
+                !active && "keep-alive-hidden content-visibility-auto"
+              )}
+            >
+              <Suspense fallback={null}>
+                <FileTabPane tab={tab} active={active} />
+              </Suspense>
+            </div>
+          );
+        })}
 
         {/* Other system tabs: lazy-loaded, mounted only when active */}
         {showSystemTab && activeSystemTab && activeSystemTab !== "browser" && (
