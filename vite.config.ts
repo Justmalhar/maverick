@@ -53,6 +53,8 @@ export default defineConfig(async () => ({
           markdown: ["react-markdown", "remark-gfm", "highlight.js"],
           pdf: ["pdfjs-dist"],
           motion: ["framer-motion"],
+          monaco: ["monaco-editor"],
+          shiki: ["shiki", "@shikijs/monaco"],
         },
       },
     },

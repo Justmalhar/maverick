@@ -19,4 +19,30 @@ describe("model cache", () => {
     releaseModel("/wt/a.ts");
     expect(m.dispose).toHaveBeenCalled();
   });
+
+  it("two concurrent calls return the same model, createModel called once, disposal requires two releases", async () => {
+    const monacoGlobal = (globalThis as Record<string, unknown>).__monaco as {
+      editor: { createModel: ReturnType<typeof vi.fn> };
+    };
+    monacoGlobal.editor.createModel.mockClear();
+
+    const [a, b] = await Promise.all([
+      getOrCreateModel("/wt/concurrent.ts", "content"),
+      getOrCreateModel("/wt/concurrent.ts", "content"),
+    ]);
+
+    // Both callers must receive the same model object.
+    expect(Object.is(a, b)).toBe(true);
+
+    // createModel must have been invoked exactly once despite two concurrent callers.
+    expect(monacoGlobal.editor.createModel).toHaveBeenCalledTimes(1);
+
+    // Two callers → refs === 2; one release is not enough to dispose.
+    releaseModel("/wt/concurrent.ts");
+    expect(a.dispose).not.toHaveBeenCalled();
+
+    // Second release → refs === 0; model must be disposed.
+    releaseModel("/wt/concurrent.ts");
+    expect(a.dispose).toHaveBeenCalled();
+  });
 });

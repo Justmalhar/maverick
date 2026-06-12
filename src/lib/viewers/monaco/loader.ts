@@ -39,14 +39,21 @@ let highlighterRef: Awaited<ReturnType<typeof import("shiki").createHighlighter>
 let loadedLangs = new Set<string>();
 
 export function getMonaco(): Promise<Monaco> {
-  if (!instance) instance = boot();
+  if (!instance) {
+    instance = boot().catch((err: unknown) => {
+      instance = null;
+      throw err;
+    });
+  }
   return instance;
 }
 
 /** Lazy-load the TextMate grammar for a file's language; returns the language id. */
 export async function ensureLanguage(path: string): Promise<string> {
   const lang = languageForPath(path);
-  if (lang === "plaintext" || !highlighterRef) return lang;
+  if (lang === "plaintext") return lang;
+  await getMonaco();
+  if (!highlighterRef) return "plaintext";
   if (!loadedLangs.has(lang)) {
     try {
       await highlighterRef.loadLanguage(lang as never);
