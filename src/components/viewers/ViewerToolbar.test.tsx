@@ -96,6 +96,37 @@ describe("ViewerToolbar", () => {
     expect(discardChanges).not.toHaveBeenCalled();
   });
 
+  it("shows View/Edit switcher for markdown file tabs and sets mode accordingly", () => {
+    useWorkbench.setState({ fileTabs: [], activeFileTabId: null });
+    useWorkbench.getState().openFileTab({
+      kind: "file",
+      path: "/wt/docs/README.md",
+      worktreePath: "/wt",
+      preview: false,
+      mode: "view",
+    });
+    const tab = useWorkbench.getState().fileTabs[0];
+    // candidates[0].id === "markdown" triggers View/Edit switcher
+    const candidates = [
+      { id: "markdown", displayName: "Markdown Preview", priority: 50, capabilities: { edit: true }, canHandle: () => true, load: async () => () => null },
+      { id: "code", displayName: "Code Editor", priority: 10, capabilities: { edit: true }, canHandle: () => true, load: async () => () => null },
+    ];
+    renderWithProviders(<ViewerToolbar tab={tab} actions={{}} candidates={candidates as never} />);
+    // View/Edit switcher must be visible
+    const viewBtn = screen.getByRole("button", { name: "View" });
+    const editBtn = screen.getByRole("button", { name: "Edit" });
+    expect(viewBtn).toBeInTheDocument();
+    expect(editBtn).toBeInTheDocument();
+    // Clicking Edit sets mode to "edit"
+    fireEvent.click(editBtn);
+    expect(useWorkbench.getState().fileTabs[0].mode).toBe("edit");
+    // Clicking View sets mode to "view"
+    fireEvent.click(viewBtn);
+    expect(useWorkbench.getState().fileTabs[0].mode).toBe("view");
+    // Viewed checkbox must NOT appear for file tabs
+    expect(screen.queryByRole("checkbox", { name: /viewed/i })).toBeNull();
+  });
+
   it("falls back to raw path when path does not start with worktreePath", () => {
     // Render a tab whose path is not under worktreePath — hits the `else`
     // branch of relSegments (line 30 of ViewerToolbar.tsx).

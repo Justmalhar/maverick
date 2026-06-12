@@ -39,7 +39,11 @@ export function ViewerToolbar({ tab, actions, candidates }: Props) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const segments = relSegments(live);
+  // Show the Diff/Edit switcher for diff tabs; show a View/Edit switcher for
+  // markdown file tabs (detected by candidates[0]?.id === "markdown").
   const showDiffSwitch = live.kind === "diff";
+  const showMarkdownSwitch = !showDiffSwitch && candidates[0]?.id === "markdown";
+  const showModeSwitch = showDiffSwitch || showMarkdownSwitch;
 
   return (
     <div
@@ -68,6 +72,7 @@ export function ViewerToolbar({ tab, actions, candidates }: Props) {
         </label>
       )}
 
+
       {live.dirty && actions.save && (
         <Button variant="ghost" size="sm" aria-label="Save" onClick={() => void actions.save?.()}>
           <Save className="h-3.5 w-3.5" />
@@ -88,22 +93,37 @@ export function ViewerToolbar({ tab, actions, candidates }: Props) {
         </Button>
       )}
 
-      {showDiffSwitch && (
+      {showModeSwitch && (
         <div role="group" aria-label="View mode" className="flex overflow-hidden rounded-md border border-border">
-          {(["diff", "edit"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-label={m === "diff" ? "Diff" : "Edit"}
-              onClick={() => setFileTabMode(live.id, m)}
-              className={cn(
-                "px-2 py-0.5 text-[11px] capitalize transition-colors duration-100",
-                live.mode === m ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-foreground/5"
-              )}
-            >
-              {m}
-            </button>
-          ))}
+          {showDiffSwitch
+            ? (["diff", "edit"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-label={m === "diff" ? "Diff" : "Edit"}
+                  onClick={() => setFileTabMode(live.id, m)}
+                  className={cn(
+                    "px-2 py-0.5 text-[11px] capitalize transition-colors duration-100",
+                    live.mode === m ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-foreground/5"
+                  )}
+                >
+                  {m === "diff" ? "Diff" : "Edit"}
+                </button>
+              ))
+            : (["view", "edit"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-label={m === "view" ? "View" : "Edit"}
+                  onClick={() => setFileTabMode(live.id, m)}
+                  className={cn(
+                    "px-2 py-0.5 text-[11px] capitalize transition-colors duration-100",
+                    live.mode === m ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-foreground/5"
+                  )}
+                >
+                  {m === "view" ? "View" : "Edit"}
+                </button>
+              ))}
         </div>
       )}
 

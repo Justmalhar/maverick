@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import MarkdownPreview from "@/panels/preview/MarkdownPreview";
 import { fileRead } from "@/lib/tauri";
 import type { ViewerProps } from "@/lib/viewers/types";
 
-export default function MarkdownViewer({ tab, registerActions }: ViewerProps) {
+// CodeViewer is lazy-loaded to avoid circular imports and keep the shell bundle small.
+const CodeViewer = lazy(() => import("./CodeViewer"));
+
+export default function MarkdownViewer({ tab, meta, onDirtyChange, registerActions }: ViewerProps) {
   const [content, setContent] = useState("");
 
   useEffect(() => {
@@ -23,6 +26,15 @@ export default function MarkdownViewer({ tab, registerActions }: ViewerProps) {
       },
     });
   }, [content, registerActions]);
+
+  // When the user switches to edit mode, render the Monaco CodeViewer instead.
+  if (tab.mode === "edit") {
+    return (
+      <Suspense fallback={null}>
+        <CodeViewer tab={tab} meta={meta} onDirtyChange={onDirtyChange} registerActions={registerActions} />
+      </Suspense>
+    );
+  }
 
   return <MarkdownPreview content={content} />;
 }

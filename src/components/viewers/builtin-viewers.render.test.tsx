@@ -18,13 +18,14 @@ import HexViewer from "./HexViewer";
 const invokeMock = vi.mocked(invoke);
 
 /** Build a minimal FileTab in the store and return it. */
-function makeFileTab(path: string) {
+function makeFileTab(path: string, mode?: import("@/state/store").FileTabMode) {
   useWorkbench.setState({ fileTabs: [], activeFileTabId: null });
   useWorkbench.getState().openFileTab({
     kind: "file",
     path,
     worktreePath: "/wt",
     preview: false,
+    mode,
   });
   return useWorkbench.getState().fileTabs[0];
 }
@@ -51,7 +52,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 describe("MarkdownViewer", () => {
   it("renders MarkdownPreview after loading file content", async () => {
-    const tab = makeFileTab("/wt/readme.md");
+    const tab = makeFileTab("/wt/readme.md", "view");
     const meta = fileMetaForPath("/wt/readme.md");
     const registerActions = vi.fn();
     const onDirtyChange = vi.fn();
@@ -70,7 +71,7 @@ describe("MarkdownViewer", () => {
   });
 
   it("calls registerActions with a copyContents function that writes to clipboard", async () => {
-    const tab = makeFileTab("/wt/readme.md");
+    const tab = makeFileTab("/wt/readme.md", "view");
     const meta = fileMetaForPath("/wt/readme.md");
     const registerActions = vi.fn();
     const onDirtyChange = vi.fn();
@@ -116,7 +117,7 @@ describe("MarkdownViewer", () => {
       return Promise.resolve({} as never);
     });
 
-    const tab = makeFileTab("/wt/blob.bin");
+    const tab = makeFileTab("/wt/blob.bin", "view");
     const meta = fileMetaForPath("/wt/blob.bin");
     const registerActions = vi.fn();
     const onDirtyChange = vi.fn();

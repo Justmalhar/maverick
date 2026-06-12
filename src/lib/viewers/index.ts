@@ -52,3 +52,12 @@ viewerRegistry.register({
   canHandle: () => true,
   load: async () => (await import("@/components/viewers/HexViewer")).default,
 });
+
+viewerRegistry.register({
+  id: "code",
+  displayName: "Code Editor",
+  priority: 10,
+  capabilities: { edit: true },
+  canHandle: (f, intent) => !f.binary && intent !== "diff",
+  load: async () => (await import("@/components/viewers/CodeViewer")).default,
+});
