@@ -278,7 +278,7 @@ export interface MaverickConfig {
   project?: ProjectSettings;
 }
 
-export type AuxiliaryView = "files" | "diff" | "scm" | "preview" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "none";
 
 export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
 

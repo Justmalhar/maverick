@@ -14,7 +14,6 @@ import {
   Sparkles,
   TerminalSquare,
   FileSearch,
-  Eye,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { KEYBINDINGS } from "@/shortcuts/registry";
@@ -49,7 +48,6 @@ export function CommandPalette() {
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const setQuickOpenOpen = useWorkbench((s) => s.setQuickOpenOpen);
-  const setAuxiliaryView = useWorkbench((s) => s.setAuxiliaryView);
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const toggleEditorMode = useWorkbench((s) => s.toggleEditorMode);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
@@ -75,16 +73,6 @@ export function CommandPalette() {
           setOpen(false);
         },
         shortcutId: "global.quickOpen",
-      },
-      {
-        id: "preview.open",
-        label: "View: Open Preview",
-        icon: Eye,
-        run: () => {
-          setAuxiliaryView("preview");
-          setOpen(false);
-        },
-        shortcutId: "preview.open",
       },
       {
         id: "view.git",
@@ -215,7 +203,6 @@ export function CommandPalette() {
       showPrimarySideBar,
       openSourceControl,
       openSystemTab,
-      setAuxiliaryView,
       setOpen,
       setPresetLauncherOpen,
       setQuickOpenOpen,

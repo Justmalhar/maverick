@@ -33,7 +33,7 @@ export function joinPath(root: string, rel: string): string {
 export function QuickOpen() {
   const open = useWorkbench((s) => s.quickOpenOpen);
   const setOpen = useWorkbench((s) => s.setQuickOpenOpen);
-  const openPreview = useWorkbench((s) => s.openPreview);
+  const openFileTab = useWorkbench((s) => s.openFileTab);
   const active = useWorkbench(selectActiveWorkspace);
   const worktree = active?.worktreePath ?? null;
   const [query, setQuery] = useState("");
@@ -82,7 +82,7 @@ export function QuickOpen() {
   }, [open, query, worktree]);
 
   const onSelect = (hit: SearchHit) => {
-    openPreview({ path: joinPath(result.root, hit.rel), name: hit.name });
+    openFileTab({ kind: "file", path: joinPath(result.root, hit.rel), worktreePath: result.root, preview: false });
     setOpen(false);
   };
 

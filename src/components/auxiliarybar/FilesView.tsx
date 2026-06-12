@@ -49,7 +49,7 @@ interface RowProps {
   node: FlatNode;
   expanded: boolean;
   onToggle: (path: string) => void;
-  onOpen: (entry: FileEntry) => void;
+  onOpen: (entry: FileEntry, opts?: { pin?: boolean }) => void;
 }
 
 function FileRow({ node, expanded, onToggle, onOpen }: RowProps) {
@@ -74,6 +74,7 @@ function FileRow({ node, expanded, onToggle, onOpen }: RowProps) {
       style={{ paddingLeft: `${depth * 12 + 8}px`, height: `${ROW_HEIGHT}px` }}
       data-testid={`file-node-${entry.path}`}
       onClick={() => (isDir ? onToggle(entry.path) : onOpen(entry))}
+      onDoubleClick={() => !isDir && onOpen(entry, { pin: true })}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -122,17 +123,22 @@ function EmptyState({
 
 export function FilesView() {
   const active = useWorkbench(selectActiveWorkspace);
-  const openPreview = useWorkbench((s) => s.openPreview);
+  const openFileTab = useWorkbench((s) => s.openFileTab);
   const { entries, expanded, toggle } = useFileTree(active?.worktreePath ?? null);
 
   const flat = useMemo(() => flattenTree(entries, expanded), [entries, expanded]);
 
-  // entry.path is RELATIVE; PreviewView -> fileRead does an OS read, so resolve
-  // to an ABSOLUTE path against the active worktree root before storing it.
-  const onOpen = (entry: FileEntry) => {
+  // entry.path is RELATIVE; resolve to an ABSOLUTE path against the active
+  // worktree root before opening the tab so the viewer can read the file.
+  const onOpen = (entry: FileEntry, opts: { pin?: boolean } = {}) => {
     const root = active?.worktreePath;
     if (!root) return;
-    openPreview({ path: absPath(root, entry.path), name: entry.name });
+    openFileTab({
+      kind: "file",
+      path: absPath(root, entry.path),
+      worktreePath: root,
+      preview: !opts.pin,
+    });
   };
 
   if (!active) {

@@ -10,13 +10,11 @@ import { Panel } from "@/components/panel/Panel";
 import { FilesView } from "./FilesView";
 import { DiffView } from "./DiffView";
 import { SourceControlView } from "./SourceControlView";
-import { PreviewView } from "./PreviewView";
 
 const TABS: Array<{ value: AuxiliaryView; label: string }> = [
   { value: "files", label: "Files" },
   { value: "diff", label: "Changes" },
   { value: "scm", label: "Source Control" },
-  { value: "preview", label: "Preview" },
 ];
 
 export function AuxiliaryBar() {
@@ -54,9 +52,6 @@ export function AuxiliaryBar() {
             </TabsContent>
             <TabsContent value="scm" className="flex-1 overflow-hidden">
               <SourceControlView />
-            </TabsContent>
-            <TabsContent value="preview" className="flex-1 overflow-hidden">
-              <PreviewView />
             </TabsContent>
           </Tabs>
         </ResizablePanel>

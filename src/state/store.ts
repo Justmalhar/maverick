@@ -24,15 +24,6 @@ interface PanelLayout {
 
 export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor";
 
-export interface PreviewFile {
-  /** Absolute path of the file being previewed. */
-  path: string;
-  /** Display label (basename) for the preview tab. */
-  name: string;
-  /** When true, markdown renders as raw source instead of the rendered view. */
-  raw?: boolean;
-}
-
 export interface TerminalTab {
   id: string;
   cwd: string;
@@ -100,9 +91,6 @@ interface WorkbenchState {
   // Layout
   layout: PanelLayout;
 
-  // Active file preview shown in the AuxiliaryBar "preview" tab.
-  previewFile: PreviewFile | null;
-
   // Workspaces whose setup script should auto-run in the Panel's Setup tab the
   // next time they are active (set right after workspace.create returns).
   pendingSetupIds: string[];
@@ -135,11 +123,6 @@ interface WorkbenchState {
   setSkills: (skills: Skill[]) => void;
   queueSetup: (workspaceId: string) => void;
   clearPendingSetup: (workspaceId: string) => void;
-
-  // Preview
-  openPreview: (file: PreviewFile) => void;
-  closePreview: () => void;
-  togglePreviewRaw: () => void;
 
   // Layout actions
   showPrimarySideBar: () => void;
@@ -219,8 +202,6 @@ export const useWorkbench = create<WorkbenchState>()(
       auxiliaryView: "files",
     },
 
-    previewFile: null,
-
     pendingSetupIds: [],
 
     commandPaletteOpen: false,
@@ -294,19 +275,6 @@ export const useWorkbench = create<WorkbenchState>()(
     clearPendingSetup: (workspaceId) =>
       set((s) => ({
         pendingSetupIds: s.pendingSetupIds.filter((id) => id !== workspaceId),
-      })),
-
-    openPreview: (file) =>
-      set((s) => ({
-        previewFile: file,
-        layout: { ...s.layout, auxiliaryView: "preview", auxiliaryBarVisible: true },
-      })),
-    closePreview: () => set({ previewFile: null }),
-    togglePreviewRaw: () =>
-      set((s) => ({
-        previewFile: s.previewFile
-          ? { ...s.previewFile, raw: !s.previewFile.raw }
-          : s.previewFile,
       })),
 
     showPrimarySideBar: () =>

@@ -50,12 +50,7 @@ describe("CommandPalette", () => {
     expect(useWorkbench.getState().commandPaletteOpen).toBe(false);
   });
 
-  it("preview.open switches the aux view to preview", async () => {
-    renderWithProviders(<CommandPalette />);
-    await userEvent.click(screen.getByTestId("commandpalette-item-preview.open"));
-    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
-    expect(useWorkbench.getState().commandPaletteOpen).toBe(false);
-  });
+  // preview.open command removed — files open as editor file tabs (B4).
 
   const cases: Array<[string, (s: ReturnType<typeof useWorkbench.getState>) => unknown]> = [
     ["view.kanban", (s) => expect(s.systemTabs).toContain("kanban")],

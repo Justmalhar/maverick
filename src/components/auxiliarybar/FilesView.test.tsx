@@ -30,7 +30,8 @@ beforeEach(() => {
     ...initial,
     workspaces: [],
     activeWorkspaceId: null,
-    previewFile: null,
+    fileTabs: [],
+    activeFileTabId: null,
   });
 });
 
@@ -104,7 +105,7 @@ describe("FilesView", () => {
     await waitFor(() => expect(screen.queryByText("a.ts")).not.toBeInTheDocument());
   });
 
-  it("opens a file in the preview on click", async () => {
+  it("opens a file as a preview tab on single click", async () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
@@ -114,12 +115,32 @@ describe("FilesView", () => {
     renderWithProviders(<FilesView />);
     await waitFor(() => expect(screen.getByText("readme.md")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("file-node-readme.md"));
-    // Stored path is ABSOLUTE (root-joined) so PreviewView -> fileRead can read it.
-    expect(useWorkbench.getState().previewFile).toEqual({
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab).toMatchObject({
+      kind: "file",
       path: "/wt/readme.md",
-      name: "readme.md",
+      worktreePath: "/wt",
+      preview: true,
     });
-    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
+  });
+
+  it("opens a file as a pinned tab on double click", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+    });
+    routeInvoke([{ path: "readme.md", name: "readme.md", isDirectory: false }]);
+    renderWithProviders(<FilesView />);
+    await waitFor(() => expect(screen.getByText("readme.md")).toBeInTheDocument());
+    fireEvent.doubleClick(screen.getByTestId("file-node-readme.md"));
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab).toMatchObject({
+      kind: "file",
+      path: "/wt/readme.md",
+      worktreePath: "/wt",
+      preview: false,
+    });
   });
 
   it("opens a file via keyboard (Enter)", async () => {
@@ -132,7 +153,7 @@ describe("FilesView", () => {
     renderWithProviders(<FilesView />);
     await waitFor(() => expect(screen.getByText("a.ts")).toBeInTheDocument());
     fireEvent.keyDown(screen.getByTestId("file-node-a.ts"), { key: "Enter" });
-    expect(useWorkbench.getState().previewFile?.path).toBe("/wt/a.ts");
+    expect(useWorkbench.getState().fileTabs[0]?.path).toBe("/wt/a.ts");
   });
 
   it("toggles a directory via keyboard (Space)", async () => {
@@ -194,7 +215,7 @@ describe("FilesView", () => {
     expect(screen.getByText("f0.ts")).toBeInTheDocument();
   });
 
-  it("clicking a file in the virtualized list opens preview", async () => {
+  it("clicking a file in the virtualized list opens a file tab", async () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
@@ -210,6 +231,6 @@ describe("FilesView", () => {
     await waitFor(() => expect(screen.getByTestId("file-node-f0.ts")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("file-node-f0.ts"));
     // Relative entry path is resolved against /wt before being stored.
-    expect(useWorkbench.getState().previewFile?.path).toBe("/wt/f0.ts");
+    expect(useWorkbench.getState().fileTabs[0]?.path).toBe("/wt/f0.ts");
   });
 });

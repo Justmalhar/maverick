@@ -158,25 +158,7 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().layout.panelHeight).toBe(150);
   });
 
-  it("preview open/close/toggle-raw actions", () => {
-    useWorkbench.getState().openPreview({ path: "/wt/a.md", name: "a.md" });
-    let s = useWorkbench.getState();
-    expect(s.previewFile).toEqual({ path: "/wt/a.md", name: "a.md" });
-    expect(s.layout.auxiliaryView).toBe("preview");
-    expect(s.layout.auxiliaryBarVisible).toBe(true);
-
-    useWorkbench.getState().togglePreviewRaw();
-    expect(useWorkbench.getState().previewFile?.raw).toBe(true);
-    useWorkbench.getState().togglePreviewRaw();
-    expect(useWorkbench.getState().previewFile?.raw).toBe(false);
-
-    useWorkbench.getState().closePreview();
-    expect(useWorkbench.getState().previewFile).toBeNull();
-
-    // toggle-raw with no preview file is a no-op.
-    useWorkbench.getState().togglePreviewRaw();
-    expect(useWorkbench.getState().previewFile).toBeNull();
-  });
+  // preview open/close/toggle-raw removed — preview is now a file tab (B4).
 
   it("overlays setters", () => {
     useWorkbench.getState().setCommandPaletteOpen(true);

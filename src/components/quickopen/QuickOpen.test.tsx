@@ -26,7 +26,8 @@ beforeEach(() => {
     workspaces: [],
     activeWorkspaceId: null,
     quickOpenOpen: false,
-    previewFile: null,
+    fileTabs: [],
+    activeFileTabId: null,
   });
 });
 
@@ -142,7 +143,7 @@ describe("QuickOpen", () => {
     expect(screen.getByText("No files found")).toBeInTheDocument();
   });
 
-  it("selecting a hit opens the preview and closes the dialog", async () => {
+  it("selecting a hit opens a pinned file tab and closes the dialog", async () => {
     mockSearch({
       hits: [{ rel: "src/a.ts", name: "a.ts", isDirectory: false }],
       truncated: false,
@@ -158,9 +159,11 @@ describe("QuickOpen", () => {
     const item = await screen.findByTestId("quickopen-item-src/a.ts");
     item.click();
     await waitFor(() => expect(useWorkbench.getState().quickOpenOpen).toBe(false));
-    expect(useWorkbench.getState().previewFile).toEqual({
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab).toMatchObject({
       path: "/wt/src/a.ts",
-      name: "a.ts",
+      worktreePath: "/wt",
+      preview: false,
     });
   });
 

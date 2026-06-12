@@ -19,8 +19,6 @@ describe("AuxiliaryBar", () => {
     expect(screen.getByTestId("auxiliary-bar")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("aux-tab-diff"));
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("diff");
-    await userEvent.click(screen.getByTestId("aux-tab-preview"));
-    expect(useWorkbench.getState().layout.auxiliaryView).toBe("preview");
     await userEvent.click(screen.getByTestId("aux-tab-scm"));
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
   });

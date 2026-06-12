@@ -52,12 +52,8 @@ export function useShortcuts() {
           onAgentFocus: () => setEditorMode(ws.id, "agent"),
         }).catch((e) => console.error("AI review failed", e));
       },
-      "preview.open": () => {
-        const { setAuxiliaryView, toggleAuxiliaryBar, layout } = useWorkbench.getState();
-        if (!layout.auxiliaryBarVisible) toggleAuxiliaryBar();
-        setAuxiliaryView("preview");
-      },
-      "preview.toggleMarkdown": () => useWorkbench.getState().togglePreviewRaw(),
+      // preview.open and preview.toggleMarkdown have been removed — the
+      // AuxiliaryBar preview tab is gone; files now open as editor file tabs.
       "browser.toggleInspect": () => {
         window.dispatchEvent(new CustomEvent("maverick:browser:toggleInspect"));
       },
