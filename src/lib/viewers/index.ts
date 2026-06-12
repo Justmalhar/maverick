@@ -61,3 +61,12 @@ viewerRegistry.register({
   canHandle: (f, intent) => !f.binary && intent !== "diff",
   load: async () => (await import("@/components/viewers/CodeViewer")).default,
 });
+
+viewerRegistry.register({
+  id: "diff",
+  displayName: "Diff Viewer",
+  priority: 10,
+  capabilities: { edit: true, diff: true },
+  canHandle: (f, intent) => !f.binary && intent === "diff",
+  load: async () => (await import("@/components/viewers/DiffViewer")).default,
+});
