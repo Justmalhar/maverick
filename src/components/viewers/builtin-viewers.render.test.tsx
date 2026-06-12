@@ -103,6 +103,24 @@ describe("MarkdownViewer", () => {
     expect(writeText).toHaveBeenCalledWith("# hello");
   });
 
+  it("renders CodeViewer (Monaco editor) when tab.mode is edit", async () => {
+    const tab = makeFileTab("/wt/readme.md", "edit");
+    const meta = fileMetaForPath("/wt/readme.md");
+    render(
+      <MarkdownViewer
+        tab={tab}
+        meta={meta}
+        onDirtyChange={vi.fn()}
+        registerActions={vi.fn()}
+      />
+    );
+    // When mode=edit, MarkdownViewer delegates to CodeViewer via lazy()/Suspense.
+    // The editor host div appears once the lazy component resolves and effect runs.
+    expect(await screen.findByTestId("code-viewer-editor")).toBeInTheDocument();
+    // The markdown renderer should NOT be present.
+    expect(screen.queryByTestId("markdown")).toBeNull();
+  });
+
   it("sets content to empty string when file is binary or unreadable", async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === "file_read") {

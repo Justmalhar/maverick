@@ -1,10 +1,19 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useWorkbench } from "@/state/store";
 import { fileMetaForPath } from "@/lib/viewers/types";
 import { __resetModelCache } from "@/lib/viewers/monaco/model-cache";
+import * as modelCache from "@/lib/viewers/monaco/model-cache";
 import CodeViewer from "./CodeViewer";
+
+const listenMock = vi.mocked(listen);
+
+// Capture the most-recently-registered fs:changed listener so tests can fire it.
+let capturedFsCallback: ((e: { payload: { paths: string[] } }) => void) | null = null;
+// Capture the most recently created model so tests can mutate it to simulate dirty state.
+let capturedModel: { getValue: () => string; setValue: (v: string) => void } | null = null;
 
 const invokeMock = vi.mocked(invoke);
 
@@ -15,12 +24,23 @@ function tabFor(path = "/wt/src/a.ts") {
 }
 
 describe("CodeViewer", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
   beforeEach(() => {
+    capturedFsCallback = null;
+    capturedModel = null;
     __resetModelCache();
+    // Wrap getOrCreateModel to capture the returned model for dirty-state tests.
+    const realGetOrCreate = modelCache.getOrCreateModel;
+    vi.spyOn(modelCache, "getOrCreateModel").mockImplementation(async (path, content) => {
+      const m = await realGetOrCreate(path, content);
+      capturedModel = m as { getValue: () => string; setValue: (v: string) => void };
+      return m;
+    });
     // Reset the monaco editor spies so each test starts fresh.
-    const monaco = (globalThis as Record<string, unknown>).__monaco as {
+    const monaco = (globalThis as unknown as Record<string, {
       editor: { create: ReturnType<typeof vi.fn>; createModel: ReturnType<typeof vi.fn>; getModel: ReturnType<typeof vi.fn> };
-    };
+    }>).__monaco;
     if (monaco) {
       monaco.editor.create.mockClear();
       monaco.editor.createModel.mockClear();
@@ -33,6 +53,11 @@ describe("CodeViewer", () => {
       if (cmd === "file_write") return { mtime: 200 };
       return undefined;
     });
+    // Capture fs:changed listener so tests can fire it.
+    listenMock.mockImplementation(async (_event, cb) => {
+      capturedFsCallback = cb as (e: { payload: { paths: string[] } }) => void;
+      return () => {};
+    });
   });
 
   it("loads file content into a monaco model and mounts an editor", async () => {
@@ -44,7 +69,7 @@ describe("CodeViewer", () => {
     );
     // Wait for the async effect to finish (it calls registerActions at the end).
     await waitFor(() => expect(actionsCaptured).toBe(true));
-    const monaco = (globalThis as Record<string, { editor: { create: ReturnType<typeof vi.fn> } }>).__monaco;
+    const monaco = (globalThis as unknown as Record<string, { editor: { create: ReturnType<typeof vi.fn> } }>).__monaco;
     expect(monaco.editor.create).toHaveBeenCalled();
     expect(invokeMock).toHaveBeenCalledWith("file_read", { filePath: "/wt/src/a.ts" });
   });
@@ -113,6 +138,35 @@ describe("CodeViewer", () => {
     await waitFor(() => expect(screen.queryByTestId("code-viewer-conflict")).toBeNull());
   });
 
+  it("copyContents action writes model content to clipboard", async () => {
+    const tab = tabFor();
+    let actions: { copyContents?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.copyContents).toBeDefined());
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, writable: true, configurable: true });
+    await actions.copyContents?.();
+    expect(writeText).toHaveBeenCalledWith("const x = 1;");
+  });
+
+  it("non-conflict errors from file_write are rethrown", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read")
+        return { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 };
+      if (cmd === "file_write") throw new Error("permission denied");
+      return undefined;
+    });
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await expect(actions.save?.()).rejects.toThrow("permission denied");
+  });
+
   it("Overwrite button writes file without mtime check and clears the conflict bar", async () => {
     let writeCount = 0;
     invokeMock.mockImplementation(async (cmd: string) => {
@@ -143,5 +197,126 @@ describe("CodeViewer", () => {
       content: "const x = 1;",
       expectedMtime: undefined,
     });
+  });
+
+  it("onFsChanged: clean-reload when model content matches baseline", async () => {
+    let readCount = 0;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read") {
+        readCount++;
+        // First read: initial load. Second read: fs-changed reload.
+        return readCount === 1
+          ? { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 }
+          : { content: "const x = 2;", size: 12, binary: false, unreadable: false, mtime: 200 };
+      }
+      return undefined;
+    });
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    const onDirtyChange = vi.fn();
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={onDirtyChange} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await waitFor(() => expect(capturedFsCallback).not.toBeNull());
+    // Fire the fs event: model is clean (matches baseline), so it should reload.
+    await act(async () => {
+      capturedFsCallback!({ payload: { paths: ["/wt/src/a.ts"] } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The model should be updated to the new content, and dirty flag cleared.
+    await waitFor(() => expect(onDirtyChange).toHaveBeenCalledWith(false));
+  });
+
+  it("onFsChanged: skips reload when mtime is unchanged", async () => {
+    const onDirtyChange = vi.fn();
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={onDirtyChange} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await waitFor(() => expect(capturedFsCallback).not.toBeNull());
+    // invokeMock returns mtime: 100 for file_read always. mtimeRef is already 100.
+    // Firing the event should be a no-op (mtime unchanged).
+    const callsBefore = onDirtyChange.mock.calls.length;
+    await act(async () => {
+      capturedFsCallback!({ payload: { paths: ["/wt/src/a.ts"] } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // No additional onDirtyChange calls since mtime matched.
+    expect(onDirtyChange.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("onFsChanged: dirty model triggers conflict bar rather than reload", async () => {
+    let readCount = 0;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read") {
+        readCount++;
+        return readCount === 1
+          ? { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 }
+          : { content: "const x = 2;", size: 12, binary: false, unreadable: false, mtime: 200 };
+      }
+      return undefined;
+    });
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await waitFor(() => expect(capturedFsCallback).not.toBeNull());
+    await waitFor(() => expect(capturedModel).not.toBeNull());
+    // Make the model dirty (content differs from baseline "const x = 1;").
+    capturedModel!.setValue("const x = 999; // dirty");
+    // Now fire the fs event with a new mtime.
+    await act(async () => {
+      capturedFsCallback!({ payload: { paths: ["/wt/src/a.ts"] } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // Dirty model → conflict bar should appear.
+    await waitFor(() => expect(screen.getByTestId("code-viewer-conflict")).toBeInTheDocument());
+  });
+
+  it("disposed guard: releases model if component unmounts after fileRead but before getOrCreateModel resolves", async () => {
+    // Hold up getOrCreateModel so we can unmount in between.
+    let resolveModel!: (m: Awaited<ReturnType<typeof modelCache.getOrCreateModel>>) => void;
+    const pendingModel = new Promise<Awaited<ReturnType<typeof modelCache.getOrCreateModel>>>((res) => { resolveModel = res; });
+    // Override the spy to return the pending promise on first call.
+    vi.spyOn(modelCache, "getOrCreateModel").mockReturnValueOnce(pendingModel);
+    const releaseModelSpy = vi.spyOn(modelCache, "releaseModel");
+
+    const tab = tabFor();
+    const { unmount } = render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={vi.fn()} />
+    );
+    // Wait for file_read to complete (the two awaits before getOrCreateModel in the effect).
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("file_read", { filePath: "/wt/src/a.ts" }));
+    // Unmount before getOrCreateModel resolves → sets disposed = true.
+    unmount();
+    // Now resolve getOrCreateModel — the disposed guard should call releaseModel and return.
+    const monacoG = (globalThis as unknown as Record<string, { editor: { createModel: ReturnType<typeof vi.fn> } }>).__monaco;
+    const fakeModel = monacoG.editor.createModel("const x = 1;", "typescript");
+    await act(async () => { resolveModel(fakeModel); });
+    expect(releaseModelSpy).toHaveBeenCalledWith("/wt/src/a.ts");
+  });
+
+  it("onFsChanged: ignores events for different paths", async () => {
+    const onDirtyChange = vi.fn();
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={onDirtyChange} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await waitFor(() => expect(capturedFsCallback).not.toBeNull());
+    const callsBefore = invokeMock.mock.calls.filter(([c]) => c === "file_read").length;
+    await act(async () => {
+      // Fire with a path that does NOT match tab.path
+      capturedFsCallback!({ payload: { paths: ["/wt/src/other.ts"] } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // file_read should NOT have been called again (early return for non-matching path).
+    expect(invokeMock.mock.calls.filter(([c]) => c === "file_read").length).toBe(callsBefore);
   });
 });
