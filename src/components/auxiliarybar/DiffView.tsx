@@ -44,9 +44,20 @@ function EmptyState({
 export function DiffView() {
   const active = useWorkbench(selectActiveWorkspace);
   const setEditorMode = useWorkbench((s) => s.setEditorMode);
+  const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [prStatus, setPrStatus] = useState<PrStatus>({ kind: "idle" });
+
+  const onOpenDiff = (relPath: string) => {
+    if (!active?.worktreePath) return;
+    openFileTab({
+      kind: "diff",
+      path: `${active.worktreePath}/${relPath}`,
+      worktreePath: active.worktreePath,
+      preview: true,
+    });
+  };
 
   useEffect(() => {
     if (!active?.worktreePath) {
@@ -177,7 +188,14 @@ export function DiffView() {
               >
                 {f.status}
               </span>
-              <span className="flex-1 truncate">{f.path}</span>
+              <button
+                type="button"
+                onClick={() => onOpenDiff(f.path)}
+                data-testid={`diff-file-${f.path}`}
+                className="flex-1 truncate text-left hover:underline"
+              >
+                {f.path}
+              </button>
               <span className="text-[10px] text-success">+{f.additions}</span>
               <span className="text-[10px] text-destructive">−{f.deletions}</span>
             </li>

@@ -79,6 +79,7 @@ function ActionButton({
 
 export function SourceControlView() {
   const active = useWorkbench(selectActiveWorkspace);
+  const openFileTab = useWorkbench((s) => s.openFileTab);
   const scm = useSourceControl(active?.worktreePath ?? null);
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -86,6 +87,16 @@ export function SourceControlView() {
   const [remote, setRemote] = useState<RemoteInfo | null>(null);
   const [busy, setBusy] = useState<Busy>("none");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  const onOpenDiff = (relPath: string) => {
+    if (!active?.worktreePath) return;
+    openFileTab({
+      kind: "diff",
+      path: `${active.worktreePath}/${relPath}`,
+      worktreePath: active.worktreePath,
+      preview: true,
+    });
+  };
 
   const refreshFiles = useCallback(async () => {
     if (!active?.worktreePath) return;
@@ -352,7 +363,17 @@ export function SourceControlView() {
                     >
                       {f.status}
                     </span>
-                    <span className="flex-1 truncate">{f.path}</span>
+                    {/* Clickable file name: opens a diff tab without toggling staging selection */}
+                    <span
+                      data-testid={`scm-open-diff-${f.path}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenDiff(f.path);
+                      }}
+                      className="flex-1 truncate hover:underline"
+                    >
+                      {f.path}
+                    </span>
                     <span className="text-[10px] text-success">+{f.additions}</span>
                     <span className="text-[10px] text-destructive">−{f.deletions}</span>
                   </button>

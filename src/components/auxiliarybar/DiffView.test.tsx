@@ -5,6 +5,7 @@ import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { DiffView } from "./DiffView";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
+import { fileTabId } from "@/state/store";
 
 const initial = useWorkbench.getState();
 
@@ -142,5 +143,31 @@ describe("DiffView", () => {
 
     await userEvent.click(screen.getByTestId("diff-create-pr"));
     expect(await screen.findByTestId("diff-pr-error")).toHaveTextContent("gh: not authenticated");
+  });
+
+  it("clicking a changed-file row opens a diff tab for that file", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+      fileTabs: [],
+      activeFileTabId: null,
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(
+      makeDiff({ files: [makeDiffFile({ path: "src/a.ts", status: "M" })] }) as never
+    );
+    renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText("src/a.ts"));
+    const state = useWorkbench.getState();
+    expect(state.fileTabs).toHaveLength(1);
+    expect(state.fileTabs[0]).toMatchObject({
+      id: fileTabId("diff", "/wt/src/a.ts"),
+      kind: "diff",
+      path: "/wt/src/a.ts",
+      worktreePath: "/wt",
+      preview: true,
+    });
   });
 });
