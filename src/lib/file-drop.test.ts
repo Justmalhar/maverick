@@ -197,4 +197,11 @@ describe("file-drop target routing", () => {
     __testing__.handleEvent({ type: "drop", paths: ["/x"], position: { x: 10, y: 10 } });
     expect(onPaths).not.toHaveBeenCalled();
   });
+
+  it("isSubscribed reflects live unlisten state", () => {
+    expect(__testing__.isSubscribed()).toBe(false);
+    registerFileDropTarget(makeTarget({ left: 0, top: 0, right: 10, bottom: 10 }), { onPaths: vi.fn() });
+    // subscription is async — still false synchronously
+    expect(__testing__.isSubscribed()).toBe(false);
+  });
 });

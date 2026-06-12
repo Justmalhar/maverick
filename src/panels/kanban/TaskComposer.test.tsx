@@ -246,4 +246,46 @@ describe("TaskComposer", () => {
     );
     expect(screen.getByTestId("composer-project")).toHaveTextContent("Beta");
   });
+
+  it("renders attachment button and hidden file input", () => {
+    setup();
+    expect(screen.getByTestId("composer-attach-button")).toBeInTheDocument();
+    expect(screen.getByTestId("composer-file-input")).toBeInTheDocument();
+  });
+
+  it("file selection via input creates utf8 attachment for text file", async () => {
+    setup();
+    const fileInput = screen.getByTestId("composer-file-input");
+    const mockFile = new File(["file content"], "hello.txt", { type: "text/plain" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("hello.txt");
+  });
+
+  it("file selection via input creates base64 attachment for binary file", async () => {
+    setup();
+    const fileInput = screen.getByTestId("composer-file-input");
+    const mockFile = new File([new Uint8Array([0, 1, 2]).buffer], "image.png", { type: "image/png" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("image.png");
+  });
+
+  it("file selection with oversized file shows error and no attachment", async () => {
+    setup();
+    const fileInput = screen.getByTestId("composer-file-input");
+    const hugeBlob = new Blob(["a".repeat(2 * 1024 * 1024 + 1)]);
+    const mockFile = new File([hugeBlob], "huge.bin", { type: "application/octet-stream" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-error").textContent).toContain("too large");
+    expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
+  });
+
+  it("renders drag-over overlay when dragging files over the composer", () => {
+    setup();
+    const composer = screen.getByTestId("task-composer");
+    fireEvent.dragOver(composer);
+    expect(screen.getByText("Drop files here to attach")).toBeInTheDocument();
+  });
 });

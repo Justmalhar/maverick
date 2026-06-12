@@ -98,15 +98,9 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    for (const file of Array.from(e.dataTransfer.files)) {
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    setError(null);
+    for (const file of Array.from(files)) {
       if (file.size > 2 * 1024 * 1024) {
         setError(`File too large (max 2 MB): ${file.name}`);
         continue;
@@ -129,6 +123,26 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
           { name: file.name, content: base64, encoding: "base64", size: file.size },
         ]);
       }
+    }
+  }, []);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files) {
+      await processFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      await processFiles(e.target.files);
+      e.target.value = "";
     }
   };
 
@@ -167,13 +181,23 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     <div
       data-testid="task-composer"
       className={cn(
-        "border-b border-border/60 bg-card/30 px-4 py-3",
+        "border-b border-border/60 bg-card/30 px-4 py-3 relative",
         isDraggingOver && "ring-1 ring-inset ring-primary"
       )}
       onDragOver={handleDragOver}
       onDragLeave={() => setIsDraggingOver(false)}
       onDrop={handleDrop}
     >
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/85 backdrop-blur-xs border border-dashed border-primary/60 rounded-md pointer-events-none transition-all duration-200">
+          <div className="flex flex-col items-center gap-1.5 p-4 rounded-lg bg-card/50 shadow-lg border border-border/40">
+            <Paperclip className="h-5 w-5 text-primary animate-bounce" />
+            <span className="text-[11px] font-medium text-foreground">Drop files here to attach</span>
+            <span className="text-[9px] text-muted-foreground">Max size 2 MB per file</span>
+          </div>
+        </div>
+      )}
+
       <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
         Task Composer
       </p>
@@ -260,6 +284,20 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
             ))}
           </SelectContent>
         </Select>
+
+        <label
+          data-testid="composer-attach-button"
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-border/50 bg-background/60 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-colors"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+            data-testid="composer-file-input"
+          />
+        </label>
 
         <Button
           size="sm"

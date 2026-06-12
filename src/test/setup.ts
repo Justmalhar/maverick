@@ -320,6 +320,34 @@ vi.mock("highlight.js/lib/common", () => ({
   },
 }));
 
+// jsdom omits Blob.prototype.arrayBuffer / .text — polyfill via FileReader
+if (typeof Blob !== "undefined") {
+  if (!("arrayBuffer" in Blob.prototype)) {
+    Object.defineProperty(Blob.prototype, "arrayBuffer", {
+      value(this: Blob): Promise<ArrayBuffer> {
+        return new Promise<ArrayBuffer>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onloadend = () => resolve(fr.result as ArrayBuffer);
+          fr.onerror = () => reject(fr.error);
+          fr.readAsArrayBuffer(this);
+        });
+      },
+    });
+  }
+  if (!("text" in Blob.prototype)) {
+    Object.defineProperty(Blob.prototype, "text", {
+      value(this: Blob): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onloadend = () => resolve(fr.result as string);
+          fr.onerror = () => reject(fr.error);
+          fr.readAsText(this);
+        });
+      },
+    });
+  }
+}
+
 // tinykeys factory — returns a function whose call is the unsubscribe.
 vi.mock("tinykeys", () => ({
   tinykeys: vi.fn((_target: unknown, bindings: Record<string, (e: KeyboardEvent) => void>) => {
