@@ -172,6 +172,7 @@ export function makeMCPServer(overrides: Partial<MCPServer> = {}): MCPServer {
     command: "npx",
     args: ["-y", "@modelcontextprotocol/server-filesystem"],
     status: "stopped",
+    restarts: 0,
     ...overrides,
   };
 }

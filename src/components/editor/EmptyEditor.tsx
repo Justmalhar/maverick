@@ -9,11 +9,11 @@ export function EmptyEditor() {
   const reduce = useReducedMotion();
   const setCommandPaletteOpen = useWorkbench((s) => s.setCommandPaletteOpen);
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
-  const setActivityView = useWorkbench((s) => s.setActivityView);
+  const showPrimarySideBar = useWorkbench((s) => s.showPrimarySideBar);
   const { addProjectFromPath } = useWorkspace();
 
   async function onAddProject() {
-    setActivityView("projects");
+    showPrimarySideBar();
     const path = await pickProjectFolder();
     if (!path) return;
     try {

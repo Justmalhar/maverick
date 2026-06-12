@@ -31,7 +31,6 @@ function resetStore() {
       auxiliaryBarWidth: 280,
       panelVisible: false,
       panelHeight: 220,
-      activityView: "projects",
       auxiliaryView: "files",
     },
   });
@@ -260,7 +259,8 @@ describe("useShortcuts", () => {
     act(() => fire("$mod+j"));
     expect(useWorkbench.getState().layout.panelVisible).toBe(true);
     act(() => fire("$mod+Shift+g"));
-    expect(useWorkbench.getState().layout.activityView).toBe("git");
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
     act(() => fire("$mod+Shift+k"));
     expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
     act(() => fire("$mod+Shift+b"));

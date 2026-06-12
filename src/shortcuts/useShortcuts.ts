@@ -86,10 +86,15 @@ export function useShortcuts() {
       "terminal.focusDown": () => {
         window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" }));
       },
+      "terminal.openBottomTerminal": () => {
+        const state = useWorkbench.getState();
+        if (!state.layout.panelVisible) state.togglePanel();
+        window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
+      },
       "layout.toggleSidebar": () => useWorkbench.getState().togglePrimarySideBar(),
       "layout.toggleAuxBar": () => useWorkbench.getState().toggleAuxiliaryBar(),
       "layout.togglePanel": () => useWorkbench.getState().togglePanel(),
-      "view.git": () => useWorkbench.getState().setActivityView("git"),
+      "view.git": () => useWorkbench.getState().openSourceControl(),
       "view.kanban": () => useWorkbench.getState().openSystemTab("kanban"),
       "view.browser": () => useWorkbench.getState().openSystemTab("browser"),
       "view.automations": () => useWorkbench.getState().openSystemTab("automations"),

@@ -62,6 +62,39 @@ describe("TerminalView", () => {
     expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
   });
 
+  it("splits vertically via the splitV event", async () => {
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(new CustomEvent("maverick:terminal:splitV"));
+    });
+    const tree = useWorkbench.getState().splitTrees["w1"];
+    expect(tree?.type).toBe("split");
+    expect(tree?.type === "split" && tree.direction).toBe("v");
+  });
+
+  it("closePane on the last remaining pane reseeds a fresh singlePane", async () => {
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
+    });
+    // removeNode on a lone leaf returns null → the view falls back to singlePane.
+    expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
+  });
+
+  it("split and close are no-ops while the tree has not been seeded yet", async () => {
+    const setSplitTree = vi.spyOn(useWorkbench.getState(), "setSplitTree").mockImplementation(() => {});
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    act(() => {
+      window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
+      window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
+      window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" }));
+    });
+    expect(useWorkbench.getState().splitTrees["w1"]).toBeUndefined();
+    setSplitTree.mockRestore();
+  });
+
   it("ignores split events when not visible (inactive workspace)", async () => {
     renderWithProviders(
       <TerminalView workspace={makeWorkspace({ id: "w1" })} visible={false} />

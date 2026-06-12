@@ -133,6 +133,18 @@ describe("EditorGroup", () => {
     await waitFor(() => expect(screen.getByTestId("mcps-panel")).toBeInTheDocument());
   });
 
+  it("renders skills system tab (SkillsPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["skills"], activeSystemTab: "skills", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("skills-panel")).toBeInTheDocument());
+  });
+
+  it("renders skill-editor system tab (SkillEditorPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["skill-editor"], activeSystemTab: "skill-editor", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("skill-editor-panel")).toBeInTheDocument());
+  });
+
   it("keeps the browser mounted (hidden) when another system tab is active", async () => {
     useWorkbench.setState({
       ...initial,

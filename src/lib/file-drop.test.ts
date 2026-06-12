@@ -6,6 +6,14 @@ import {
   __testing__,
 } from "./file-drop";
 
+const { onDragDropEventMock } = vi.hoisted(() => ({
+  onDragDropEventMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: onDragDropEventMock }),
+}));
+
 function makeTarget(rect: { left: number; top: number; right: number; bottom: number }) {
   const el = document.createElement("div");
   document.body.appendChild(el);
@@ -22,6 +30,7 @@ function makeTarget(rect: { left: number; top: number; right: number; bottom: nu
 
 beforeEach(() => {
   __testing__.reset();
+  onDragDropEventMock.mockReset().mockResolvedValue(() => {});
 });
 
 afterEach(() => {
@@ -46,6 +55,23 @@ describe("shellEscapePath", () => {
 
   it("joins multiple paths with spaces", () => {
     expect(shellEscapePaths(["/a/b.png", "/c d/e.png"])).toBe("/a/b.png '/c d/e.png'");
+  });
+});
+
+describe("file-drop subscription", () => {
+  it("logs when the drag-drop listen call fails", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    onDragDropEventMock.mockRejectedValueOnce(new Error("no webview"));
+
+    const el = makeTarget({ left: 0, top: 0, right: 10, bottom: 10 });
+    registerFileDropTarget(el, { onPaths: vi.fn() });
+    await vi.waitFor(() =>
+      expect(errSpy).toHaveBeenCalledWith(
+        "[file-drop] failed to subscribe to drag-drop events",
+        expect.any(Error)
+      )
+    );
+    errSpy.mockRestore();
   });
 });
 

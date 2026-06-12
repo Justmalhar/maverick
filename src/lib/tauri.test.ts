@@ -47,6 +47,33 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("pty_resize", { ptyId: "pty1", cols: 80, rows: 24 });
     await api.ptyKill("pty1");
     expect(invoke).toHaveBeenLastCalledWith("pty_kill", { ptyId: "pty1" });
+    await api.ptyCloseAll();
+    expect(invoke).toHaveBeenLastCalledWith("pty_close_all");
+  });
+
+  it("companion remote server commands", async () => {
+    await api.remoteStart(7777);
+    expect(invoke).toHaveBeenLastCalledWith("remote_start", { port: 7777 });
+    await api.remoteStart();
+    expect(invoke).toHaveBeenLastCalledWith("remote_start", { port: undefined });
+    await api.remoteStop();
+    expect(invoke).toHaveBeenLastCalledWith("remote_stop");
+    await api.remoteStatus();
+    expect(invoke).toHaveBeenLastCalledWith("remote_status");
+    await api.remotePair("wss://rdv.example", "iPhone");
+    expect(invoke).toHaveBeenLastCalledWith("remote_pair", {
+      rendezvous: "wss://rdv.example", name: "iPhone",
+    });
+    await api.remotePair();
+    expect(invoke).toHaveBeenLastCalledWith("remote_pair", {
+      rendezvous: undefined, name: undefined,
+    });
+    await api.remoteDevices();
+    expect(invoke).toHaveBeenLastCalledWith("remote_devices");
+    vi.mocked(invoke).mockResolvedValueOnce(true as never);
+    const revoked = await api.remoteRevoke("dev1");
+    expect(invoke).toHaveBeenLastCalledWith("remote_revoke", { deviceId: "dev1" });
+    expect(revoked).toBe(true);
   });
 
   it("defaultShell forwards to the default_shell command", async () => {

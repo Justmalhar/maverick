@@ -1,6 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { GitProviderModule, parseRemoteUrl, prWebUrl } from "./git-provider";
-import type { Shell } from "./types";
+import { parseRemoteUrl, prWebUrl } from "./git-provider";
 
 describe("parseRemoteUrl", () => {
   test("scp-style GitHub SSH", () => {
@@ -80,43 +79,5 @@ describe("prWebUrl", () => {
     expect(prWebUrl(gl, "feat", "main")).toBe(
       "https://gitlab.com/o/r/-/merge_requests/new?merge_request%5Bsource_branch%5D=feat&merge_request%5Btarget_branch%5D=main"
     );
-  });
-});
-
-describe("GitProviderModule.remoteInfo", () => {
-  function shellWith(stdout: string): { shell: Shell; calls: string[][] } {
-    const calls: string[][] = [];
-    return {
-      calls,
-      shell: {
-        async text(cmd) {
-          calls.push(cmd);
-          return stdout;
-        },
-        async run() {
-          throw new Error("unused");
-        },
-      },
-    };
-  }
-
-  test("reads origin by default", async () => {
-    const { shell, calls } = shellWith("git@github.com:o/r.git\n");
-    const info = await new GitProviderModule({ shell }).remoteInfo({ worktreePath: "/w" });
-    expect(calls[0]).toEqual(["git", "-C", "/w", "remote", "get-url", "origin"]);
-    expect(info.provider).toBe("github");
-  });
-
-  test("honors a custom remote name", async () => {
-    const { shell, calls } = shellWith("git@bitbucket.org:o/r.git\n");
-    await new GitProviderModule({ shell }).remoteInfo({ worktreePath: "/w", remote: "upstream" });
-    expect(calls[0][5]).toBe("upstream");
-  });
-
-  test("throws on an unparseable URL", async () => {
-    const { shell } = shellWith("garbage\n");
-    await expect(
-      new GitProviderModule({ shell }).remoteInfo({ worktreePath: "/w" })
-    ).rejects.toThrow(/unrecognized remote URL/);
   });
 });

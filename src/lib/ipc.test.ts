@@ -8,7 +8,7 @@ import {
 import type {
   Project, Workspace, Backend, Skill, Message, KanbanTask, MCPServer,
   WorkspacePreset, DiffResult, Commit, Stash, FileEntry, MaverickConfig,
-  SplitNode, ContextUsage, Automation, AutomationStep, ActivityView,
+  SplitNode, ContextUsage, Automation, AutomationStep,
   AuxiliaryView, ThemeDefinition, TerminalTheme, EditorMode, KeybindingMap,
   PresetNode, DiffFile, DiffHunk,
   Branch, BlameLine, ConflictHunk, ConflictResolution,
@@ -40,7 +40,7 @@ describe("ipc types", () => {
       columnOrder: 0, labels: [], createdAt: 0,
       agentBackend: "claude", branch: "main", attachments: [],
     };
-    const mcp: MCPServer = { name: "n", command: "c", args: [], status: "running" };
+    const mcp: MCPServer = { name: "n", command: "c", args: [], status: "running", restarts: 0 };
     const preset: WorkspacePreset = {
       name: "p", layout: { type: "terminal", agent: "a", cwd: "/", mode: "agent" },
     };
@@ -53,7 +53,6 @@ describe("ipc types", () => {
     const ctx: ContextUsage = { workspaceId: "w", tokensUsed: 0, contextWindow: 0, sessionCostEstimate: 0 };
     const auto: Automation = { name: "a", trigger: "manual", steps: [] };
     const step: AutomationStep = { type: "shell" };
-    const av: ActivityView = "projects";
     const auxView: AuxiliaryView = "files";
     const mode: EditorMode = "agent";
     const km: KeybindingMap = {};
@@ -85,7 +84,6 @@ describe("ipc types", () => {
     expectTypeOf(ctx).toMatchTypeOf<ContextUsage>();
     expectTypeOf(auto).toMatchTypeOf<Automation>();
     expectTypeOf(step).toMatchTypeOf<AutomationStep>();
-    expectTypeOf(av).toMatchTypeOf<ActivityView>();
     expectTypeOf(auxView).toMatchTypeOf<AuxiliaryView>();
     expectTypeOf(mode).toMatchTypeOf<EditorMode>();
     expectTypeOf(km).toMatchTypeOf<KeybindingMap>();

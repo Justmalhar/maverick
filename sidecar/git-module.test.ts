@@ -283,6 +283,12 @@ describe("GitModule methods", () => {
     expect(info.repo).toBe("r");
   });
 
+  test("remoteInfo honors a custom remote name", async () => {
+    const { shell, calls } = transcript([{ stdout: "git@bitbucket.org:o/r.git\n" }]);
+    await new GitModule({ shell }).remoteInfo({ worktreePath: "/w", remote: "upstream" });
+    expect(calls[0][5]).toBe("upstream");
+  });
+
   test("remoteInfo throws on an unparseable URL", async () => {
     const { shell } = transcript([{ stdout: "not-a-url\n" }]);
     await expect(new GitModule({ shell }).remoteInfo({ worktreePath: "/w" })).rejects.toThrow(

@@ -12,7 +12,6 @@ beforeEach(() => {
   useWorkbench.setState({
     ...initial,
     commandPaletteOpen: true,
-    layout: { ...initial.layout, activityView: "projects" },
     workspaces: [], activeWorkspaceId: null,
   });
 });
@@ -24,18 +23,24 @@ describe("CommandPalette", () => {
       commandPaletteOpen: true,
       workspaces: [makeWorkspace({ id: "w1" })],
       activeWorkspaceId: "w1",
-      layout: { ...initial.layout, activityView: "projects" },
+      layout: { ...initial.layout, auxiliaryView: "files", auxiliaryBarVisible: false },
     });
     renderWithProviders(<CommandPalette />);
     await userEvent.click(screen.getByTestId("commandpalette-item-view.git"));
-    expect(useWorkbench.getState().layout.activityView).toBe("git");
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
+    expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(true);
     expect(useWorkbench.getState().commandPaletteOpen).toBe(false);
   });
 
-  it("project.new sets the projects view", async () => {
+  it("project.new reveals the primary sidebar", async () => {
+    useWorkbench.setState({
+      ...initial,
+      commandPaletteOpen: true,
+      layout: { ...initial.layout, primarySideBarVisible: false },
+    });
     renderWithProviders(<CommandPalette />);
     await userEvent.click(screen.getByTestId("commandpalette-item-project.new"));
-    expect(useWorkbench.getState().layout.activityView).toBe("projects");
+    expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(true);
   });
 
   it("global.quickOpen opens the Go to File overlay", async () => {
@@ -53,10 +58,10 @@ describe("CommandPalette", () => {
   });
 
   const cases: Array<[string, (s: ReturnType<typeof useWorkbench.getState>) => unknown]> = [
-    ["view.kanban", (s) => expect(s.layout.activityView).toBe("kanban")],
-    ["view.browser", (s) => expect(s.layout.activityView).toBe("browser")],
-    ["view.automations", (s) => expect(s.layout.activityView).toBe("automations")],
-    ["view.mcps", (s) => expect(s.layout.activityView).toBe("mcps")],
+    ["view.kanban", (s) => expect(s.systemTabs).toContain("kanban")],
+    ["view.browser", (s) => expect(s.systemTabs).toContain("browser")],
+    ["view.automations", (s) => expect(s.systemTabs).toContain("automations")],
+    ["view.mcps", (s) => expect(s.systemTabs).toContain("mcps")],
     ["global.settings", (s) => expect(s.settingsOpen).toBe(true)],
     ["global.presets", (s) => expect(s.presetLauncherOpen).toBe(true)],
     ["layout.toggleSidebar", (s) => expect(s.layout.primarySideBarVisible).toBe(false)],

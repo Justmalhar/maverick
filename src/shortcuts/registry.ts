@@ -49,6 +49,7 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "terminal.focusRight", label: "Focus pane right", category: "Terminal", keys: "$mod+Alt+ArrowRight", display: "⌘⌥→" },
   { id: "terminal.focusUp", label: "Focus pane up", category: "Terminal", keys: "$mod+Alt+ArrowUp", display: "⌘⌥↑" },
   { id: "terminal.focusDown", label: "Focus pane down", category: "Terminal", keys: "$mod+Alt+ArrowDown", display: "⌘⌥↓" },
+  { id: "terminal.openBottomTerminal", label: "New terminal in Panel", category: "Terminal", keys: "$mod+Shift+t", display: "⌘⇧T" },
 
   // Panel toggles
   { id: "layout.toggleSidebar", label: "Toggle primary sidebar", category: "Panel", keys: "$mod+b", display: "⌘B" },

@@ -291,7 +291,11 @@ pub async fn ai_commit_message(
 ) -> Result<Value, String> {
     state
         .sidecar
-        .request("ai.commit_message", json!({ "worktreePath": worktree_path }))
+        .request_with_timeout(
+            "ai.commit_message",
+            json!({ "worktreePath": worktree_path }),
+            std::time::Duration::from_secs(180),
+        )
         .await
         .map_err(|e| e.to_string())
 }

@@ -24,13 +24,13 @@ pub async fn remote_start<R: Runtime>(
 /// Stop the companion server (also stops the mDNS advertiser) and flip the
 /// persisted enabled flag to false.
 #[tauri::command]
-pub async fn remote_stop(server: State<'_, RemoteServer>) -> Result<RemoteStatus, String> {
+pub async fn remote_stop(server: State<'_, Arc<RemoteServer>>) -> Result<RemoteStatus, String> {
     Ok(server.stop().await)
 }
 
 /// Report the companion server's enabled/running/port/LAN/paired state.
 #[tauri::command]
-pub async fn remote_status(server: State<'_, RemoteServer>) -> Result<RemoteStatus, String> {
+pub async fn remote_status(server: State<'_, Arc<RemoteServer>>) -> Result<RemoteStatus, String> {
     Ok(server.status().await)
 }
 

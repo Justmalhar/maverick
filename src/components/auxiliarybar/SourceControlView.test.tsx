@@ -90,6 +90,22 @@ describe("SourceControlView", () => {
     expect(file).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(file);
     expect(file).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(file);
+    expect(file).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("refresh button reloads files and remote state", async () => {
+    mockInvoke();
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    const diffCallsBefore = vi
+      .mocked(invoke)
+      .mock.calls.filter(([cmd]) => cmd === "diff_get").length;
+    await userEvent.click(screen.getByTestId("scm-refresh"));
+    await waitFor(() => {
+      const diffCalls = vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "diff_get").length;
+      expect(diffCalls).toBeGreaterThan(diffCallsBefore);
+    });
   });
 
   it("generates a commit message into the textarea", async () => {
@@ -193,6 +209,21 @@ describe("SourceControlView", () => {
     await userEvent.click(screen.getByTestId("scm-pull"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Pulled.")
+    );
+  });
+
+  it("surfaces a pull failure", async () => {
+    mockInvoke({
+      git_pull: () => {
+        throw new Error("merge conflict");
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await waitFor(() => expect(screen.getByTestId("scm-ahead")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("scm-pull"));
+    await waitFor(() =>
+      expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/merge conflict/)
     );
   });
 

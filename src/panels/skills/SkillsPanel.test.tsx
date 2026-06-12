@@ -46,6 +46,17 @@ describe("SkillsPanel", () => {
     expect(vi.mocked(invoke).mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
+  it("logs and keeps rendering when skills_list_global fails", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(invoke).mockRejectedValue(new Error("sidecar down"));
+    renderWithProviders(<SkillsPanel />);
+    await waitFor(() =>
+      expect(errSpy).toHaveBeenCalledWith("skillsListGlobal failed", expect.any(Error))
+    );
+    expect(screen.getByTestId("skills-panel")).toBeInTheDocument();
+    errSpy.mockRestore();
+  });
+
   it("New Skill button opens the skill-editor system tab", async () => {
     vi.mocked(invoke).mockResolvedValue([]);
     renderWithProviders(<SkillsPanel />);

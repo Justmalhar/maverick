@@ -8,7 +8,6 @@ import type {
   Skill,
   SplitNode,
   EditorMode,
-  ActivityView,
   AuxiliaryView,
 } from "@/lib/ipc";
 
@@ -20,7 +19,6 @@ interface PanelLayout {
   auxiliaryBarWidth: number;
   panelVisible: boolean;
   panelHeight: number;
-  activityView: ActivityView;
   auxiliaryView: AuxiliaryView;
 }
 
@@ -109,7 +107,8 @@ interface WorkbenchState {
   togglePreviewRaw: () => void;
 
   // Layout actions
-  setActivityView: (view: ActivityView) => void;
+  showPrimarySideBar: () => void;
+  openSourceControl: () => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
   setActivitybarCollapsed: (collapsed: boolean) => void;
   toggleActivitybarCollapsed: () => void;
@@ -169,7 +168,6 @@ export const useWorkbench = create<WorkbenchState>()(
       auxiliaryBarWidth: 280,
       panelVisible: true,
       panelHeight: 220,
-      activityView: "projects",
       auxiliaryView: "files",
     },
 
@@ -262,13 +260,13 @@ export const useWorkbench = create<WorkbenchState>()(
           : s.previewFile,
       })),
 
-    setActivityView: (view) =>
+    showPrimarySideBar: () =>
       set((s) => ({
-        layout: {
-          ...s.layout,
-          activityView: view,
-          primarySideBarVisible: true,
-        },
+        layout: { ...s.layout, primarySideBarVisible: true },
+      })),
+    openSourceControl: () =>
+      set((s) => ({
+        layout: { ...s.layout, auxiliaryView: "scm", auxiliaryBarVisible: true },
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),

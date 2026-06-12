@@ -470,6 +470,15 @@ describe("RpcHandlers", () => {
     await expect(h.dispatch("kanban.upsert", { task: {} })).rejects.toThrow();
   });
 
+  test("kanban.upsert rejects an invalid status", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/k3" })) as { id: string };
+    await expect(
+      h.dispatch("kanban.upsert", {
+        task: { projectId: proj.id, title: "bad", status: "archived" },
+      })
+    ).rejects.toThrow();
+  });
+
   test("preset.list/launch/save_current", async () => {
     const list = (await h.dispatch("preset.list", { projectPath: "/r" })) as unknown[];
     expect(list).toHaveLength(1);
@@ -867,6 +876,15 @@ describe("RpcHandlers", () => {
     };
     expect(reloaded.mcps).toHaveLength(1);
     expect(reloaded.mcps[0].command).toBe("new");
+  });
+
+  test("mcp.add rejects an empty command before persisting", async () => {
+    await expect(
+      h.dispatch("mcp.add", { name: "fs", command: "", args: [], projectPath: "/r" })
+    ).rejects.toThrow(/command/i);
+    await expect(
+      h.dispatch("mcp.add", { name: "  ", command: "c", args: [], projectPath: "/r" })
+    ).rejects.toThrow(/name/i);
   });
 
   test("mcp.add throws without a workspaceId or projectPath", async () => {

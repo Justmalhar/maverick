@@ -40,7 +40,9 @@ interface CommandEntry {
 export function CommandPalette() {
   const open = useWorkbench((s) => s.commandPaletteOpen);
   const setOpen = useWorkbench((s) => s.setCommandPaletteOpen);
-  const setActivityView = useWorkbench((s) => s.setActivityView);
+  const showPrimarySideBar = useWorkbench((s) => s.showPrimarySideBar);
+  const openSourceControl = useWorkbench((s) => s.openSourceControl);
+  const openSystemTab = useWorkbench((s) => s.openSystemTab);
   const togglePrimarySideBar = useWorkbench((s) => s.togglePrimarySideBar);
   const toggleAuxiliaryBar = useWorkbench((s) => s.toggleAuxiliaryBar);
   const togglePanel = useWorkbench((s) => s.togglePanel);
@@ -59,7 +61,7 @@ export function CommandPalette() {
         label: "Projects: Add project…",
         icon: FolderPlus,
         run: () => {
-          setActivityView("projects");
+          showPrimarySideBar();
           setOpen(false);
         },
         shortcutId: "project.new",
@@ -89,7 +91,7 @@ export function CommandPalette() {
         label: "View: Show Source Control",
         icon: GitBranch,
         run: () => {
-          setActivityView("git");
+          openSourceControl();
           setOpen(false);
         },
         shortcutId: "view.git",
@@ -99,7 +101,7 @@ export function CommandPalette() {
         label: "View: Show Kanban",
         icon: KanbanSquare,
         run: () => {
-          setActivityView("kanban");
+          openSystemTab("kanban");
           setOpen(false);
         },
         shortcutId: "view.kanban",
@@ -109,7 +111,7 @@ export function CommandPalette() {
         label: "View: Show Browser",
         icon: Globe,
         run: () => {
-          setActivityView("browser");
+          openSystemTab("browser");
           setOpen(false);
         },
         shortcutId: "view.browser",
@@ -119,7 +121,7 @@ export function CommandPalette() {
         label: "View: Show Automations",
         icon: Zap,
         run: () => {
-          setActivityView("automations");
+          openSystemTab("automations");
           setOpen(false);
         },
         shortcutId: "view.automations",
@@ -129,7 +131,7 @@ export function CommandPalette() {
         label: "View: Show MCP Servers",
         icon: Plug,
         run: () => {
-          setActivityView("mcps");
+          openSystemTab("mcps");
           setOpen(false);
         },
       },
@@ -210,7 +212,9 @@ export function CommandPalette() {
     [
       activeId,
       openProjectSettings,
-      setActivityView,
+      showPrimarySideBar,
+      openSourceControl,
+      openSystemTab,
       setAuxiliaryView,
       setOpen,
       setPresetLauncherOpen,

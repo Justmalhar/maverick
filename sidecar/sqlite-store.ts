@@ -187,7 +187,7 @@ export class SQLiteStore {
       agentBackend: row.agent_backend,
       worktreePath: row.worktree_path,
       status: row.status as Workspace["status"],
-      sessionId: "",
+      sessionId: this.latestSession(row.id) ?? "",
       title: row.title ?? undefined,
     };
   }
@@ -252,9 +252,15 @@ export class SQLiteStore {
       )
       .get(workspaceId);
     if (!row) throw new Error(`workspace not found: ${workspaceId}`);
+    // Manual cascade: foreign_keys=ON and the schema has no ON DELETE clauses,
+    // so every table referencing workspaces(id) must be handled here or the
+    // final DELETE throws. Kanban tasks outlive their workspace (detach), the
+    // rest are workspace-scoped (delete).
     this.db.query("DELETE FROM context_usage WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)").run(workspaceId);
     this.db.query("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)").run(workspaceId);
     this.db.query("DELETE FROM sessions WHERE workspace_id = ?").run(workspaceId);
+    this.db.query("UPDATE kanban_tasks SET workspace_id = NULL WHERE workspace_id = ?").run(workspaceId);
+    this.db.query("DELETE FROM notifications WHERE workspace_id = ?").run(workspaceId);
     this.db.query("DELETE FROM workspaces WHERE id = ?").run(workspaceId);
     return { ok: true, worktreePath: row.worktree_path };
   }

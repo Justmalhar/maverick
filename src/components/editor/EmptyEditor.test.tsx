@@ -16,7 +16,7 @@ beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
   useWorkbench.setState({
     ...initial, commandPaletteOpen: false, presetLauncherOpen: false,
-    layout: { ...initial.layout, activityView: "git" },
+    layout: { ...initial.layout, primarySideBarVisible: false },
   });
 });
 
@@ -27,10 +27,10 @@ describe("EmptyEditor", () => {
     expect(screen.getByText("Maverick")).toBeInTheDocument();
   });
 
-  it("clicking Add project sets the projects view", async () => {
+  it("clicking Add project reveals the primary sidebar", async () => {
     renderWithProviders(<EmptyEditor />);
     await userEvent.click(screen.getByTestId("empty-add-project"));
-    expect(useWorkbench.getState().layout.activityView).toBe("projects");
+    expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(true);
   });
 
   it("adds project when pickProjectFolder returns a path", async () => {
