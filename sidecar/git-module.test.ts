@@ -916,3 +916,68 @@ describe("GitModule.diffStat", () => {
     expect(stat).toEqual({ added: 0, removed: 0 });
   });
 });
+
+describe("showAtRef", () => {
+  test("returns content from git show REF:path", async () => {
+    const calls: string[][] = [];
+    const shell = {
+      run: async (cmd: string[]) => {
+        calls.push(cmd);
+        return { exitCode: 0, stdout: "old contents\n", stderr: "" };
+      },
+      text: async () => "",
+    };
+    const git = new GitModule({ shell: shell as never });
+    const res = await git.showAtRef({ worktreePath: "/wt", filePath: "src/a.ts", ref: "HEAD" });
+    expect(res).toEqual({ content: "old contents\n", missing: false });
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "show", "HEAD:src/a.ts"]);
+  });
+
+  test("missing at ref (added file) returns missing:true, not a throw", async () => {
+    const shell = {
+      run: async () => ({ exitCode: 128, stdout: "", stderr: "fatal: path 'src/a.ts' does not exist in 'HEAD'" }),
+      text: async () => "",
+    };
+    const git = new GitModule({ shell: shell as never });
+    const res = await git.showAtRef({ worktreePath: "/wt", filePath: "src/a.ts", ref: "HEAD" });
+    expect(res).toEqual({ content: "", missing: true });
+  });
+});
+
+describe("discardFile", () => {
+  test("tracked file: git checkout HEAD -- path", async () => {
+    const calls: string[][] = [];
+    const shell = {
+      run: async (cmd: string[]) => {
+        calls.push(cmd);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      text: async () => "",
+    };
+    const git = new GitModule({ shell: shell as never });
+    const res = await git.discardFile({ worktreePath: "/wt", filePath: "src/a.ts" });
+    expect(res).toEqual({ ok: true });
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "ls-files", "--error-unmatch", "--", "src/a.ts"]);
+    expect(calls[1]).toEqual(["git", "-C", "/wt", "checkout", "HEAD", "--", "src/a.ts"]);
+  });
+
+  test("untracked file: removed via injected removeFile, no checkout", async () => {
+    const calls: string[][] = [];
+    const removed: string[] = [];
+    const shell = {
+      run: async (cmd: string[]) => {
+        calls.push(cmd);
+        return { exitCode: 1, stdout: "", stderr: "error: pathspec" };
+      },
+      text: async () => "",
+    };
+    const git = new GitModule({
+      shell: shell as never,
+      removeFile: async (p: string) => { removed.push(p); },
+    });
+    const res = await git.discardFile({ worktreePath: "/wt", filePath: "new.txt" });
+    expect(res).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(removed).toEqual(["/wt/new.txt"]);
+  });
+});

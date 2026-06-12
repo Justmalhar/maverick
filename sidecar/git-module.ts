@@ -1,4 +1,5 @@
 import { join } from "path";
+import { unlink } from "fs/promises";
 import { defaultShell } from "./deps";
 import { parseRemoteUrl, prWebUrl } from "./git-provider";
 import type {
@@ -91,15 +92,18 @@ const defaultFileReader: FileReader = (path) => Bun.file(path).arrayBuffer();
 export interface GitModuleOptions {
   shell?: Shell;
   readFile?: FileReader;
+  removeFile?: (path: string) => Promise<void>;
 }
 
 export class GitModule {
   private shell: Shell;
   private readFile: FileReader;
+  private removeFile: (path: string) => Promise<void>;
 
   constructor(opts: GitModuleOptions = {}) {
     this.shell = opts.shell ?? defaultShell;
     this.readFile = opts.readFile ?? defaultFileReader;
+    this.removeFile = opts.removeFile ?? ((p) => unlink(p));
   }
 
   async log(params: LogParams): Promise<Commit[]> {
@@ -268,6 +272,35 @@ export class GitModule {
       undefined
     );
     return GitModule.parseBlame(output);
+  }
+
+  /** File content at a ref (`git show REF:path`); `missing` when the path did not exist there. */
+  async showAtRef(params: { worktreePath: string; filePath: string; ref: string }): Promise<{ content: string; missing: boolean }> {
+    const { exitCode, stdout, stderr } = await this.shell.run(
+      ["git", "-C", params.worktreePath, "show", `${params.ref}:${params.filePath}`],
+      undefined
+    );
+    if (exitCode === 0) return { content: stdout, missing: false };
+    if (/does not exist|exists on disk, but not in/i.test(stderr)) return { content: "", missing: true };
+    throw new Error(stderr || "git show failed");
+  }
+
+  /** Undo working-tree changes: restore tracked files from HEAD, delete untracked ones. */
+  async discardFile(params: { worktreePath: string; filePath: string }): Promise<{ ok: true }> {
+    const tracked = await this.shell.run(
+      ["git", "-C", params.worktreePath, "ls-files", "--error-unmatch", "--", params.filePath],
+      undefined
+    );
+    if (tracked.exitCode === 0) {
+      const { exitCode, stderr } = await this.shell.run(
+        ["git", "-C", params.worktreePath, "checkout", "HEAD", "--", params.filePath],
+        undefined
+      );
+      if (exitCode !== 0) throw new Error(stderr || "git checkout (discard) failed");
+    } else {
+      await this.removeFile(join(params.worktreePath, params.filePath));
+    }
+    return { ok: true };
   }
 
   async stashApply(params: StashIndexParams): Promise<{ ok: true }> {
