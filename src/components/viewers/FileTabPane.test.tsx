@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { useWorkbench } from "@/state/store";
 import { viewerRegistry } from "@/lib/viewers";
 import { invoke } from "@tauri-apps/api/core";
 import type { ViewerProps } from "@/lib/viewers/types";
-import FileTabPane from "./FileTabPane";
+import FileTabPane, { lazyViewerCache } from "./FileTabPane";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -25,7 +25,6 @@ describe("FileTabPane", () => {
 
   it("renders the toolbar and the resolved viewer", async () => {
     const tab = makeTab();
-    // register a catch-all test viewer at top priority
     if (!viewerRegistry.get("test-viewer")) {
       viewerRegistry.register({
         id: "test-viewer",
@@ -108,5 +107,89 @@ describe("FileTabPane", () => {
     await waitFor(() =>
       expect(useWorkbench.getState().fileTabs.find((t) => t.id === tab.id)?.dirty).toBe(true)
     );
+  });
+
+  it("falls back to highest-priority candidate when tab.viewerId is set to a nonexistent id", async () => {
+    // Control both registry methods so the test is isolated from registration order.
+    // get("nonexistent-viewer-id") → undefined  (branch: viewerId set but unknown)
+    // resolve(...) → single deterministic candidate with a known testid.
+    const fallbackDescriptor = {
+      id: "fallback-viewer",
+      displayName: "Fallback",
+      priority: 999,
+      capabilities: {},
+      canHandle: () => true,
+      load: async () => () => <div data-testid="fallback-viewer-body" />,
+    };
+    const getSpy = vi.spyOn(viewerRegistry, "get").mockReturnValue(undefined);
+    const resolveSpy = vi.spyOn(viewerRegistry, "resolve").mockReturnValue([fallbackDescriptor]);
+    try {
+      const tab = makeTab("/wt/d.zzz");
+      useWorkbench.getState().setFileTabViewer(tab.id, "nonexistent-viewer-id");
+      // viewerRegistry.get("nonexistent-viewer-id") → undefined → falls through
+      // to candidates[0] (fallbackDescriptor from resolveSpy).
+      render(<FileTabPane tab={useWorkbench.getState().fileTabs.find((t) => t.id === tab.id)!} active />);
+      expect(await screen.findByTestId("fallback-viewer-body")).toBeInTheDocument();
+    } finally {
+      getSpy.mockRestore();
+      resolveSpy.mockRestore();
+    }
+  });
+
+  it("lazy viewer component identity is stable per descriptor id across re-renders", async () => {
+    // Regression for the lazy()-inside-useMemo remount loop bug.
+    // Strategy: render a file tab whose mode toggles (diff→edit→diff) while
+    // pointing at the same descriptor id via viewerId override.  The
+    // lazyViewerCache must return the identical ComponentType reference each
+    // time the same id is requested, so React never unmounts the viewer when
+    // merely the descriptor *object* reference changes.
+    //
+    // Assertion: after two setFileTabViewer calls (same id) the cache still
+    // holds exactly one entry for the id, and re-rendering returns the same
+    // component reference as the first render.
+    const STABLE_ID = "stable-id-viewer";
+    let mountCount = 0;
+    function StableViewer() {
+      useEffect(() => { mountCount += 1; }, []);
+      return <div data-testid="stable-viewer-body" />;
+    }
+    if (!viewerRegistry.get(STABLE_ID)) {
+      viewerRegistry.register({
+        id: STABLE_ID,
+        displayName: "Stable",
+        priority: 500,
+        capabilities: {},
+        canHandle: () => false, // only reachable via viewerId override
+        load: async () => StableViewer,
+      });
+    }
+    // Clear any stale cache entry so this test controls the full lifecycle.
+    lazyViewerCache.delete(STABLE_ID);
+
+    const tab = makeTab("/wt/e.zzz");
+    useWorkbench.getState().setFileTabViewer(tab.id, STABLE_ID);
+    const liveTab = () => useWorkbench.getState().fileTabs.find((t) => t.id === tab.id)!;
+
+    const { rerender } = render(<FileTabPane tab={liveTab()} active />);
+    await screen.findByTestId("stable-viewer-body");
+
+    // Capture the cached lazy component after first render.
+    const firstCachedComponent = lazyViewerCache.get(STABLE_ID);
+    expect(firstCachedComponent).toBeDefined();
+
+    // Simulate a state poke (e.g. setFileTabViewed) that causes FileTabPane to
+    // re-render — the useMemo for Viewer will re-run if descriptor changes, but
+    // the cache must return the same ComponentType identity.
+    await act(async () => {
+      useWorkbench.getState().setFileTabViewer(tab.id, STABLE_ID);
+    });
+    rerender(<FileTabPane tab={liveTab()} active />);
+    await screen.findByTestId("stable-viewer-body");
+
+    // Cache must not have grown a second entry — same reference returned.
+    expect(lazyViewerCache.get(STABLE_ID)).toBe(firstCachedComponent);
+    // Viewer must NOT have remounted a second time (mount count stays 1 because
+    // React sees the same component type and keeps the subtree alive).
+    expect(mountCount).toBe(1);
   });
 });

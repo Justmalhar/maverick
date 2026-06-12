@@ -11,6 +11,14 @@ import {
 import { fileRead } from "@/lib/tauri";
 import { ViewerToolbar } from "./ViewerToolbar";
 
+// Module-level cache keyed by descriptor id. Ensures the lazy() wrapper for a
+// given viewer id is created exactly once — even if the descriptor object
+// reference changes (e.g. intent flip rebuilds candidates → new resolve → same
+// id but new winner object). A fresh lazy() per render would make React treat
+// the Viewer as a NEW component type, unmounting + remounting the subtree and
+// destroying editor state (violates keep-alive rule 6).
+export const lazyViewerCache = new Map<string, ComponentType<ViewerProps>>();
+
 export interface FileTabPaneProps {
   tab: FileTab;
   active: boolean;
@@ -51,7 +59,12 @@ export default function FileTabPane({ tab }: FileTabPaneProps) {
 
   const Viewer = useMemo<ComponentType<ViewerProps> | null>(() => {
     if (!descriptor) return null;
-    return lazy(async () => ({ default: await descriptor.load() }));
+    let component = lazyViewerCache.get(descriptor.id);
+    if (!component) {
+      component = lazy(async () => ({ default: await descriptor.load() }));
+      lazyViewerCache.set(descriptor.id, component);
+    }
+    return component;
   }, [descriptor]);
 
   if (!meta) {
