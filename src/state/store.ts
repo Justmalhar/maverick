@@ -40,6 +40,37 @@ export interface TerminalTab {
   ptyId: string;
 }
 
+export type FileTabKind = "file" | "diff";
+export type FileTabMode = "view" | "edit" | "diff";
+
+export interface FileTab {
+  id: string;
+  kind: FileTabKind;
+  /** Absolute path of the file. */
+  path: string;
+  /** Worktree root — diff context and breadcrumb base. */
+  worktreePath: string;
+  /** "Open With…" override; undefined = registry default. */
+  viewerId?: string;
+  /** Italic preview tab — reused by the next single-click open. */
+  preview: boolean;
+  dirty: boolean;
+  mode: FileTabMode;
+  /** Diff-tab "viewed" checkbox state. */
+  viewed: boolean;
+}
+
+export interface OpenFileTabInput {
+  kind: FileTabKind;
+  path: string;
+  worktreePath: string;
+  preview: boolean;
+  mode?: FileTabMode;
+  viewerId?: string;
+}
+
+export const fileTabId = (kind: FileTabKind, path: string): string => `${kind}:${path}`;
+
 interface WorkbenchState {
   // Data
   projects: Project[];
@@ -54,6 +85,10 @@ interface WorkbenchState {
   // Terminal tabs (standalone PTY tabs)
   terminalTabs: TerminalTab[];
   activeTerminalTabId: string | null;
+
+  // File tabs (real editor tabs with VSCode preview-tab semantics)
+  fileTabs: FileTab[];
+  activeFileTabId: string | null;
 
   // Per-workspace state
   activeWorkspaceId: string | null;
@@ -143,10 +178,21 @@ interface WorkbenchState {
   setActiveTerminalTab: (id: string | null) => void;
   /** Bind a freshly-spawned PTY to an optimistically-added terminal tab. */
   setTerminalTabPty: (id: string, ptyId: string) => void;
+
+  // File tab mutators
+  openFileTab: (input: OpenFileTabInput) => void;
+  setActiveFileTab: (id: string | null) => void;
+  /** Returns false when blocked by a dirty tab (caller shows confirm UI). */
+  closeFileTab: (id: string, opts?: { force?: boolean }) => boolean;
+  pinFileTab: (id: string) => void;
+  setFileTabDirty: (id: string, dirty: boolean) => void;
+  setFileTabMode: (id: string, mode: FileTabMode) => void;
+  setFileTabViewer: (id: string, viewerId: string) => void;
+  setFileTabViewed: (id: string, viewed: boolean) => void;
 }
 
 export const useWorkbench = create<WorkbenchState>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector((set, get) => ({
     projects: [],
     workspaces: [],
     backends: [],
@@ -155,6 +201,8 @@ export const useWorkbench = create<WorkbenchState>()(
     activeSystemTab: null,
     terminalTabs: [],
     activeTerminalTabId: null,
+    fileTabs: [],
+    activeFileTabId: null,
     activeWorkspaceId: null,
     workspaceAccessOrder: [],
     editorModes: {},
@@ -217,6 +265,7 @@ export const useWorkbench = create<WorkbenchState>()(
         // workspace.
         activeSystemTab: id ? null : s.activeSystemTab,
         activeTerminalTabId: id ? null : s.activeTerminalTabId,
+        activeFileTabId: id ? null : s.activeFileTabId,
         workspaceAccessOrder: id
           ? [id, ...s.workspaceAccessOrder.filter((wid) => wid !== id)]
           : s.workspaceAccessOrder,
@@ -306,6 +355,7 @@ export const useWorkbench = create<WorkbenchState>()(
         activeSystemTab: id,
         activeWorkspaceId: null,
         activeTerminalTabId: null,
+        activeFileTabId: null,
       })),
     closeSystemTab: (id) =>
       set((s) => ({
@@ -317,6 +367,7 @@ export const useWorkbench = create<WorkbenchState>()(
         activeSystemTab: id,
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
         activeTerminalTabId: id ? null : s.activeTerminalTabId,
+        activeFileTabId: id ? null : s.activeFileTabId,
       })),
 
     addTerminalTab: (tab) =>
@@ -339,6 +390,96 @@ export const useWorkbench = create<WorkbenchState>()(
         activeTerminalTabId: id,
         activeWorkspaceId: null,
         activeSystemTab: null,
+        activeFileTabId: null,
+      })),
+
+    openFileTab: (input) =>
+      set((s) => {
+        const id = fileTabId(input.kind, input.path);
+        const defaultMode: FileTabMode = input.mode ?? (input.kind === "diff" ? "diff" : "edit");
+        const existing = s.fileTabs.find((t) => t.id === id);
+        if (existing) {
+          return {
+            fileTabs: s.fileTabs.map((t) =>
+              t.id === id ? { ...t, preview: t.preview && input.preview } : t
+            ),
+            activeFileTabId: id,
+            activeWorkspaceId: null,
+            activeSystemTab: null,
+            activeTerminalTabId: null,
+          };
+        }
+        const tab: FileTab = {
+          id,
+          kind: input.kind,
+          path: input.path,
+          worktreePath: input.worktreePath,
+          viewerId: input.viewerId,
+          preview: input.preview,
+          dirty: false,
+          mode: defaultMode,
+          viewed: false,
+        };
+        // VSCode preview semantics: at most one preview tab; a new preview
+        // open replaces it in place instead of appending.
+        const previewIdx = input.preview ? s.fileTabs.findIndex((t) => t.preview) : -1;
+        const fileTabs =
+          previewIdx >= 0
+            ? s.fileTabs.map((t, i) => (i === previewIdx ? tab : t))
+            : [...s.fileTabs, tab];
+        return {
+          fileTabs,
+          activeFileTabId: id,
+          activeWorkspaceId: null,
+          activeSystemTab: null,
+          activeTerminalTabId: null,
+        };
+      }),
+
+    setActiveFileTab: (id) =>
+      set((s) => ({
+        activeFileTabId: id,
+        activeWorkspaceId: id ? null : s.activeWorkspaceId,
+        activeSystemTab: id ? null : s.activeSystemTab,
+        activeTerminalTabId: id ? null : s.activeTerminalTabId,
+      })),
+
+    closeFileTab: (id, opts) => {
+      const tab = get().fileTabs.find((t) => t.id === id);
+      if (!tab) return true;
+      if (tab.dirty && !opts?.force) return false;
+      set((s) => ({
+        fileTabs: s.fileTabs.filter((t) => t.id !== id),
+        activeFileTabId: s.activeFileTabId === id ? null : s.activeFileTabId,
+      }));
+      return true;
+    },
+
+    pinFileTab: (id) =>
+      set((s) => ({
+        fileTabs: s.fileTabs.map((t) => (t.id === id ? { ...t, preview: false } : t)),
+      })),
+
+    setFileTabDirty: (id, dirty) =>
+      set((s) => ({
+        fileTabs: s.fileTabs.map((t) =>
+          t.id === id ? { ...t, dirty, preview: dirty ? false : t.preview } : t
+        ),
+      })),
+
+    setFileTabMode: (id, mode) =>
+      set((s) => ({
+        fileTabs: s.fileTabs.map((t) => (t.id === id ? { ...t, mode } : t)),
+      })),
+
+    setFileTabViewer: (id, viewerId) =>
+      set((s) => ({
+        fileTabs: s.fileTabs.map((t) => (t.id === id ? { ...t, viewerId } : t)),
+      })),
+
+    setFileTabViewed: (id, viewed) =>
+      set((s) => ({
+        fileTabs: s.fileTabs.map((t) => (t.id === id ? { ...t, viewed } : t)),
       })),
   }))
 );

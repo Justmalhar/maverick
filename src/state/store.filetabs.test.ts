@@ -1,0 +1,111 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { useWorkbench, fileTabId } from "./store";
+
+function open(input: Partial<Parameters<ReturnType<typeof useWorkbench.getState>["openFileTab"]>[0]> = {}) {
+  useWorkbench.getState().openFileTab({
+    kind: "file",
+    path: "/wt/src/a.ts",
+    worktreePath: "/wt",
+    preview: true,
+    ...input,
+  });
+}
+
+describe("FileTab store", () => {
+  beforeEach(() => {
+    useWorkbench.setState({
+      fileTabs: [],
+      activeFileTabId: null,
+      activeWorkspaceId: null,
+      activeSystemTab: null,
+      activeTerminalTabId: null,
+    });
+  });
+
+  it("fileTabId is stable per kind+path", () => {
+    expect(fileTabId("file", "/wt/a.ts")).toBe("file:/wt/a.ts");
+    expect(fileTabId("diff", "/wt/a.ts")).not.toBe(fileTabId("file", "/wt/a.ts"));
+  });
+
+  it("openFileTab adds a preview tab and activates it", () => {
+    open();
+    const s = useWorkbench.getState();
+    expect(s.fileTabs).toHaveLength(1);
+    expect(s.fileTabs[0]).toMatchObject({
+      kind: "file", path: "/wt/src/a.ts", preview: true, dirty: false, mode: "edit",
+    });
+    expect(s.activeFileTabId).toBe(s.fileTabs[0].id);
+    expect(s.activeWorkspaceId).toBeNull();
+  });
+
+  it("a second preview open REPLACES the existing preview tab in place", () => {
+    open();
+    open({ path: "/wt/src/b.ts" });
+    const s = useWorkbench.getState();
+    expect(s.fileTabs).toHaveLength(1);
+    expect(s.fileTabs[0].path).toBe("/wt/src/b.ts");
+  });
+
+  it("pinned tabs are never replaced by preview opens", () => {
+    open({ preview: false });
+    open({ path: "/wt/src/b.ts" });
+    const s = useWorkbench.getState();
+    expect(s.fileTabs).toHaveLength(2);
+  });
+
+  it("re-opening the same path with preview:false pins the existing tab", () => {
+    open();
+    open({ preview: false });
+    const s = useWorkbench.getState();
+    expect(s.fileTabs).toHaveLength(1);
+    expect(s.fileTabs[0].preview).toBe(false);
+  });
+
+  it("marking dirty pins the tab", () => {
+    open();
+    useWorkbench.getState().setFileTabDirty(useWorkbench.getState().fileTabs[0].id, true);
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab.dirty).toBe(true);
+    expect(tab.preview).toBe(false);
+  });
+
+  it("closeFileTab removes a clean tab and returns true", () => {
+    open();
+    const id = useWorkbench.getState().fileTabs[0].id;
+    expect(useWorkbench.getState().closeFileTab(id)).toBe(true);
+    expect(useWorkbench.getState().fileTabs).toHaveLength(0);
+    expect(useWorkbench.getState().activeFileTabId).toBeNull();
+  });
+
+  it("closeFileTab blocks a dirty tab unless forced", () => {
+    open();
+    const id = useWorkbench.getState().fileTabs[0].id;
+    useWorkbench.getState().setFileTabDirty(id, true);
+    expect(useWorkbench.getState().closeFileTab(id)).toBe(false);
+    expect(useWorkbench.getState().fileTabs).toHaveLength(1);
+    expect(useWorkbench.getState().closeFileTab(id, { force: true })).toBe(true);
+    expect(useWorkbench.getState().fileTabs).toHaveLength(0);
+  });
+
+  it("setFileTabMode and setFileTabViewer update the tab", () => {
+    open({ kind: "diff", mode: "diff" });
+    const id = useWorkbench.getState().fileTabs[0].id;
+    useWorkbench.getState().setFileTabMode(id, "edit");
+    useWorkbench.getState().setFileTabViewer(id, "hex");
+    expect(useWorkbench.getState().fileTabs[0]).toMatchObject({ mode: "edit", viewerId: "hex" });
+  });
+
+  it("activating a workspace clears the active file tab and vice versa", () => {
+    open();
+    useWorkbench.getState().setActiveWorkspace("ws-1");
+    expect(useWorkbench.getState().activeFileTabId).toBeNull();
+    useWorkbench.getState().setActiveFileTab(useWorkbench.getState().fileTabs[0].id);
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+  });
+
+  it("opening a system tab clears the active file tab", () => {
+    open();
+    useWorkbench.getState().openSystemTab("kanban");
+    expect(useWorkbench.getState().activeFileTabId).toBeNull();
+  });
+});
