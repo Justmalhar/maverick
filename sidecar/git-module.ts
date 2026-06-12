@@ -1,4 +1,4 @@
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import { unlink } from "fs/promises";
 import { defaultShell } from "./deps";
 import { parseRemoteUrl, prWebUrl } from "./git-provider";
@@ -287,6 +287,9 @@ export class GitModule {
 
   /** Undo working-tree changes: restore tracked files from HEAD, delete untracked ones. */
   async discardFile(params: { worktreePath: string; filePath: string }): Promise<{ ok: true }> {
+    if (isAbsolute(params.filePath)) {
+      throw new Error(`filePath must be relative to the worktree root: ${params.filePath}`);
+    }
     const tracked = await this.shell.run(
       ["git", "-C", params.worktreePath, "ls-files", "--error-unmatch", "--", params.filePath],
       undefined

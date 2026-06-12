@@ -942,6 +942,17 @@ describe("showAtRef", () => {
     const res = await git.showAtRef({ worktreePath: "/wt", filePath: "src/a.ts", ref: "HEAD" });
     expect(res).toEqual({ content: "", missing: true });
   });
+
+  test("git show failure with non-missing stderr throws", async () => {
+    const shell = {
+      run: async () => ({ exitCode: 128, stdout: "", stderr: "fatal: bad object deadbeef" }),
+      text: async () => "",
+    };
+    const git = new GitModule({ shell: shell as never });
+    await expect(
+      git.showAtRef({ worktreePath: "/wt", filePath: "a.ts", ref: "deadbeef" })
+    ).rejects.toThrow("fatal: bad object deadbeef");
+  });
 });
 
 describe("discardFile", () => {
@@ -979,5 +990,21 @@ describe("discardFile", () => {
     expect(res).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
     expect(removed).toEqual(["/wt/new.txt"]);
+  });
+
+  test("absolute filePath rejects with /relative/ and records zero shell calls", async () => {
+    const calls: string[][] = [];
+    const shell = {
+      run: async (cmd: string[]) => {
+        calls.push(cmd);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      text: async () => "",
+    };
+    const git = new GitModule({ shell: shell as never });
+    await expect(
+      git.discardFile({ worktreePath: "/wt", filePath: "/etc/passwd" })
+    ).rejects.toThrow(/relative/);
+    expect(calls).toHaveLength(0);
   });
 });

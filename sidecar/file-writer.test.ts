@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { FileWriter, FileWriteConflictError } from "./file-writer";
 
 function tmpFile(content: string): string {
@@ -51,8 +51,19 @@ describe("FileWriter", () => {
     const p = tmpFile("old");
     const w = new FileWriter();
     w.write({ filePath: p, content: "new" });
-    const { readdirSync } = require("fs") as typeof import("fs");
-    const dir = p.slice(0, p.lastIndexOf("/"));
+    const dir = dirname(p);
     expect(readdirSync(dir)).toEqual(["a.txt"]);
+  });
+
+  test("failure: write to nonexistent parent throws and leaves no temp artefacts", () => {
+    // The fixture dir is a real tmpdir we control; writing to a path whose parent
+    // does not exist causes mkdtempSync to throw before any .mv-write-* dir is
+    // created — verified by asserting none appear under our fixture dir.
+    const fixtureDir = mkdtempSync(join(tmpdir(), "mv-fw-guard-"));
+    const ghost = join(fixtureDir, "nonexistent-subdir", "x.txt");
+    const w = new FileWriter();
+    expect(() => w.write({ filePath: ghost, content: "boom" })).toThrow();
+    const entries = readdirSync(fixtureDir);
+    expect(entries.some((e) => e.startsWith(".mv-write-"))).toBe(false);
   });
 });
