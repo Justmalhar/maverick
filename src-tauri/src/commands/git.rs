@@ -269,6 +269,39 @@ pub async fn git_push(
 }
 
 #[tauri::command]
+pub async fn file_read_at_ref(
+    state: State<'_, AppState>,
+    worktree_path: String,
+    file_path: String,
+    r#ref: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "file.readAtRef",
+            json!({ "worktreePath": worktree_path, "filePath": file_path, "ref": r#ref }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn git_discard_file(
+    state: State<'_, AppState>,
+    worktree_path: String,
+    file_path: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "git.discard_file",
+            json!({ "worktreePath": worktree_path, "filePath": file_path }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn git_remote_info(
     state: State<'_, AppState>,
     worktree_path: String,

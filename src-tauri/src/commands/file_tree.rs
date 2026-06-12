@@ -25,6 +25,23 @@ pub async fn file_read(state: State<'_, AppState>, file_path: String) -> Result<
 }
 
 #[tauri::command]
+pub async fn file_write(
+    state: State<'_, AppState>,
+    file_path: String,
+    content: String,
+    expected_mtime: Option<f64>,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "file.write",
+            json!({ "filePath": file_path, "content": content, "expectedMtime": expected_mtime }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn file_search(
     state: State<'_, AppState>,
     worktree_path: String,

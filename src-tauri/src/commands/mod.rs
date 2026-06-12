@@ -39,14 +39,14 @@ pub use config::{config_load, config_save};
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
 pub use file_tree::{
-    file_read, file_search, file_tree, fs_watch_add, fs_watch_remove, fs_watch_start,
+    file_read, file_search, file_tree, file_write, fs_watch_add, fs_watch_remove, fs_watch_start,
     fs_watch_stop,
 };
 pub use git::{
-    ai_commit_message, git_blame, git_branch_list, git_branches, git_checkout, git_cherry_pick,
-    git_commit, git_conflicts, git_diff_stat, git_fetch, git_log, git_pull, git_push,
-    git_remote_info, git_resolve_conflict, git_stash_apply, git_stash_drop, git_stash_list,
-    git_stash_pop,
+    ai_commit_message, file_read_at_ref, git_blame, git_branch_list, git_branches, git_checkout,
+    git_cherry_pick, git_commit, git_conflicts, git_diff_stat, git_discard_file, git_fetch,
+    git_log, git_pull, git_push, git_remote_info, git_resolve_conflict, git_stash_apply,
+    git_stash_drop, git_stash_list, git_stash_pop,
 };
 pub use instructions::instructions_resolve;
 pub use kanban::{kanban_list, kanban_upsert};
