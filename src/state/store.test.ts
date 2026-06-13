@@ -5,12 +5,31 @@ import {
   selectEditorMode,
   selectWorkspacesForProject,
   computeLiveWorkspaceIds,
+  computeLiveFileTabIds,
+  type FileTab,
 } from "./store";
 import { makeProject, makeWorkspace, makeBackend, makeSkill } from "@/test/fixtures";
+
+let tabCounter = 0;
+function makeTab(overrides: Partial<FileTab> = {}): FileTab {
+  const path = `/wt/file-${tabCounter++}.ts`;
+  return {
+    id: `file:${path}`,
+    kind: "file",
+    path,
+    worktreePath: "/wt",
+    preview: false,
+    dirty: false,
+    mode: "edit",
+    viewed: false,
+    ...overrides,
+  };
+}
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
+  tabCounter = 0;
   useWorkbench.setState({
     ...initial,
     projects: [],
@@ -24,6 +43,9 @@ beforeEach(() => {
     activeTerminalTabId: null,
     systemTabs: [],
     activeSystemTab: null,
+    fileTabs: [],
+    activeFileTabId: null,
+    fileTabAccessOrder: [],
     commandPaletteOpen: false,
     quickOpenOpen: false,
     presetLauncherOpen: false,
@@ -323,5 +345,104 @@ describe("computeLiveWorkspaceIds", () => {
   it("treats a non-positive limit as no suspension", () => {
     const list = [ws("a"), ws("b")];
     expect(computeLiveWorkspaceIds(list, ["a", "b"], "a", 0)).toEqual(new Set(["a", "b"]));
+  });
+});
+
+describe("computeLiveFileTabIds", () => {
+  it("keeps every tab live when at or below the limit", () => {
+    const tabs = [makeTab(), makeTab(), makeTab()];
+    const order = tabs.map((t) => t.id);
+    const live = computeLiveFileTabIds(tabs, order, tabs[0].id, 8);
+    expect(live).toEqual(new Set(tabs.map((t) => t.id)));
+  });
+
+  it("suspends least-recently-used clean tabs beyond the limit", () => {
+    const [a, b, c, d] = [makeTab(), makeTab(), makeTab(), makeTab()];
+    // MRU first: d, c, b, a — with limit 2 only d and c stay live.
+    const live = computeLiveFileTabIds([a, b, c, d], [d.id, c.id, b.id, a.id], d.id, 2);
+    expect(live.has(d.id)).toBe(true);
+    expect(live.has(c.id)).toBe(true);
+    expect(live.has(b.id)).toBe(false);
+    expect(live.has(a.id)).toBe(false);
+  });
+
+  it("always keeps the active tab live even if it is the LRU tail", () => {
+    const [a, b, c, d] = [makeTab(), makeTab(), makeTab(), makeTab()];
+    // Window of 2 = {a, b}; active 'd' is the stale tail but must be force-kept.
+    const live = computeLiveFileTabIds([a, b, c, d], [a.id, b.id, c.id, d.id], d.id, 2);
+    expect(live.has(a.id)).toBe(true);
+    expect(live.has(b.id)).toBe(true);
+    expect(live.has(d.id)).toBe(true); // active, force-kept
+    expect(live.has(c.id)).toBe(false); // suspended
+  });
+
+  it("always keeps dirty tabs live regardless of LRU position", () => {
+    const clean1 = makeTab();
+    const dirty = makeTab({ dirty: true });
+    const clean2 = makeTab();
+    const clean3 = makeTab();
+    // MRU order: clean1, clean2, dirty, clean3 — limit 2 → window = {clean1, clean2}
+    // dirty must be added anyway because dirty: true.
+    const live = computeLiveFileTabIds(
+      [clean1, dirty, clean2, clean3],
+      [clean1.id, clean2.id, dirty.id, clean3.id],
+      clean1.id,
+      2
+    );
+    expect(live.has(clean1.id)).toBe(true);
+    expect(live.has(clean2.id)).toBe(true);
+    expect(live.has(dirty.id)).toBe(true); // force-kept: dirty
+    expect(live.has(clean3.id)).toBe(false);
+  });
+
+  it("appends tabs missing from the access order (e.g. restored from disk)", () => {
+    const [a, b, c] = [makeTab(), makeTab(), makeTab()];
+    // 'c' was never recorded in access order.
+    const live = computeLiveFileTabIds([a, b, c], [a.id, b.id], null, 3);
+    expect(live).toEqual(new Set([a.id, b.id, c.id]));
+  });
+
+  it("treats a non-positive limit as no suspension", () => {
+    const tabs = [makeTab(), makeTab()];
+    const live = computeLiveFileTabIds(tabs, tabs.map((t) => t.id), tabs[0].id, 0);
+    expect(live).toEqual(new Set(tabs.map((t) => t.id)));
+  });
+});
+
+describe("fileTabAccessOrder mutations", () => {
+  beforeEach(() => {
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      fileTabs: [],
+      activeFileTabId: null,
+      fileTabAccessOrder: [],
+    });
+  });
+
+  it("openFileTab prepends the id (MRU first)", () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    expect(useWorkbench.getState().fileTabAccessOrder).toEqual(["file:/wt/b.ts", "file:/wt/a.ts"]);
+  });
+
+  it("openFileTab on existing tab moves it to front", () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    expect(useWorkbench.getState().fileTabAccessOrder[0]).toBe("file:/wt/a.ts");
+  });
+
+  it("setActiveFileTab moves id to front", () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().setActiveFileTab("file:/wt/a.ts");
+    expect(useWorkbench.getState().fileTabAccessOrder[0]).toBe("file:/wt/a.ts");
+  });
+
+  it("closeFileTab prunes the id from access order", () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().closeFileTab("file:/wt/a.ts");
+    expect(useWorkbench.getState().fileTabAccessOrder).toEqual(["file:/wt/b.ts"]);
   });
 });

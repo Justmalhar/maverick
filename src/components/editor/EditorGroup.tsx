@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from "react";
-import { useWorkbench, computeLiveWorkspaceIds, type SystemTabId } from "@/state/store";
+import { useWorkbench, computeLiveWorkspaceIds, computeLiveFileTabIds, type SystemTabId } from "@/state/store";
 import { useSettings } from "@/lib/stores/settings";
 import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
@@ -49,6 +49,12 @@ export function EditorGroup() {
 
   const fileTabs = useWorkbench((s) => s.fileTabs);
   const activeFileTabId = useWorkbench((s) => s.activeFileTabId);
+  const fileTabAccessOrder = useWorkbench((s) => s.fileTabAccessOrder);
+
+  const liveFileTabIds = useMemo(
+    () => computeLiveFileTabIds(fileTabs, fileTabAccessOrder, activeFileTabId, lruLimit),
+    [fileTabs, fileTabAccessOrder, activeFileTabId, lruLimit]
+  );
 
   const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0 || fileTabs.length > 0;
   const showEmpty = !hasAnyTabs;
@@ -135,26 +141,31 @@ export function EditorGroup() {
           </Suspense>
         )}
 
-        {/* File tabs: keep-alive mounted, hidden when inactive so Monaco
-            models, scroll position and undo stacks survive tab switches. */}
-        {fileTabs.map((tab) => {
-          const active = showFileTab && tab.id === activeFileTabId;
-          return (
-            <div
-              key={tab.id}
-              data-testid={`file-tab-content-${tab.id}`}
-              aria-hidden={!active}
-              className={cn(
-                "absolute inset-0 bg-editor",
-                !active && "keep-alive-hidden content-visibility-auto"
-              )}
-            >
-              <Suspense fallback={null}>
-                <FileTabPane tab={tab} active={active} />
-              </Suspense>
-            </div>
-          );
-        })}
+        {/* File tabs: suspended (unmounted) when outside the LRU window.
+            Clean suspended tabs remount from disk on re-focus — safe because
+            they cannot have unsaved changes (dirty tabs are always kept live).
+            Terminal tabs are keep-alive hidden; file tabs are LRU suspended
+            to bound Monaco editor instance count and RSS. */}
+        {fileTabs
+          .filter((tab) => liveFileTabIds.has(tab.id))
+          .map((tab) => {
+            const active = showFileTab && tab.id === activeFileTabId;
+            return (
+              <div
+                key={tab.id}
+                data-testid={`file-tab-content-${tab.id}`}
+                aria-hidden={!active}
+                className={cn(
+                  "absolute inset-0 bg-editor",
+                  !active && "keep-alive-hidden content-visibility-auto"
+                )}
+              >
+                <Suspense fallback={null}>
+                  <FileTabPane tab={tab} active={active} />
+                </Suspense>
+              </div>
+            );
+          })}
 
         {/* Other system tabs: lazy-loaded, mounted only when active */}
         {showSystemTab && activeSystemTab && activeSystemTab !== "browser" && (

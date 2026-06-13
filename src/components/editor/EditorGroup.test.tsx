@@ -33,7 +33,7 @@ beforeEach(() => {
   useWorkbench.setState({
     ...initial, workspaces: [], activeWorkspaceId: null, workspaceAccessOrder: [],
     editorModes: {}, splitTrees: {}, systemTabs: [], activeSystemTab: null,
-    fileTabs: [], activeFileTabId: null,
+    fileTabs: [], activeFileTabId: null, fileTabAccessOrder: [],
   });
 });
 
@@ -250,5 +250,44 @@ describe("file tabs", () => {
     const b = await screen.findByTestId("file-tab-content-file:/wt/b.ts");
     expect(a).toHaveAttribute("aria-hidden", "true");
     expect(b).toHaveAttribute("aria-hidden", "false");
+  });
+
+  it("suspends clean file tabs beyond the LRU limit (oldest unmounted)", () => {
+    useSettingsStore.setState({
+      values: { "advanced.lruLimit": 2 },
+      status: "idle",
+      lastError: null,
+    });
+    // Open 4 clean tabs; most-recent (f4) is active.
+    const paths = ["/wt/f1.ts", "/wt/f2.ts", "/wt/f3.ts", "/wt/f4.ts"];
+    for (const p of paths) {
+      useWorkbench.getState().openFileTab({ kind: "file", path: p, worktreePath: "/wt", preview: false });
+    }
+    // accessOrder is now MRU first: f4, f3, f2, f1 — limit 2 means f1 and f2 are suspended.
+    renderWithProviders(<EditorGroup />);
+    expect(screen.queryByTestId("file-tab-content-file:/wt/f1.ts")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("file-tab-content-file:/wt/f2.ts")).not.toBeInTheDocument();
+    expect(screen.getByTestId("file-tab-content-file:/wt/f3.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("file-tab-content-file:/wt/f4.ts")).toBeInTheDocument();
+  });
+
+  it("keeps a dirty file tab mounted even when it falls outside the LRU window", () => {
+    useSettingsStore.setState({
+      values: { "advanced.lruLimit": 2 },
+      status: "idle",
+      lastError: null,
+    });
+    // Open 3 clean tabs (f1 oldest, f3 newest/active).
+    const paths = ["/wt/dirty1.ts", "/wt/dirty2.ts", "/wt/dirty3.ts"];
+    for (const p of paths) {
+      useWorkbench.getState().openFileTab({ kind: "file", path: p, worktreePath: "/wt", preview: false });
+    }
+    // Mark the oldest tab dirty.
+    useWorkbench.getState().setFileTabDirty("file:/wt/dirty1.ts", true);
+    // accessOrder MRU: f3, f2, f1. Limit 2 → window {f3, f2}. But f1 is dirty → force-kept.
+    renderWithProviders(<EditorGroup />);
+    expect(screen.getByTestId("file-tab-content-file:/wt/dirty1.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("file-tab-content-file:/wt/dirty2.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("file-tab-content-file:/wt/dirty3.ts")).toBeInTheDocument();
   });
 });

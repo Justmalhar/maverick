@@ -80,6 +80,8 @@ interface WorkbenchState {
   // File tabs (real editor tabs with VSCode preview-tab semantics)
   fileTabs: FileTab[];
   activeFileTabId: string | null;
+  // MRU-first. Drives LRU render suspension of file tab panes (mirrors workspaceAccessOrder).
+  fileTabAccessOrder: string[];
 
   // Per-workspace state
   activeWorkspaceId: string | null;
@@ -186,6 +188,7 @@ export const useWorkbench = create<WorkbenchState>()(
     activeTerminalTabId: null,
     fileTabs: [],
     activeFileTabId: null,
+    fileTabAccessOrder: [],
     activeWorkspaceId: null,
     workspaceAccessOrder: [],
     editorModes: {},
@@ -375,6 +378,7 @@ export const useWorkbench = create<WorkbenchState>()(
             activeWorkspaceId: null,
             activeSystemTab: null,
             activeTerminalTabId: null,
+            fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
           };
         }
         const tab: FileTab = {
@@ -401,6 +405,7 @@ export const useWorkbench = create<WorkbenchState>()(
           activeWorkspaceId: null,
           activeSystemTab: null,
           activeTerminalTabId: null,
+          fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
         };
       }),
 
@@ -410,6 +415,9 @@ export const useWorkbench = create<WorkbenchState>()(
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
         activeSystemTab: id ? null : s.activeSystemTab,
         activeTerminalTabId: id ? null : s.activeTerminalTabId,
+        fileTabAccessOrder: id
+          ? [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)]
+          : s.fileTabAccessOrder,
       })),
 
     closeFileTab: (id, opts) => {
@@ -419,6 +427,7 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         fileTabs: s.fileTabs.filter((t) => t.id !== id),
         activeFileTabId: s.activeFileTabId === id ? null : s.activeFileTabId,
+        fileTabAccessOrder: s.fileTabAccessOrder.filter((fid) => fid !== id),
       }));
       return true;
     },
@@ -489,5 +498,36 @@ export function computeLiveWorkspaceIds(
   }
   const live = new Set(ranked.slice(0, lruLimit));
   if (activeWorkspaceId) live.add(activeWorkspaceId);
+  return live;
+}
+
+/**
+ * The set of file tab ids whose panes stay rendered (keep-alive). When more
+ * than `lruLimit` tabs are open, the least-recently-used CLEAN tabs fall out
+ * of this set and have their DOM destroyed — they remount from disk on re-focus.
+ * The active tab and ALL dirty tabs are always live: suspending a dirty tab
+ * would call disposeModelForPath on unmount and destroy unsaved edits.
+ */
+export function computeLiveFileTabIds(
+  fileTabs: FileTab[],
+  accessOrder: string[],
+  activeFileTabId: string | null,
+  lruLimit: number
+): Set<string> {
+  const existing = new Set(fileTabs.map((t) => t.id));
+  if (lruLimit <= 0 || fileTabs.length <= lruLimit) return existing;
+
+  const ranked = accessOrder.filter((id) => existing.has(id));
+  // Tabs missing from the access order (e.g. restored from disk) are appended.
+  for (const t of fileTabs) {
+    if (!ranked.includes(t.id)) ranked.push(t.id);
+  }
+  const live = new Set(ranked.slice(0, lruLimit));
+  // Active tab is always live.
+  if (activeFileTabId) live.add(activeFileTabId);
+  // Dirty tabs are always live — suspending them would destroy unsaved edits.
+  for (const t of fileTabs) {
+    if (t.dirty) live.add(t.id);
+  }
   return live;
 }
