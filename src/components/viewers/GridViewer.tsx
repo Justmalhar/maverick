@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -11,6 +11,7 @@ const ROW_HEIGHT = 24;
 const VIRTUALIZE_THRESHOLD = 50;
 
 async function loadXlsx(path: string): Promise<Table> {
+  // SheetJS (~1MB gz) loads as a lazy chunk only when an .xlsx tab opens (CLAUDE.md rule 8).
   const XLSX = await import("xlsx");
   const buf = await (await fetch(convertFileSrc(path))).arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
@@ -26,9 +27,13 @@ async function loadXlsx(path: string): Promise<Table> {
 export default function GridViewer({ tab, meta, registerActions }: ViewerProps) {
   const [table, setTable] = useState<Table>({ header: [], rows: [] });
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [bodyHeight, setBodyHeight] = useState<number>(600);
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     const load = async (): Promise<Table> => {
       if (meta.ext === "xlsx") return loadXlsx(tab.path);
       const res = await fileRead(tab.path);
@@ -37,25 +42,40 @@ export default function GridViewer({ tab, meta, registerActions }: ViewerProps) 
     };
     load().then((t) => {
       if (!cancelled) setTable(t);
+    }).catch(() => {
+      if (!cancelled) setError("Could not load file.");
     });
     return () => {
       cancelled = true;
     };
   }, [tab.path, meta.ext]);
 
-  useEffect(() => {
-    registerActions({
-      copyContents: async () => {
-        const text = [table.header, ...table.rows].map((r) => r.join("\t")).join("\n");
-        await navigator.clipboard.writeText(text);
-      },
-    });
-  }, [table, registerActions]);
-
   const rows = useMemo(
     () => (sort ? sortRows(table.rows, sort.col, sort.dir) : table.rows),
     [table.rows, sort]
   );
+
+  useEffect(() => {
+    registerActions({
+      copyContents: async () => {
+        const text = [table.header, ...rows].map((r) => r.join("\t")).join("\n");
+        await navigator.clipboard.writeText(text);
+      },
+    });
+  }, [table.header, rows, registerActions]);
+
+  // Measure the body container so FixedSizeList gets an accurate pixel height
+  // instead of a hardcoded 600px that clips or overflows real panels.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height;
+      if (h && h > 0) setBodyHeight(h);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   const onSort = (col: number) =>
     setSort((s) =>
@@ -74,9 +94,28 @@ export default function GridViewer({ tab, meta, registerActions }: ViewerProps) 
     </div>
   );
 
+  if (error) {
+    return (
+      <div
+        role="table"
+        aria-label={meta.name}
+        className="flex h-full items-center justify-center"
+      >
+        <div data-testid="grid-viewer-error" className="text-[11px] text-muted-foreground">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div role="table" aria-label={meta.name} className="flex h-full flex-col overflow-auto">
-      <div role="row" className="sticky top-0 z-base grid border-b border-border bg-muted" style={{ gridTemplateColumns: gridTemplate }}>
+    <div role="table" aria-label={meta.name} className="flex h-full flex-col">
+      {/* Non-scrolling header — stays fixed while body scrolls */}
+      <div
+        role="row"
+        className="grid shrink-0 border-b border-border bg-muted"
+        style={{ gridTemplateColumns: gridTemplate }}
+      >
         {table.header.map((h, i) => (
           <button
             key={i}
@@ -94,17 +133,27 @@ export default function GridViewer({ tab, meta, registerActions }: ViewerProps) 
           </button>
         ))}
       </div>
-      {rows.length > VIRTUALIZE_THRESHOLD ? (
-        <FixedSizeList height={600} width="100%" itemCount={rows.length} itemSize={ROW_HEIGHT}>
-          {({ index, style }: ListChildComponentProps) => (
-            <div style={style}>
-              <Row row={rows[index]} />
-            </div>
-          )}
-        </FixedSizeList>
-      ) : (
-        rows.map((row, i) => <Row key={i} row={row} />)
-      )}
+      {/* Body: flex-1 + min-h-0 lets it shrink into the parent flex container */}
+      <div ref={bodyRef} className="min-h-0 flex-1">
+        {rows.length > VIRTUALIZE_THRESHOLD ? (
+          <FixedSizeList
+            height={bodyHeight}
+            width="100%"
+            itemCount={rows.length}
+            itemSize={ROW_HEIGHT}
+          >
+            {({ index, style }: ListChildComponentProps) => (
+              <div style={style}>
+                <Row row={rows[index]} />
+              </div>
+            )}
+          </FixedSizeList>
+        ) : (
+          <div className="overflow-auto">
+            {rows.map((row, i) => <Row key={i} row={row} />)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
