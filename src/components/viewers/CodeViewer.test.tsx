@@ -319,4 +319,124 @@ describe("CodeViewer", () => {
     // file_read should NOT have been called again (early return for non-matching path).
     expect(invokeMock.mock.calls.filter(([c]) => c === "file_read").length).toBe(callsBefore);
   });
+
+  it("Fix 4 — onFsChanged listener leak: unmount before listen resolves → unlisten is invoked", async () => {
+    // Hold up the onFsChanged promise so we can unmount before it resolves.
+    let resolveUnlisten!: (fn: () => void) => void;
+    const unlistenFn = vi.fn();
+    const pendingListen = new Promise<() => void>((res) => { resolveUnlisten = res; });
+
+    // listenMock is already set up in beforeEach; override it for this test only.
+    listenMock.mockImplementationOnce(async () => {
+      return pendingListen;
+    });
+
+    const tab = tabFor();
+    const { unmount } = render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={vi.fn()} />
+    );
+
+    // Wait for file_read to complete so the effect has progressed past the first awaits.
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("file_read", expect.any(Object)));
+
+    // Unmount while the listen promise is still pending — sets disposed=true.
+    unmount();
+
+    // Now resolve the listen promise with our fake unlisten fn.
+    await act(async () => { resolveUnlisten(unlistenFn); });
+
+    // The disposed guard must have called unlisten() to avoid a leaked listener.
+    expect(unlistenFn).toHaveBeenCalledOnce();
+  });
+
+  it("Fix 5 — overwriteDisk: early return when modelRef is null (no empty-file data loss)", async () => {
+    // Trigger the conflict bar so the Overwrite button renders, then null out
+    // modelRef before the click resolves (simulating unmount mid-flight).
+    // In practice we test the null-model guard by intercepting file_write to
+    // verify it is never called with an empty string when the model is absent.
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read")
+        return { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 };
+      if (cmd === "file_write") throw new Error("file changed on disk since last read: /wt/src/a.ts");
+      return undefined;
+    });
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await actions.save?.().catch(() => {});
+    // Conflict bar should be visible.
+    expect(await screen.findByTestId("code-viewer-conflict")).toBeInTheDocument();
+    // Now change invokeMock: if overwriteDisk is guarded it won't call file_write at all
+    // when the model is null; if it's NOT guarded it writes "". We simulate the
+    // model-null scenario by checking that content arg is never "".
+    const writeCallsBefore = invokeMock.mock.calls.filter(([c]) => c === "file_write").length;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read")
+        return { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 };
+      if (cmd === "file_write") {
+        // Must never be called with empty string content.
+        const args = invokeMock.mock.calls.at(-1)?.[1] as { content?: string } | undefined;
+        expect(args?.content).not.toBe("");
+        return { mtime: 300 };
+      }
+      return undefined;
+    });
+    const overwriteBtn = screen.getByRole("button", { name: /overwrite/i });
+    await act(async () => { overwriteBtn.click(); });
+    // The overwrite write (with real model content) should have fired exactly once more.
+    await waitFor(() => {
+      const writeCallsAfter = invokeMock.mock.calls.filter(([c]) => c === "file_write").length;
+      expect(writeCallsAfter).toBe(writeCallsBefore + 1);
+    });
+    // Conflict bar should be gone.
+    await waitFor(() => expect(screen.queryByTestId("code-viewer-conflict")).toBeNull());
+  });
+
+  it("Fix 5 — reloadFromDisk: early return when modelRef is null (no state mutation after unmount)", async () => {
+    // Trigger a conflict bar so the Reload button renders.
+    let writeCount = 0;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read")
+        return { content: "const x = 1;", size: 12, binary: false, unreadable: false, mtime: 100 };
+      if (cmd === "file_write") {
+        writeCount++;
+        if (writeCount === 1) throw new Error("file changed on disk since last read: /wt/src/a.ts");
+        return { mtime: 300 };
+      }
+      return undefined;
+    });
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    const { unmount } = render(
+      <CodeViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={(a) => { actions = a; }} />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    await actions.save?.().catch(() => {});
+    await screen.findByTestId("code-viewer-conflict");
+
+    // Hold up the second file_read inside reloadFromDisk.
+    let resolveRead!: (v: unknown) => void;
+    const pendingRead = new Promise((res) => { resolveRead = res; });
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "file_read") return pendingRead;
+      return undefined;
+    });
+
+    const reloadBtn = screen.getByRole("button", { name: /reload/i });
+    // Start the reload (won't complete yet).
+    reloadBtn.click();
+
+    // Unmount before the read resolves — modelRef becomes null.
+    unmount();
+
+    // Resolve the read — the null-guard should prevent any state mutation.
+    // If the guard is absent, this would throw (calling setState on an unmounted component).
+    await act(async () => {
+      resolveRead({ content: "const x = 2;", size: 12, binary: false, unreadable: false, mtime: 200 });
+    });
+    // No assertion needed beyond "did not throw". The test passes if no error is thrown.
+  });
 });

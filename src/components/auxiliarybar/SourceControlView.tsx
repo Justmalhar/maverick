@@ -339,44 +339,51 @@ export function SourceControlView() {
               const checked = selected.has(f.path);
               return (
                 <li key={f.path}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(f.path)}
-                    data-testid={`scm-file-${f.path}`}
-                    aria-pressed={checked}
-                    className="group/row flex w-full items-center gap-2 px-3 text-left text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+                  {/* Outer div: row container — keeps row styling without making the
+                      whole row a single button (which would trap the file-name
+                      button inside, preventing keyboard access to the diff action). */}
+                  <div
+                    className="group/row flex w-full items-center gap-2 px-3 text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
                     style={{ height: "22px" }}
                   >
-                    <span
-                      className={cn(
-                        "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
-                        checked ? "border-accent bg-accent/20" : "border-border"
-                      )}
+                    {/* Staging toggle — keyboard reachable, toggles selection */}
+                    <button
+                      type="button"
+                      onClick={() => toggle(f.path)}
+                      data-testid={`scm-file-${f.path}`}
+                      aria-pressed={checked}
+                      className="flex shrink-0 items-center gap-2 text-left"
                     >
-                      {checked && <Check className="h-2.5 w-2.5 text-accent" />}
-                    </span>
-                    <span
-                      className={cn(
-                        "w-3 shrink-0 text-center text-[10px] font-semibold",
-                        STATUS_TONE[f.status]
-                      )}
-                    >
-                      {f.status}
-                    </span>
-                    {/* Clickable file name: opens a diff tab without toggling staging selection */}
-                    <span
+                      <span
+                        className={cn(
+                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
+                          checked ? "border-accent bg-accent/20" : "border-border"
+                        )}
+                      >
+                        {checked && <Check className="h-2.5 w-2.5 text-accent" />}
+                      </span>
+                      <span
+                        className={cn(
+                          "w-3 shrink-0 text-center text-[10px] font-semibold",
+                          STATUS_TONE[f.status]
+                        )}
+                      >
+                        {f.status}
+                      </span>
+                    </button>
+                    {/* File name — its own keyboard-reachable button that opens a diff
+                        tab without affecting the staging selection. */}
+                    <button
+                      type="button"
                       data-testid={`scm-open-diff-${f.path}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenDiff(f.path);
-                      }}
-                      className="flex-1 truncate hover:underline"
+                      onClick={() => onOpenDiff(f.path)}
+                      className="flex-1 truncate text-left hover:underline"
                     >
                       {f.path}
-                    </span>
+                    </button>
                     <span className="text-[10px] text-success">+{f.additions}</span>
                     <span className="text-[10px] text-destructive">−{f.deletions}</span>
-                  </button>
+                  </div>
                 </li>
               );
             })}

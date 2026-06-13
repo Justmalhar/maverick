@@ -20,6 +20,7 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
 
   useEffect(() => {
     let disposed = false;
+    let acquired = false; // true only after getOrCreateModel succeeds and disposed was false
     const disposables: Array<{ dispose(): void }> = [];
 
     (async () => {
@@ -38,10 +39,13 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
       originalRef.current = original;
       const modified = await getOrCreateModel(tab.path, working.content);
       if (disposed) {
+        // The guard releases the ref that getOrCreateModel just acquired.
+        // Do NOT also release in cleanup (acquired remains false).
         original.dispose();
         releaseModel(tab.path);
         return;
       }
+      acquired = true;
 
       const editor = monaco.editor.createDiffEditor(hostRef.current, {
         theme: "maverick-dark",
@@ -94,7 +98,9 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
       editorRef.current = null;
       originalRef.current?.dispose();
       originalRef.current = null;
-      releaseModel(tab.path);
+      // Only release if this cleanup owns the ref. If disposed guard already ran
+      // (acquired stays false), that path already called releaseModel exactly once.
+      if (acquired) releaseModel(tab.path);
     };
   }, [tab.path, tab.worktreePath, onDirtyChange, registerActions]);
 

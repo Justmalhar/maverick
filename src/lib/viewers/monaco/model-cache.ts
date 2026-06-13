@@ -49,14 +49,29 @@ export async function getOrCreateModel(path: string, content: string): Promise<T
 export function releaseModel(path: string): void {
   const entry = cache.get(path);
   if (!entry) return;
-  entry.refs -= 1;
-  if (entry.refs <= 0) {
-    cache.delete(path);
-    entry.model.dispose();
-  }
+  // Decrement refs but NEVER dispose or delete the entry here. The model must
+  // survive viewer swaps (Diff⟷Edit) because FileTabPane is keep-alive mounted
+  // and its unmount is the real tab-close signal. disposeModelForPath handles
+  // actual disposal when the tab closes.
+  entry.refs = Math.max(0, entry.refs - 1);
 }
 
-/** Test-only. */
+/**
+ * Dispose and evict the cache entry for `path`. Called by FileTabPane on
+ * unmount (tab close). No-ops when refs > 0 (another viewer still holds it)
+ * or when no entry exists (non-text file, e.g. image/pdf).
+ */
+export function disposeModelForPath(path: string): void {
+  const entry = cache.get(path);
+  if (!entry) return;
+  if (entry.refs > 0) return; // another tab's viewer still holds the ref
+  entry.model.dispose();
+  cache.delete(path);
+}
+
+/** Test-only. Clears the cache and inflight maps without disposing models.
+ *  The Monaco mock's internal URI→model map persists across tests anyway, so
+ *  disposing here would only poison the mock's dispose spy count. */
 export function __resetModelCache(): void {
   cache.clear();
   inflight.clear();

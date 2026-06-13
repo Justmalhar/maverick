@@ -158,8 +158,10 @@ describe("DiffViewer", () => {
     const fakeModel = monaco.editor.createModel("new", "typescript");
     await act(async () => { resolveModel(fakeModel); });
 
-    // releaseModel must have been called (from the disposed guard path, NOT the cleanup path,
-    // but cleanup also calls releaseModel — either way it must be called at least once).
+    // releaseModel must have been called EXACTLY once — from the disposed guard path.
+    // The cleanup return() only calls releaseModel when acquired===true, which is false
+    // here because the guard returned early before setting acquired. No double-release.
+    expect(releaseModelSpy).toHaveBeenCalledTimes(1);
     expect(releaseModelSpy).toHaveBeenCalledWith("/wt/src/a.ts");
 
     getOrCreateSpy.mockRestore();

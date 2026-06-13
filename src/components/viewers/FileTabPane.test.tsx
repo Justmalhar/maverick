@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { useWorkbench } from "@/state/store";
 import { viewerRegistry } from "@/lib/viewers";
 import { invoke } from "@tauri-apps/api/core";
 import type { ViewerProps } from "@/lib/viewers/types";
+import * as modelCacheModule from "@/lib/viewers/monaco/model-cache";
 import FileTabPane, { lazyViewerCache } from "./FileTabPane";
 
 const invokeMock = vi.mocked(invoke);
@@ -134,6 +135,57 @@ describe("FileTabPane", () => {
       getSpy.mockRestore();
       resolveSpy.mockRestore();
     }
+  });
+
+  it("unmount calls disposeModelForPath for its path (Fix 1 — tab-scoped model lifetime)", async () => {
+    const disposeForPathSpy = vi.spyOn(modelCacheModule, "disposeModelForPath");
+    const tab = makeTab("/wt/dispose-test.zzz");
+    const { unmount } = render(<FileTabPane tab={tab} active />);
+    // Wait for the meta-loading effect to complete (toolbar always renders after meta resolves).
+    await screen.findByTestId("viewer-toolbar");
+    unmount();
+    expect(disposeForPathSpy).toHaveBeenCalledWith("/wt/dispose-test.zzz");
+    disposeForPathSpy.mockRestore();
+  });
+
+  it("onDirtyChange identity is stable — viewer does NOT remount on dirty toggle (Fix 3)", async () => {
+    // Register a viewer that: (a) counts mounts, (b) exposes a button that calls
+    // onDirtyChange(true) to simulate the editor marking the file dirty.
+    let mountSpy = 0;
+    const DIRTY_STABLE_ID = "dirty-stable-viewer-fix3";
+    function StableDirtyViewer({ onDirtyChange }: ViewerProps) {
+      useEffect(() => { mountSpy += 1; }, []);
+      return (
+        <button data-testid="trigger-dirty" onClick={() => onDirtyChange(true)}>
+          Make dirty
+        </button>
+      );
+    }
+    if (!viewerRegistry.get(DIRTY_STABLE_ID)) {
+      viewerRegistry.register({
+        id: DIRTY_STABLE_ID,
+        displayName: "StableDirty",
+        priority: 0,
+        capabilities: {},
+        canHandle: () => false, // only reachable via viewerId override
+        load: async () => StableDirtyViewer,
+      });
+    }
+    // Clear stale lazy cache entry to ensure this test controls the lifecycle.
+    lazyViewerCache.delete(DIRTY_STABLE_ID);
+    mountSpy = 0;
+
+    const tab = makeTab("/wt/stable-dirty.zzz");
+    useWorkbench.getState().setFileTabViewer(tab.id, DIRTY_STABLE_ID);
+    const liveTab = () => useWorkbench.getState().fileTabs.find((t) => t.id === tab.id)!;
+    render(<FileTabPane tab={liveTab()} active />);
+    const btn = await screen.findByTestId("trigger-dirty");
+    expect(mountSpy).toBe(1);
+
+    // Click triggers onDirtyChange(true) → FileTabPane re-renders with dirty state,
+    // but onDirtyChange is now stable (useCallback), so the viewer effect does NOT re-run.
+    await act(async () => { fireEvent.click(btn); });
+    expect(mountSpy).toBe(1); // viewer did NOT remount
   });
 
   it("lazy viewer component identity is stable per descriptor id across re-renders", async () => {

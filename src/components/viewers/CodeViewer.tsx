@@ -78,6 +78,8 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
       });
 
       // External edits: reload clean tabs in place; dirty tabs get the conflict bar.
+      // Guard: if cleanup ran before the listen promise resolves, invoke unlisten
+      // immediately to prevent a leaked listener.
       const unlisten = await onFsChanged(({ paths }) => {
         if (!paths.includes(tab.path)) return;
         void fileRead(tab.path).then((fresh) => {
@@ -92,7 +94,11 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
           }
         });
       });
-      disposables.push({ dispose: unlisten });
+      if (disposed) {
+        unlisten();
+      } else {
+        disposables.push({ dispose: unlisten });
+      }
     })();
 
     return () => {
@@ -108,17 +114,25 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
   }, [tab.path, onDirtyChange, registerActions]);
 
   const reloadFromDisk = async () => {
+    // Guard: model may be null if called after unmount.
+    if (!modelRef.current) return;
     const fresh = await fileRead(tab.path);
+    if (!modelRef.current) return; // unmounted during the await
     baselineRef.current = fresh.content;
     mtimeRef.current = fresh.mtime;
-    modelRef.current?.setValue(fresh.content);
+    modelRef.current.setValue(fresh.content);
     setConflict(false);
     onDirtyChange(false);
   };
 
   const overwriteDisk = async () => {
-    const content = modelRef.current?.getValue() ?? "";
+    // Guard: writing an empty string if the model is null would silently
+    // truncate the file. Bail out instead.
+    const model = modelRef.current;
+    if (!model) return;
+    const content = model.getValue();
     const { mtime } = await fileWrite(tab.path, content);
+    if (!modelRef.current) return; // unmounted during the await
     baselineRef.current = content;
     mtimeRef.current = mtime;
     setConflict(false);
