@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { joinPath } from "@/lib/paths";
 import { useSourceControl } from "@/hooks/useSourceControl";
 import {
   aiCommitMessage,
@@ -92,7 +93,7 @@ export function SourceControlView() {
     if (!active?.worktreePath) return;
     openFileTab({
       kind: "diff",
-      path: `${active.worktreePath}/${relPath}`,
+      path: joinPath(active.worktreePath, relPath),
       worktreePath: active.worktreePath,
       preview: true,
     });

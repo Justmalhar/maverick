@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { File } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { joinPath } from "@/lib/paths";
 import { fileSearch } from "@/lib/tauri";
 import type { SearchHit } from "@/lib/ipc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -22,13 +23,6 @@ function basename(path: string): string {
   return i >= 0 ? path.slice(i + 1) : path;
 }
 
-// Joins a worktree root with a forward-slash relative path without producing a
-// double separator when `root` already ends in "/" (or is the filesystem root
-// "/"). The sidecar emits forward-slash rels, so we normalize on "/" only.
-export function joinPath(root: string, rel: string): string {
-  const base = root.endsWith("/") ? root.slice(0, -1) : root;
-  return `${base}/${rel}`;
-}
 
 export function QuickOpen() {
   const open = useWorkbench((s) => s.quickOpenOpen);

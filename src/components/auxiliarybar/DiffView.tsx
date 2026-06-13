@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2 } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview } from "@/lib/ai-review";
@@ -53,7 +54,7 @@ export function DiffView() {
     if (!active?.worktreePath) return;
     openFileTab({
       kind: "diff",
-      path: `${active.worktreePath}/${relPath}`,
+      path: joinPath(active.worktreePath, relPath),
       worktreePath: active.worktreePath,
       preview: true,
     });
