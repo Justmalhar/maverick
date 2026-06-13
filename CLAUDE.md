@@ -14,6 +14,7 @@ You are working on **Maverick**, a native Tauri v2 desktop IDE that orchestrates
 8. **Bundle budget is 100MB installed, 200MB RSS at idle.** Before adding a dependency >1MB gzipped, justify in PR description.
 9. **No comments explaining WHAT.** Identifiers do that. Only write a comment for non-obvious WHY (invariants, workarounds, perf hacks).
 10. **TODO/`todo!()` markers must reference a tracked task.** No silent stubs in production paths.
+11. **Viewers never import Monaco/pdfjs/SheetJS directly.** Always `getMonaco()` / registry `load()`. Adding a viewer must require zero changes outside `src/lib/viewers/` + `src/components/viewers/`.
 
 ## Canonical VSCode Terminology
 
@@ -77,6 +78,7 @@ Subagents must respect these zones to avoid edit conflicts:
 | `sidecar/**` | Sidecar logic agent |
 | `src/components/workbench/**`, `src/components/activitybar/**`, `src/components/statusbar/**` | Frontend shell agent |
 | `src/components/editor/**`, `src/lib/providers/**` | Editor/Terminal agent |
+| `src/lib/viewers/**`, `src/components/viewers/**` | Editor/Terminal agent |
 | `src/panels/git/**`, `src/panels/kanban/**`, etc. | Panel agent (one per panel) |
 | `src/styles/**`, `src/components/ui/**` (shadcn) | Design system agent |
 | `**/*.test.ts`, `**/*.test.tsx`, `**/*_test.rs` | Test agent (may touch any zone) |

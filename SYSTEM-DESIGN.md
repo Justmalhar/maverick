@@ -151,6 +151,16 @@ App
 │       └── TerminalSubPanel
 │           ├── SubPanelTabs (Setup | Run | Terminal)
 │           └── TerminalInstance (xterm.js)
+
+ViewerRegistry (src/lib/viewers/)  ← resolves lazy viewer component from (FileMeta, ViewerIntent)
+├── CodeViewer (Monaco editor, Shiki TextMate grammars/themes)
+├── DiffViewer (Monaco diff editor, Conductor-style toolbar)
+├── MarkdownViewer (react-markdown + GFM, View/Edit toggle)
+├── ImageViewer (zoom/pan canvas)
+├── VideoViewer (native <video> element)
+├── PDFViewer (pdfjs-dist, page navigation)
+├── HexViewer (hex dump fallback for binary files)
+└── GridViewer (papaparse CSV/TSV + xlsx lazy, sort + react-window virtualisation)
 ├── ThemeProvider (CSS custom properties injection from active theme)
 ├── KeyboardShortcutHandler (global hotkey registry, `tinykeys`)
 ├── NotificationManager (OS notifications + in-app bell)
@@ -320,6 +330,9 @@ pty_write(pty_id, data) -> Result
 pty_resize(pty_id, cols, rows) -> Result
 config_load(project_path) -> ConfigResult
 messages_list(session_id, limit, offset) -> Vec<Message>
+file_write(file_path, content, expected_mtime?) -> { mtime }          // atomic write; rejects with conflict when mtime drifts
+file_read_at_ref(worktree_path, file_path, ref) -> { content, missing } // git show REF:path; missing=true for added files
+git_discard_file(worktree_path, file_path) -> { ok }                  // checkout HEAD for tracked; delete for untracked
 ```
 
 **Tauri events (Rust → React, streamed):**
