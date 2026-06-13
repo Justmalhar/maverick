@@ -439,6 +439,14 @@ describe("fileTabAccessOrder mutations", () => {
     expect(useWorkbench.getState().fileTabAccessOrder[0]).toBe("file:/wt/a.ts");
   });
 
+  it("setActiveFileTab(null) leaves access order unchanged", () => {
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
+    const orderBefore = [...useWorkbench.getState().fileTabAccessOrder];
+    useWorkbench.getState().setActiveFileTab(null);
+    expect(useWorkbench.getState().fileTabAccessOrder).toEqual(orderBefore);
+  });
+
   it("closeFileTab prunes the id from access order", () => {
     useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/a.ts", worktreePath: "/wt", preview: false });
     useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
