@@ -70,3 +70,12 @@ viewerRegistry.register({
   canHandle: (f, intent) => !f.binary && intent === "diff",
   load: async () => (await import("@/components/viewers/DiffViewer")).default,
 });
+
+viewerRegistry.register({
+  id: "grid",
+  displayName: "Table Grid",
+  priority: 50,
+  capabilities: {},
+  canHandle: (f, intent) => ["csv", "tsv", "xlsx"].includes(f.ext) && intent !== "diff",
+  load: async () => (await import("@/components/viewers/GridViewer")).default,
+});

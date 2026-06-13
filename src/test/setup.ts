@@ -7,6 +7,20 @@ afterEach(() => cleanup());
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+  convertFileSrc: vi.fn((path: string) => `asset://${path}`),
+}));
+
+vi.mock("xlsx", () => ({
+  read: vi.fn(() => ({
+    SheetNames: ["Sheet1"],
+    Sheets: { Sheet1: {} },
+  })),
+  utils: {
+    sheet_to_json: vi.fn(() => [
+      ["name", "qty"],
+      ["apple", 3],
+    ]),
+  },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

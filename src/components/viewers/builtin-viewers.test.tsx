@@ -8,6 +8,7 @@ describe("builtin viewer registration", () => {
     ["/wt/logo.png", "preview", "image"],
     ["/wt/demo.mp4", "preview", "video"],
     ["/wt/doc.pdf", "preview", "pdf"],
+    ["/wt/data.csv", "preview", "grid"],
   ])("%s + %s resolves to %s", (path, intent, expected) => {
     const winner = viewerRegistry.resolve(fileMetaForPath(path), intent as never)[0];
     expect(winner?.id).toBe(expected);
@@ -96,6 +97,13 @@ describe("builtin viewer load() functions", () => {
 
   it("diff load() returns a component", async () => {
     const descriptor = viewerRegistry.get("diff");
+    expect(descriptor).toBeDefined();
+    const Component = await descriptor!.load();
+    expect(typeof Component).toBe("function");
+  });
+
+  it("grid load() returns a component", async () => {
+    const descriptor = viewerRegistry.get("grid");
     expect(descriptor).toBeDefined();
     const Component = await descriptor!.load();
     expect(typeof Component).toBe("function");
