@@ -32,7 +32,7 @@ beforeEach(() => {
   _resetSettingsStoreForTests();
   useWorkbench.setState({
     ...initial, workspaces: [], activeWorkspaceId: null, workspaceAccessOrder: [],
-    editorModes: {}, splitTrees: {}, systemTabs: [], activeSystemTab: null,
+    splitTrees: {}, systemTabs: [], activeSystemTab: null,
     fileTabs: [], activeFileTabId: null, fileTabAccessOrder: [],
   });
 });

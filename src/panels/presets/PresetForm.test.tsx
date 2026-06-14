@@ -25,15 +25,17 @@ describe("PresetForm", () => {
     expect(onChange).toHaveBeenCalled();
   });
 
-  it("renders terminal node with all sub-fields and toggles agent and mode + converts to browser", async () => {
+  it("renders terminal node with all sub-fields, toggles agent + converts to browser, and has no mode picker", async () => {
     const onChange = vi.fn();
     renderWithProviders(
-      <PresetForm node={{ type: "terminal", agent: "claude", cwd: "/", mode: "agent" }} onChange={onChange} />
+      <PresetForm node={{ type: "terminal", agent: "claude", cwd: "/", mode: "terminal" }} onChange={onChange} />
     );
     await userEvent.click(screen.getByTestId("preset-agent-codex"));
     fireEvent.change(screen.getByTestId("preset-form-cwd"), { target: { value: "/x" } });
     fireEvent.change(screen.getByTestId("preset-form-startup"), { target: { value: "claude --c" } });
-    await userEvent.click(screen.getByTestId("preset-mode-terminal"));
+    // Presets are terminal-only — the mode picker is gone.
+    expect(screen.queryByTestId("preset-mode-agent")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("preset-mode-terminal")).not.toBeInTheDocument();
     await userEvent.click(screen.getByText("Convert to browser"));
     expect(onChange).toHaveBeenCalled();
   });

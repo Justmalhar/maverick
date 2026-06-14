@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { WorkspaceEditor } from "./WorkspaceEditor";
-import { __testing__ as agentTerminalTesting } from "./agent/AgentTerminal";
+import { __testing__ as leafTesting } from "./terminal/TerminalLeaf";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
@@ -27,9 +27,9 @@ function registerStubProvider() {
 }
 
 beforeEach(() => {
-  vi.mocked(invoke).mockReset().mockResolvedValue({ ptyId: "pty-agent" } as never);
+  vi.mocked(invoke).mockReset().mockResolvedValue({ ptyId: "pty-shell" } as never);
   vi.mocked(listen).mockReset().mockResolvedValue(() => {});
-  agentTerminalTesting.agentPtyCache.clear();
+  leafTesting.leafPtyCache.clear();
   registerStubProvider();
   vi.stubGlobal(
     "ResizeObserver",
@@ -39,11 +39,11 @@ beforeEach(() => {
       disconnect = vi.fn();
     }
   );
-  useWorkbench.setState({ ...initial, editorModes: {}, splitTrees: {} });
+  useWorkbench.setState({ ...initial, launchSpecs: {}, splitTrees: {} });
 });
 
 describe("WorkspaceEditor", () => {
-  it("renders a live agent terminal in agent mode", async () => {
+  it("renders only the terminal view and spawns a shell in the worktree", async () => {
     renderWithProviders(<WorkspaceEditor workspace={makeWorkspace({ id: "w1", worktreePath: "/wt" })} active />);
     expect(screen.getByTestId("workspace-editor-w1")).toBeInTheDocument();
     await waitFor(() =>
@@ -52,7 +52,7 @@ describe("WorkspaceEditor", () => {
         expect.objectContaining({ cwd: "/wt" })
       )
     );
-    expect(await screen.findByTestId("agent-terminal-w1")).toBeInTheDocument();
+    expect(await screen.findByTestId("terminal-view-w1")).toBeInTheDocument();
   });
 
   it("inactive workspace adds the keep-alive-hidden class", () => {

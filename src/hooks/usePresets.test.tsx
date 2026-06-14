@@ -14,7 +14,7 @@ const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
-  useWorkbench.setState({ ...initial, workspaces: [], splitTrees: {}, editorModes: {} });
+  useWorkbench.setState({ ...initial, workspaces: [], splitTrees: {} });
 });
 
 describe("usePresets", () => {
@@ -57,7 +57,7 @@ describe("usePresets", () => {
       expect.objectContaining({
         workspaceId: "w1",
         name: "saved",
-        layout: { type: "terminal", agent: "codex", cwd: "{{workspace_root}}", mode: "agent" },
+        layout: { type: "terminal", agent: "codex", cwd: "{{workspace_root}}", mode: "terminal" },
       })
     );
   });
@@ -115,7 +115,6 @@ describe("buildWorkspaceLayout", () => {
   it("uses the split tree when present", () => {
     useWorkbench.setState({
       workspaces: [makeWorkspace({ id: "ws", agentBackend: "claude" })],
-      editorModes: { ws: "terminal" },
       splitTrees: { ws: { type: "terminal", id: "1", backend: "shell", ptyId: "" } },
     });
     expect(buildWorkspaceLayout("ws")).toEqual({
@@ -126,7 +125,7 @@ describe("buildWorkspaceLayout", () => {
     });
   });
 
-  it("falls back to a single agent terminal when no tree exists", () => {
+  it("falls back to a single terminal-mode node when no tree exists", () => {
     useWorkbench.setState({
       workspaces: [makeWorkspace({ id: "ws", agentBackend: "gemini" })],
     });
@@ -134,7 +133,7 @@ describe("buildWorkspaceLayout", () => {
       type: "terminal",
       agent: "gemini",
       cwd: "{{workspace_root}}",
-      mode: "agent",
+      mode: "terminal",
     });
   });
 
@@ -143,7 +142,7 @@ describe("buildWorkspaceLayout", () => {
       type: "terminal",
       agent: "shell",
       cwd: "{{workspace_root}}",
-      mode: "agent",
+      mode: "terminal",
     });
   });
 });

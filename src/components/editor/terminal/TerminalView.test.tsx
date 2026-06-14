@@ -5,6 +5,7 @@ import { act } from "@testing-library/react";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { TerminalView } from "./TerminalView";
 import { __testing__ } from "./TerminalLeaf";
+import { __resetLaunchedForTests } from "@/hooks/useLaunchSpec";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
@@ -24,7 +25,8 @@ beforeEach(() => {
   vi.mocked(listen).mockReset().mockResolvedValue(() => {});
   TerminalRegistry.register(provider);
   __testing__.leafPtyCache.clear();
-  useWorkbench.setState({ ...initial, splitTrees: {} });
+  __resetLaunchedForTests();
+  useWorkbench.setState({ ...initial, splitTrees: {}, launchSpecs: {} });
 });
 
 describe("TerminalView", () => {
@@ -156,6 +158,59 @@ describe("TerminalView", () => {
     act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "down" })); });
     // Tree should remain a single-leaf terminal
     expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("terminal");
+  });
+
+  it("input-append writes the text to the focused leaf's shell PTY", async () => {
+    __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:input-append", { detail: { text: "ls -la\r" } })
+      );
+    });
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-w1-1", data: "ls -la\r" })
+    );
+  });
+
+  it("input-append is a no-op when the view is not visible", async () => {
+    __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
+    renderWithProviders(
+      <TerminalView workspace={makeWorkspace({ id: "w1" })} visible={false} />
+    );
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:input-append", { detail: { text: "ls\r" } })
+      );
+    });
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
+  it("input-append is a no-op when the focused leaf has no live PTY", async () => {
+    // Shell spawn never resolves → no pty cached for the focused leaf.
+    vi.mocked(invoke).mockImplementation(() => new Promise<never>(() => {}) as never);
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:input-append", { detail: { text: "ls\r" } })
+      );
+    });
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
+  it("input-append is a no-op when the event carries no text", async () => {
+    __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
+    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("maverick:input-append", { detail: { text: "" } })
+      );
+    });
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
   });
 
   it("split events do nothing when the tree cannot accept more leaves", async () => {

@@ -37,7 +37,7 @@ export function splitTreeToPresetNode(node: SplitNode, mode: EditorMode): Preset
  */
 export function buildWorkspaceLayout(workspaceId: string): PresetNode {
   const state = useWorkbench.getState();
-  const mode: EditorMode = state.editorModes[workspaceId] ?? "agent";
+  const mode: EditorMode = "terminal";
   const tree = state.splitTrees[workspaceId];
   if (tree) return splitTreeToPresetNode(tree, mode);
   const ws = state.workspaces.find((w) => w.id === workspaceId);

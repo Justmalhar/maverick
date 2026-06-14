@@ -30,8 +30,7 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+,", display: "⌘⇧," },
   { id: "project-settings.edit-file", label: "Project Settings: Edit maverick.json", category: "Workspace", keys: "" },
 
-  // Editor modes
-  { id: "editor.toggleMode", label: "Toggle Agent ↔ Terminal", category: "Editor", keys: "$mod+t", display: "⌘T" },
+  // Editor
   { id: "editor.focusInput", label: "Focus input bar", category: "Editor", keys: "$mod+l", display: "⌘L" },
   { id: "ai.review", label: "AI Code Review of working changes", category: "Editor", keys: "$mod+Shift+r", display: "⌘⇧R" },
 

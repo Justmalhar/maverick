@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   useWorkbench,
   selectActiveWorkspace,
-  selectEditorMode,
   selectWorkspacesForProject,
   computeLiveWorkspaceIds,
   computeLiveFileTabIds,
@@ -37,8 +36,8 @@ beforeEach(() => {
     backends: [],
     skills: [],
     activeWorkspaceId: null,
-    editorModes: {},
     splitTrees: {},
+    launchSpecs: {},
     terminalTabs: [],
     activeTerminalTabId: null,
     systemTabs: [],
@@ -117,15 +116,26 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().workspaceAccessOrder).toEqual([]);
   });
 
-  it("editor mode set + toggle", () => {
-    useWorkbench.getState().setEditorMode("w1", "agent");
-    expect(useWorkbench.getState().editorModes["w1"]).toBe("agent");
-    useWorkbench.getState().toggleEditorMode("w1");
-    expect(useWorkbench.getState().editorModes["w1"]).toBe("terminal");
-    useWorkbench.getState().toggleEditorMode("w1");
-    expect(useWorkbench.getState().editorModes["w1"]).toBe("agent");
-    useWorkbench.getState().toggleEditorMode("w2"); // uninitialised → terminal
-    expect(useWorkbench.getState().editorModes["w2"]).toBe("terminal");
+  it("launch spec set + consume is single-shot", () => {
+    const spec = { command: "claude", args: ["--model", "opus"], prompt: "fix it" };
+    useWorkbench.getState().setLaunchSpec("w1", spec);
+    expect(useWorkbench.getState().launchSpecs["w1"]).toEqual(spec);
+    // First consume returns the spec and removes it.
+    expect(useWorkbench.getState().consumeLaunchSpec("w1")).toEqual(spec);
+    expect(useWorkbench.getState().launchSpecs["w1"]).toBeUndefined();
+    // Second consume yields null (single-shot).
+    expect(useWorkbench.getState().consumeLaunchSpec("w1")).toBeNull();
+  });
+
+  it("consumeLaunchSpec returns null for an unknown workspace", () => {
+    expect(useWorkbench.getState().consumeLaunchSpec("nope")).toBeNull();
+  });
+
+  it("removeWorkspace clears a pending launch spec", () => {
+    useWorkbench.getState().addWorkspace(makeWorkspace({ id: "w9", projectId: "p1" }));
+    useWorkbench.getState().setLaunchSpec("w9", { command: "codex", args: [] });
+    useWorkbench.getState().removeWorkspace("w9");
+    expect(useWorkbench.getState().launchSpecs["w9"]).toBeUndefined();
   });
 
   it("setSplitTree, setBackends, setSkills", () => {
@@ -219,10 +229,6 @@ describe("workbench store", () => {
 
     useWorkbench.getState().setActiveWorkspace(null);
     expect(selectActiveWorkspace(useWorkbench.getState())).toBeUndefined();
-
-    expect(selectEditorMode("wA")(useWorkbench.getState())).toBe("agent");
-    useWorkbench.getState().setEditorMode("wA", "terminal");
-    expect(selectEditorMode("wA")(useWorkbench.getState())).toBe("terminal");
 
     expect(selectWorkspacesForProject("p1")(useWorkbench.getState())).toHaveLength(1);
   });

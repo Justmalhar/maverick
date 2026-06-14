@@ -16,7 +16,6 @@ function resetStore() {
     backends: [],
     skills: [],
     activeWorkspaceId: null,
-    editorModes: {},
     splitTrees: {},
     commandPaletteOpen: false,
     quickOpenOpen: false,
@@ -102,14 +101,9 @@ describe("useShortcuts", () => {
     act(() => fire("$mod+w"));
   });
 
-  it("editor.toggleMode flips the active editor mode", () => {
-    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "a" })]);
-    useWorkbench.getState().setActiveWorkspace("a");
+  it("does not register an editor.toggleMode binding ($mod+t freed)", () => {
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+t"));
-    expect(useWorkbench.getState().editorModes["a"]).toBe("terminal");
-    useWorkbench.getState().setActiveWorkspace(null);
-    act(() => fire("$mod+t"));
+    expect(bindings()["$mod+t"]).toBeUndefined();
   });
 
   it("editor.focusInput targets [data-input-bar]", () => {
@@ -285,11 +279,11 @@ describe("useShortcuts", () => {
   it("ai.review is a no-op when there is no active workspace", () => {
     renderHook(() => useShortcuts());
     act(() => fire("$mod+Shift+r"));
-    // No active workspace → handler returns before touching editor mode.
-    expect(useWorkbench.getState().editorModes).toEqual({});
+    // No active workspace → handler returns before touching the workspace.
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
   });
 
-  it("ai.review uses the project review preference and switches to agent mode", async () => {
+  it("ai.review uses the project review preference and brings the workspace to the front", async () => {
     vi.mocked(invoke).mockReset().mockImplementation(((cmd: string) => {
       if (cmd === "diff_get") return Promise.resolve(makeDiff({ files: [makeDiffFile()] }));
       return Promise.resolve(undefined);
@@ -308,7 +302,7 @@ describe("useShortcuts", () => {
     useWorkbench.getState().setActiveWorkspace("w1");
     renderHook(() => useShortcuts());
     act(() => fire("$mod+Shift+r"));
-    await waitFor(() => expect(useWorkbench.getState().editorModes["w1"]).toBe("agent"));
+    await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "pty_write",

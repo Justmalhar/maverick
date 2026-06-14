@@ -73,7 +73,7 @@ describe("DiffView", () => {
     await waitFor(() => expect(screen.getByTestId("diff-view-empty")).toBeInTheDocument());
   });
 
-  it("AI Code Review writes a review prompt and switches the workspace to agent mode", async () => {
+  it("AI Code Review writes a review prompt and brings the workspace to the front", async () => {
     activeWorkspaceWithDiff();
     vi.mocked(invoke)
       .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
@@ -86,7 +86,8 @@ describe("DiffView", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("pty_write", expect.objectContaining({ ptyId: "w1" }))
     );
-    expect(useWorkbench.getState().editorModes["w1"]).toBe("agent");
+    // onAgentFocus brings the reviewed workspace to the front (no editor mode).
+    await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));
   });
 
   it("AI Code Review logs an error when the review call fails", async () => {

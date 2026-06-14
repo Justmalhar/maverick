@@ -10,7 +10,6 @@ import {
   bootstrapStatus,
 } from "@/lib/tauri";
 import { brandFor } from "@/lib/backend-brand";
-import { killAgentPty } from "@/components/editor/agent/AgentTerminal";
 import { killWorkspaceLeaves } from "@/components/editor/terminal/TerminalLeaf";
 import type { Backend } from "@/lib/ipc";
 
@@ -47,7 +46,6 @@ export function useWorkspace() {
       // Kill the workspace's PTYs first — their cwd is the worktree that
       // workspaceDestroy is about to remove. ptyKill had zero callers before,
       // so every destroyed workspace leaked an OS process + reader thread.
-      killAgentPty(workspaceId);
       killWorkspaceLeaves(workspaceId);
       await workspaceDestroy(workspaceId);
       removeWorkspace(workspaceId);

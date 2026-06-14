@@ -10,7 +10,7 @@ import { makeWorkspace } from "@/test/fixtures";
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
-  useWorkbench.setState({ ...initial, editorModes: {} });
+  useWorkbench.setState({ ...initial });
   useAgentStatusStore.setState({ statuses: {} });
 });
 
@@ -30,16 +30,12 @@ describe("EditorTab", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("wears the backend brand mark in agent mode and the terminal glyph in terminal mode", () => {
+  it("wears the backend brand mark when the backend is known", () => {
     const ws = makeWorkspace({ id: "w1", agentBackend: "claude-code" });
-    const { rerender } = renderWithProviders(
+    renderWithProviders(
       <EditorTab workspace={ws} active onSelect={() => {}} onClose={() => {}} />
     );
     expect(screen.getByTestId("editor-tab-brand-w1")).toHaveAttribute("title", "Claude Code");
-
-    useWorkbench.setState({ ...initial, editorModes: { w1: "terminal" } });
-    rerender(<EditorTab workspace={ws} active onSelect={() => {}} onClose={() => {}} />);
-    expect(screen.queryByTestId("editor-tab-brand-w1")).not.toBeInTheDocument();
   });
 
   it("falls back to the generic icon for an unknown backend", () => {
@@ -54,11 +50,10 @@ describe("EditorTab", () => {
     expect(screen.queryByTestId("editor-tab-brand-w2")).not.toBeInTheDocument();
   });
 
-  it("shows terminal icon when mode is terminal and reflects the agent status", () => {
-    useWorkbench.setState({ ...initial, editorModes: { w1: "terminal" } });
+  it("reflects the agent status pill", () => {
     useAgentStatusStore.setState({ statuses: { w1: "error" } });
     renderWithProviders(
-      <EditorTab workspace={makeWorkspace({ id: "w1", status: "error", title: "T" })}
+      <EditorTab workspace={makeWorkspace({ id: "w1", agentBackend: "mystery-cli", status: "error", title: "T" })}
         active={false} onSelect={() => {}} onClose={() => {}} />
     );
     const tab = screen.getByTestId("editor-tab-w1");

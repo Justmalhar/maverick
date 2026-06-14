@@ -72,24 +72,9 @@ describe("CommandPalette", () => {
     cleanup();
   });
 
-  it("toggle editor mode no-ops without active workspace", async () => {
-    useWorkbench.setState({ ...initial, commandPaletteOpen: true, activeWorkspaceId: null, editorModes: {} });
+  it("does not register an editor mode toggle command", () => {
     renderWithProviders(<CommandPalette />);
-    await userEvent.click(screen.getByTestId("commandpalette-item-editor.toggleMode"));
-    expect(useWorkbench.getState().editorModes).toEqual({});
-  });
-
-  it("toggle editor mode flips with active workspace", async () => {
-    useWorkbench.setState({
-      ...initial,
-      commandPaletteOpen: true,
-      workspaces: [makeWorkspace({ id: "wA" })],
-      activeWorkspaceId: "wA",
-      editorModes: {},
-    });
-    renderWithProviders(<CommandPalette />);
-    await userEvent.click(screen.getByTestId("commandpalette-item-editor.toggleMode"));
-    expect(useWorkbench.getState().editorModes["wA"]).toBe("terminal");
+    expect(screen.queryByTestId("commandpalette-item-editor.toggleMode")).not.toBeInTheDocument();
   });
 
   it("project-settings.open opens project settings when active workspace exists", async () => {

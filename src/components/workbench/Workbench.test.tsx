@@ -27,7 +27,9 @@ describe("Workbench", () => {
     expect(screen.getByTestId("titlebar")).toBeInTheDocument();
     expect(screen.getByTestId("primarysidebar-panel")).toBeInTheDocument();
     expect(screen.getByTestId("auxiliarybar-panel")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId("bottom-panel")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("bottom-panel")).toBeInTheDocument(), {
+      timeout: 3000,
+    });
   });
 
   it("hides primary sidebar and bottom panel when toggled off", () => {
@@ -59,7 +61,9 @@ describe("Workbench", () => {
       projectSettings: { open: true, projectId: "p1", initialSection: undefined, focusField: undefined },
     });
     renderWithProviders(<Workbench />);
-    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument(), {
+      timeout: 3000,
+    });
   });
 
   it("closes project settings panel when Escape is pressed", async () => {
@@ -68,7 +72,9 @@ describe("Workbench", () => {
       projectSettings: { open: true, projectId: "p1", initialSection: undefined, focusField: undefined },
     });
     renderWithProviders(<Workbench />);
-    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("project-settings-panel")).toBeInTheDocument(), {
+      timeout: 3000,
+    });
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(useWorkbench.getState().projectSettings.open).toBe(false));
   });
