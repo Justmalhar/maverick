@@ -68,7 +68,9 @@ impl SidecarRequest for crate::sidecar::Sidecar {
 /// the Tauri `PtyManager` + an `AppHandle` (so `spawn` can emit `pty:data` to the
 /// local webview too); tests use a fake backed by a seeded `Ring`.
 pub trait PtyHost: Send + Sync {
-    /// Spawn a shell, returning the core's opaque pty id.
+    /// Spawn a shell, returning the core's opaque pty id. Terminal size defaults
+    /// to 80x24; callers must send a `Resize` immediately after creation to apply
+    /// the client's actual viewport dimensions.
     fn spawn(&self, command: &str, cwd: Option<&str>) -> Result<String, String>;
     /// Subscribe to replay-then-live output for a live pty. `None` if unknown.
     fn subscribe(&self, pty_id: &str) -> Option<Subscription>;

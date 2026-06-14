@@ -55,7 +55,7 @@ type Pending = Arc<(Mutex<String>, Condvar)>;
 /// RAII cleanup for the spawn fan-out. If any of the three thread spawns fails
 /// after the reader/flusher are already running, dropping this guard sets
 /// `done` and wakes the condvar so those threads observe shutdown and exit
-/// instead of looping forever holding an AppHandle clone. `disarm()` is called
+/// instead of looping forever holding an `Arc<dyn PtyEventSink>` clone. `disarm()` is called
 /// only once all three threads spawned successfully and the waiter owns teardown.
 struct SpawnGuard {
     done: Arc<AtomicBool>,
@@ -198,7 +198,8 @@ impl PtyManager {
 
         // Armed until all three threads spawn. If any spawn below returns Err, the
         // guard's Drop sets `done` + notifies so the already-running reader/flusher
-        // unwind instead of leaking (esp. the flusher, which holds an AppHandle).
+        // unwind instead of leaking (esp. the flusher, which holds an
+        // `Arc<dyn PtyEventSink>` clone).
         let mut guard = SpawnGuard::new(done.clone(), pending.clone());
 
         // Reader: raw bytes -> DA filter -> UTF-8 carry -> coalesce buffer.
@@ -344,9 +345,11 @@ impl PtyManager {
                     tail
                 };
 
-                // Join the flusher so any in-flight `pty:data` emit completes
-                // before we emit `pty:exit`. After this the flusher is gone and the
-                // waiter is the sole emitter — no `pty:data` can follow `pty:exit`.
+                // Join the flusher so no `pty:data` can fire AFTER `pty:exit`:
+                // after the join the flusher is gone and the waiter is the sole
+                // emitter. This guarantees nothing follows exit; it does NOT order
+                // the flusher's last chunk against the waiter's tail chunk — both
+                // merely precede exit, which is the only hard requirement.
                 let _ = flusher_handle.join();
 
                 if !tail.is_empty() {
