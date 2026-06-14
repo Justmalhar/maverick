@@ -1,4 +1,4 @@
-use maverick_lib::sidecar::{jsonrpc_event_name, parse_message, SidecarMessage};
+use maverick_core::sidecar::{jsonrpc_event_name, parse_message, SidecarMessage};
 use serde_json::json;
 
 #[test]

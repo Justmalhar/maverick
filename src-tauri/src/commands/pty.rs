@@ -4,8 +4,8 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Runtime, State};
 
-use crate::pty::{PtyEventSink, PtyManager, SpawnParams};
 use crate::pty_sink_tauri::TauriPtySink;
+use maverick_core::pty::{PtyEventSink, PtyManager, SpawnParams};
 
 #[tauri::command]
 pub async fn pty_spawn<R: Runtime>(

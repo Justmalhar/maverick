@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::bootstrap::MaverickPaths;
-use crate::sidecar::Sidecar;
+use maverick_core::sidecar::Sidecar;
 
 pub struct AppState {
     pub sidecar: Arc<Sidecar>,

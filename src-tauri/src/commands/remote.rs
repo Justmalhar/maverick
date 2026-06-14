@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::remote::auth_session::PairingTicket;
-use crate::remote::{PairedDevice, RemoteServer, RemoteStatus};
+use maverick_core::remote::auth_session::PairingTicket;
+use maverick_core::remote::{PairedDevice, RemoteServer, RemoteStatus};
 
 /// Start the companion WebSocket server.
 ///

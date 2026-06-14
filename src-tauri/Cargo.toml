@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "core"]
+resolver = "2"
+
 [package]
 name = "maverick"
 version = "0.1.0"
@@ -16,6 +20,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# Tauri-free core: PTY management, the companion remote protocol + server, and
+# the sidecar JSON-RPC client. Shared with the headless daemon (maverick-hostd).
+maverick-core = { path = "core" }
 # `unstable` enables embedded child webviews (Window::add_child) used by the Browser panel.
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-shell = "2"

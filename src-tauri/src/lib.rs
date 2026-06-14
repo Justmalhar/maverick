@@ -1,10 +1,7 @@
 mod backend_detector;
 mod bootstrap;
 mod commands;
-mod pty;
 mod pty_sink_tauri;
-pub mod remote;
-pub mod sidecar;
 mod state;
 
 use std::path::PathBuf;
@@ -14,8 +11,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 use crate::commands::*;
-use crate::sidecar::{jsonrpc_event_name, NotificationSink, Sidecar};
 use crate::state::AppState;
+use maverick_core::sidecar::{jsonrpc_event_name, NotificationSink, Sidecar};
 
 struct TauriEventSink {
     handle: AppHandle,
@@ -83,7 +80,7 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
-            app.manage(std::sync::Arc::new(crate::pty::PtyManager::new()));
+            app.manage(std::sync::Arc::new(maverick_core::pty::PtyManager::new()));
 
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -141,15 +138,16 @@ pub fn run() {
             // `pty:data`/`pty:exit` to the local webview; the sidecar Arc is shared
             // with AppState so file/git RPCs hit the same transport.
             let pty_manager = app
-                .state::<Arc<crate::pty::PtyManager>>()
+                .state::<Arc<maverick_core::pty::PtyManager>>()
                 .inner()
                 .clone();
-            let tauri_sink: Arc<dyn crate::pty::PtyEventSink> =
+            let tauri_sink: Arc<dyn maverick_core::pty::PtyEventSink> =
                 Arc::new(crate::pty_sink_tauri::TauriPtySink::new(handle.clone()));
-            let pty_host: Arc<dyn crate::remote::bridge::PtyHost> =
-                Arc::new(crate::remote::ManagerPtyHost::new(pty_manager, tauri_sink));
-            let sidecar_for_remote: Arc<dyn crate::remote::bridge::SidecarRequest> = sidecar.clone();
-            app.manage(std::sync::Arc::new(crate::remote::RemoteServer::with_deps(
+            let pty_host: Arc<dyn maverick_core::remote::bridge::PtyHost> =
+                Arc::new(maverick_core::remote::ManagerPtyHost::new(pty_manager, tauri_sink));
+            let sidecar_for_remote: Arc<dyn maverick_core::remote::bridge::SidecarRequest> =
+                sidecar.clone();
+            app.manage(std::sync::Arc::new(maverick_core::remote::RemoteServer::with_deps(
                 paths.app_data_dir.clone(),
                 pty_host,
                 sidecar_for_remote,
@@ -270,7 +268,7 @@ pub fn run() {
         if let RunEvent::ExitRequested { .. } = event {
             // Stop the companion listener first so no socket task outlives the app.
             if let Some(server) =
-                app_handle.try_state::<std::sync::Arc<crate::remote::RemoteServer>>()
+                app_handle.try_state::<std::sync::Arc<maverick_core::remote::RemoteServer>>()
             {
                 tauri::async_runtime::block_on(async move {
                     server.stop().await;

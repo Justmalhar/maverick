@@ -5,7 +5,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};
 
-use crate::pty::PtyEventSink;
+use maverick_core::pty::PtyEventSink;
 
 #[derive(Clone, Serialize)]
 struct PtyData<'a> {

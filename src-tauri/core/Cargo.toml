@@ -1,0 +1,48 @@
+[package]
+name = "maverick-core"
+version = "0.1.0"
+description = "Maverick — Tauri-free core (pty, remote protocol/server, sidecar client)"
+authors = ["Malhar Ujawane"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "maverick_core"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+anyhow = "1"
+thiserror = "2"
+dashmap = "6"
+once_cell = "1"
+which = "6"
+dirs = "5"
+portable-pty = "0.8"
+base64 = "0.22"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+async-trait = "0.1"
+snow = { version = "0.10", default-features = false, features = [
+    "use-curve25519",
+    "use-chacha20poly1305",
+    "use-sha2",
+    "use-getrandom",
+] }
+mdns-sd = "0.13"
+sha2 = "0.10"
+getrandom = "0.2"
+hex = "0.4"
+curve25519-dalek = "4"
+subtle = "2"
+
+[dev-dependencies]
+tempfile = "3"
+# tokio `test-util` enables the paused-clock (`time::advance`, `start_paused`)
+# the hook-bridge permission-timeout test relies on for deterministic timing.
+tokio = { version = "1", features = ["full", "test-util"] }
