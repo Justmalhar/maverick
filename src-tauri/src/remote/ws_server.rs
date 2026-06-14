@@ -20,7 +20,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::Mutex;
@@ -28,10 +27,8 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::pty::{PtyManager, SpawnParams, Subscription};
 use crate::remote::bridge::{PtyHost, RemoteBridge, SidecarRequest};
 use crate::remote::ServerMessage;
-use crate::state::AppState;
 
 /// Default loopback port. Chosen to match the Swift reference server (8765).
 pub const DEFAULT_PORT: u16 = 8765;
@@ -40,48 +37,6 @@ pub const DEFAULT_PORT: u16 = 8765;
 /// a 256 KiB scrollback replay (base64 ≈ 340 KiB) plus headroom, while bounding
 /// worst-case allocation per message.
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
-
-/// Production `PtyHost`: spawns/reads/writes the Rust-core [`PtyManager`] held in
-/// Tauri state, using an `AppHandle` so `spawn` still tees output to the local
-/// webview's `pty:data` listeners exactly as a desktop-spawned PTY would.
-struct ManagedPty<R: Runtime> {
-    app: AppHandle<R>,
-}
-
-impl<R: Runtime> ManagedPty<R> {
-    fn manager(&self) -> Option<tauri::State<'_, PtyManager>> {
-        self.app.try_state::<PtyManager>()
-    }
-}
-
-impl<R: Runtime> PtyHost for ManagedPty<R> {
-    fn spawn(&self, command: &str, cwd: Option<&str>) -> Result<String, String> {
-        let manager = self.manager().ok_or("pty manager unavailable")?;
-        manager.spawn(
-            &self.app,
-            SpawnParams {
-                command: command.to_string(),
-                args: vec![],
-                cwd: cwd.map(str::to_string),
-                env: None,
-                cols: 80,
-                rows: 24,
-            },
-        )
-    }
-    fn subscribe(&self, pty_id: &str) -> Option<Subscription> {
-        self.manager()?.subscribe(pty_id)
-    }
-    fn write(&self, pty_id: &str, data: &str) -> Result<(), String> {
-        self.manager().ok_or("pty manager unavailable")?.write(pty_id, data)
-    }
-    fn resize(&self, pty_id: &str, cols: u16, rows: u16) -> Result<(), String> {
-        self.manager().ok_or("pty manager unavailable")?.resize(pty_id, cols, rows)
-    }
-    fn kill(&self, pty_id: &str) -> Result<(), String> {
-        self.manager().ok_or("pty manager unavailable")?.kill(pty_id)
-    }
-}
 
 /// A running listener: the bound address plus a handle whose abort stops accept.
 /// `hook` is the Claude hook bridge's localhost:7789 listener (if it bound).
@@ -118,42 +73,43 @@ pub struct RemoteStatus {
 pub struct RemoteServer {
     enabled: std::sync::atomic::AtomicBool,
     running: Mutex<Option<Running>>,
-    /// Shared security context, lazily initialized on first `start`/`pair` (it
-    /// needs the OS-resolved app-support dir from the `AppHandle`).
     security: Mutex<Option<Arc<crate::remote::auth_session::SecurityContext>>>,
-}
-
-impl Default for RemoteServer {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Directory rooting the device store + static identity (`<dir>/companion`).
+    security_dir: std::path::PathBuf,
+    /// PTY host the bridge drives (desktop: Tauri sink; headless: noop sink).
+    pty: Arc<dyn PtyHost>,
+    /// Sidecar transport for file/git/agent helper RPCs (headless: NoopSidecar).
+    sidecar: Arc<dyn SidecarRequest>,
 }
 
 impl RemoteServer {
-    pub fn new() -> Self {
+    /// Construct with injected dependencies. `security_dir` is the app-data root
+    /// under which `<security_dir>/companion` holds the device store + identity.
+    pub fn with_deps(
+        security_dir: std::path::PathBuf,
+        pty: Arc<dyn PtyHost>,
+        sidecar: Arc<dyn SidecarRequest>,
+    ) -> Self {
         Self {
-            // OFF by default: stays disabled until a device is paired + enabled.
             enabled: std::sync::atomic::AtomicBool::new(false),
             running: Mutex::new(None),
             security: Mutex::new(None),
+            security_dir,
+            pty,
+            sidecar,
         }
     }
 
     /// Lazily build (or fetch) the security context, rooting the device store +
-    /// identity under `<app-data>/companion`. The `AppState.paths.app_data_dir`
-    /// is the Rust-owned OS app-support location.
-    pub(crate) async fn security<R: Runtime>(
+    /// identity under `<security_dir>/companion`.
+    pub(crate) async fn security(
         &self,
-        app: &AppHandle<R>,
     ) -> Result<Arc<crate::remote::auth_session::SecurityContext>, String> {
         let mut guard = self.security.lock().await;
         if let Some(ctx) = guard.as_ref() {
             return Ok(ctx.clone());
         }
-        let dir = {
-            let state = app.try_state::<AppState>().ok_or("app state unavailable")?;
-            state.inner().paths.app_data_dir.join("companion")
-        };
+        let dir = self.security_dir.join("companion");
         let ctx = Arc::new(crate::remote::auth_session::SecurityContext::open(dir)?);
         *guard = Some(ctx.clone());
         Ok(ctx)
@@ -179,39 +135,31 @@ impl RemoteServer {
     /// `remote_pair` entry point. Does NOT require the server to be running, so a
     /// user can pair before/while enabling. Initializing the security context here
     /// also persists the static identity on first ever call.
-    pub async fn pair<R: Runtime>(
+    pub async fn pair(
         &self,
-        app: AppHandle<R>,
         rendezvous: Option<String>,
         name: Option<String>,
     ) -> Result<crate::remote::auth_session::PairingTicket, String> {
-        let ctx = self.security(&app).await?;
+        let ctx = self.security().await?;
         Ok(ctx.mint_pairing(rendezvous.as_deref(), name.as_deref()))
     }
 
     /// List paired devices (`remote_devices`).
-    pub async fn devices<R: Runtime>(
-        &self,
-        app: AppHandle<R>,
-    ) -> Result<Vec<crate::remote::PairedDevice>, String> {
-        let ctx = self.security(&app).await?;
+    pub async fn devices(&self) -> Result<Vec<crate::remote::PairedDevice>, String> {
+        let ctx = self.security().await?;
         Ok(ctx.devices.list())
     }
 
     /// Revoke a paired device (`remote_revoke`). Removes the pinned row and tears
     /// down any of that device's live sessions, then re-resolves the bind scope:
     /// if the last device was revoked, the listener narrows back to loopback.
-    pub async fn revoke<R: Runtime>(
-        &self,
-        app: AppHandle<R>,
-        device_id: String,
-    ) -> Result<bool, String> {
-        let ctx = self.security(&app).await?;
+    pub async fn revoke(&self, device_id: String) -> Result<bool, String> {
+        let ctx = self.security().await?;
         let removed = ctx.devices.revoke(&device_id).map_err(|e| e.to_string())?;
         if removed {
             ctx.sessions.revoke_device(&device_id);
             // Re-resolve exposure: dropping the last device must narrow to loopback.
-            self.reconcile_bind(app).await?;
+            self.reconcile_bind().await?;
         }
         Ok(removed)
     }
@@ -219,22 +167,18 @@ impl RemoteServer {
     /// Start (or re-bind) the listener with the bind scope resolved from the
     /// enabled + paired state. Flips `enabled` to true. If already running with
     /// the correct scope, this is a no-op; otherwise it rebinds.
-    pub async fn start<R: Runtime>(
-        &self,
-        app: AppHandle<R>,
-        port: Option<u16>,
-    ) -> Result<RemoteStatus, String> {
+    pub async fn start(&self, port: Option<u16>) -> Result<RemoteStatus, String> {
         self.enabled.store(true, std::sync::atomic::Ordering::Release);
-        self.bind(app, port, true).await?;
+        self.bind(port, true).await?;
         Ok(self.status().await)
     }
 
     /// Re-evaluate the bind scope without changing `enabled` (called after a pair
     /// or revoke so the listener widens/narrows to match the new paired state).
-    async fn reconcile_bind<R: Runtime>(&self, app: AppHandle<R>) -> Result<(), String> {
+    async fn reconcile_bind(&self) -> Result<(), String> {
         let enabled = self.enabled.load(std::sync::atomic::Ordering::Acquire);
         if enabled {
-            self.bind(app, None, false).await?;
+            self.bind(None, false).await?;
         }
         Ok(())
     }
@@ -243,15 +187,10 @@ impl RemoteServer {
     /// and (re)binds the listener if the scope changed. Starts/stops the mDNS
     /// advertiser to match. `keep_port` reuses the currently-bound port on a
     /// rebind so the listener address only changes interface, not port.
-    async fn bind<R: Runtime>(
-        &self,
-        app: AppHandle<R>,
-        port: Option<u16>,
-        _explicit: bool,
-    ) -> Result<(), String> {
+    async fn bind(&self, port: Option<u16>, _explicit: bool) -> Result<(), String> {
         use crate::remote::transport::{BindPolicy, BindScope, MdnsAdvertiser};
 
-        let ctx = self.security(&app).await?;
+        let ctx = self.security().await?;
         let enabled = self.enabled.load(std::sync::atomic::Ordering::Acquire);
         let has_paired = !ctx.devices.list().is_empty();
         let desired = BindPolicy::resolve(enabled, has_paired);
@@ -294,12 +233,7 @@ impl RemoteServer {
             .map_err(|e| format!("failed to bind {bind}: {e}"))?;
         let addr = listener.local_addr().map_err(|e| e.to_string())?;
 
-        let sidecar: Arc<dyn SidecarRequest> = {
-            let state = app.try_state::<AppState>().ok_or("app state unavailable")?;
-            state.inner().sidecar.clone()
-        };
-        let pty: Arc<dyn PtyHost> = Arc::new(ManagedPty { app: app.clone() });
-        let bridge = Arc::new(RemoteBridge::new(sidecar, pty));
+        let bridge = Arc::new(RemoteBridge::new(self.sidecar.clone(), self.pty.clone()));
 
         let hook_bridge = bridge.hook_bridge();
         if let Err(e) = crate::remote::hook_server::HookConfigWriter::install() {
@@ -562,6 +496,7 @@ pub(crate) async fn handle_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pty::Subscription;
     use crate::remote::bridge::{PtyHost, SidecarRequest};
     use crate::remote::ClientMessage;
     use async_trait::async_trait;
@@ -601,6 +536,14 @@ mod tests {
 
     fn test_bridge() -> Arc<RemoteBridge> {
         Arc::new(RemoteBridge::new(Arc::new(EchoSidecar), Arc::new(NoPty)))
+    }
+
+    fn test_server() -> RemoteServer {
+        RemoteServer::with_deps(
+            std::env::temp_dir().join(format!("mav-test-{}", uuid::Uuid::new_v4())),
+            Arc::new(NoPty),
+            Arc::new(EchoSidecar),
+        )
     }
 
     // Drive the server over an in-memory duplex so no real socket/port is needed:
@@ -719,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn remote_server_status_defaults_off() {
-        let server = RemoteServer::new();
+        let server = test_server();
         let status = server.status().await;
         assert!(!status.enabled, "companion server is OFF by default");
         assert!(!status.running);
@@ -728,7 +671,7 @@ mod tests {
 
     #[tokio::test]
     async fn stop_when_never_started_is_disabled() {
-        let server = RemoteServer::new();
+        let server = test_server();
         let status = server.stop().await;
         assert!(!status.enabled && !status.running);
     }

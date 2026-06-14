@@ -2,6 +2,7 @@ mod backend_detector;
 mod bootstrap;
 mod commands;
 mod pty;
+mod pty_sink_tauri;
 pub mod remote;
 pub mod sidecar;
 mod state;
@@ -82,17 +83,7 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
-            app.manage(crate::pty::PtyManager::new());
-
-            // Companion WebSocket server: OFF by default. Managed here so the
-            // remote_* commands can reach it, but nothing binds a listener until
-            // remote_start is called explicitly. The listener stays loopback-only
-            // until enabled AND a device is paired (Companion-5 QR/Noise pairing),
-            // at which point it widens to the LAN behind the Noise auth gate.
-            // Managed as an `Arc` so the first-pair reconcile watcher can hold a
-            // cheap clone across `.await` (a borrowed `tauri::State` guard isn't
-            // `Send` and can't cross the spawned task boundary).
-            app.manage(std::sync::Arc::new(crate::remote::RemoteServer::new()));
+            app.manage(std::sync::Arc::new(crate::pty::PtyManager::new()));
 
             // Compute paths from OS-resolved roots (home + app-data dir).
             let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -120,20 +111,51 @@ pub fn run() {
             };
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-            match tauri::async_runtime::block_on(async {
+            let sidecar: Arc<Sidecar> = match tauri::async_runtime::block_on(async {
                 Sidecar::spawn(&cmd, &arg_refs, cwd, sink).await
             }) {
                 Ok(sidecar) => {
                     log::info!("sidecar spawned: {cmd}");
-                    app.manage(AppState::new(sidecar, paths));
+                    sidecar
                 }
                 Err(e) => {
                     log::error!(
                         "sidecar failed to start (cmd='{cmd}'): {e:#}. UI in degraded mode."
                     );
-                    app.manage(AppState::new(Sidecar::placeholder(), paths));
+                    Sidecar::placeholder()
                 }
-            }
+            };
+
+            // Companion WebSocket server: OFF by default. Managed here so the
+            // remote_* commands can reach it, but nothing binds a listener until
+            // remote_start is called explicitly. The listener stays loopback-only
+            // until enabled AND a device is paired (Companion-5 QR/Noise pairing),
+            // at which point it widens to the LAN behind the Noise auth gate.
+            // Managed as an `Arc` so the first-pair reconcile watcher can hold a
+            // cheap clone across `.await` (a borrowed `tauri::State` guard isn't
+            // `Send` and can't cross the spawned task boundary).
+            //
+            // Built with injected deps: the security dir roots the device store +
+            // identity under `<app-data>/companion`; the PTY host pairs the shared
+            // PtyManager with a Tauri sink so remote-spawned PTYs still tee
+            // `pty:data`/`pty:exit` to the local webview; the sidecar Arc is shared
+            // with AppState so file/git RPCs hit the same transport.
+            let pty_manager = app
+                .state::<Arc<crate::pty::PtyManager>>()
+                .inner()
+                .clone();
+            let tauri_sink: Arc<dyn crate::pty::PtyEventSink> =
+                Arc::new(crate::pty_sink_tauri::TauriPtySink::new(handle.clone()));
+            let pty_host: Arc<dyn crate::remote::bridge::PtyHost> =
+                Arc::new(crate::remote::ManagerPtyHost::new(pty_manager, tauri_sink));
+            let sidecar_for_remote: Arc<dyn crate::remote::bridge::SidecarRequest> = sidecar.clone();
+            app.manage(std::sync::Arc::new(crate::remote::RemoteServer::with_deps(
+                paths.app_data_dir.clone(),
+                pty_host,
+                sidecar_for_remote,
+            )));
+
+            app.manage(AppState::new(sidecar, paths));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

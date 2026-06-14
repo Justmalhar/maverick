@@ -1,17 +1,16 @@
 mod da_filter;
 mod ring;
+mod sink;
 mod utf8_carry;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use self::da_filter::DaFilter;
 use self::utf8_carry::Utf8Carry;
@@ -22,6 +21,11 @@ use self::utf8_carry::Utf8Carry;
 // lands; the re-export is part of the public surface that feature will call.
 #[allow(unused_imports)]
 pub use self::ring::{Ring, Subscription, REPLAY_CAP, RING_CAP};
+// `NoopPtySink` is consumed by the headless daemon (Phase 3) and tests; the
+// desktop crate only uses `PtyEventSink`. Re-exported now as part of the stable
+// pty surface so the daemon can name `crate::pty::NoopPtySink`.
+#[allow(unused_imports)]
+pub use self::sink::{NoopPtySink, PtyEventSink};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -43,20 +47,6 @@ const MAX_PENDING: usize = 4 * 1024 * 1024;
 // backlog. All ASCII, so it stays valid UTF-8 in the pending String.
 const OVERFLOW_NOTICE: &str =
     "\x1bc\x1b[2m[maverick: dropped output due to backpressure]\x1b[0m\r\n";
-
-#[derive(Clone, Serialize)]
-struct PtyData {
-    #[serde(rename = "ptyId")]
-    pty_id: String,
-    data: String,
-}
-
-#[derive(Clone, Serialize)]
-struct PtyExit {
-    #[serde(rename = "ptyId")]
-    pty_id: String,
-    code: i32,
-}
 
 /// Shared coalesce buffer: decoded UTF-8 text waiting to be emitted, plus a
 /// condvar the reader signals and the flusher waits on.
@@ -155,9 +145,9 @@ impl PtyManager {
         Self::default()
     }
 
-    pub fn spawn<R: Runtime>(
-        &self,
-        app: &AppHandle<R>,
+    pub fn spawn(
+        self: &Arc<Self>,
+        sink: Arc<dyn PtyEventSink>,
         params: SpawnParams,
     ) -> Result<String, String> {
         let pty_system = native_pty_system();
@@ -261,7 +251,7 @@ impl PtyManager {
             .map_err(|e| e.to_string())?;
 
         // Flusher: emit coalesced `pty:data`.
-        let app_flush = app.clone();
+        let sink_flush = sink.clone();
         let id_flush = id.clone();
         let pending_f = pending.clone();
         let done_f = done.clone();
@@ -290,13 +280,7 @@ impl PtyManager {
                     // Second sink first: feed the ring before the emit so any
                     // attach that races the emit still observes this chunk.
                     ring_f.push(chunk.as_bytes());
-                    let _ = app_flush.emit(
-                        "pty:data",
-                        PtyData {
-                            pty_id: id_flush.clone(),
-                            data: chunk,
-                        },
-                    );
+                    sink_flush.data(&id_flush, &chunk);
                 }
             })
             .map_err(|e| e.to_string())?;
@@ -318,7 +302,8 @@ impl PtyManager {
             );
 
         // Waiter: reap the child, drain the final tail, emit exit, drop session.
-        let app_exit = app.clone();
+        let weak_self: Weak<PtyManager> = Arc::downgrade(self);
+        let sink_exit = sink.clone();
         let id_exit = id.clone();
         let pending_e = pending;
         let done_e = done;
@@ -335,7 +320,7 @@ impl PtyManager {
                 // join the reader FIRST so no more bytes can be pushed into the
                 // coalesce buffer after this point. We own the session here, so
                 // dropping it later won't re-trigger teardown on the IPC worker.
-                let reaped = app_exit.try_state::<PtyManager>().and_then(|m| {
+                let reaped = weak_self.upgrade().and_then(|m| {
                     m.sessions
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -368,22 +353,10 @@ impl PtyManager {
                     // Mirror the flusher: ring before emit, so the final tail is
                     // part of the scrollback a late attach can still replay.
                     ring_e.push(tail.as_bytes());
-                    let _ = app_exit.emit(
-                        "pty:data",
-                        PtyData {
-                            pty_id: id_exit.clone(),
-                            data: tail,
-                        },
-                    );
+                    sink_exit.data(&id_exit, &tail);
                 }
 
-                let _ = app_exit.emit(
-                    "pty:exit",
-                    PtyExit {
-                        pty_id: id_exit,
-                        code,
-                    },
-                );
+                sink_exit.exit(&id_exit, code);
             });
 
         match waiter {
@@ -678,6 +651,57 @@ mod tests {
     fn kill_unknown_pty_is_ok() {
         let mgr = PtyManager::new();
         assert!(mgr.kill("nope").is_ok());
+    }
+
+    #[test]
+    fn spawn_streams_output_to_sink_and_reaps_on_exit() {
+        use crate::pty::sink::PtyEventSink;
+        use std::sync::{Arc, Mutex};
+
+        struct Cap {
+            data: Arc<Mutex<String>>,
+            exited: Arc<Mutex<Option<i32>>>,
+        }
+        impl PtyEventSink for Cap {
+            fn data(&self, _id: &str, chunk: &str) {
+                self.data.lock().unwrap().push_str(chunk);
+            }
+            fn exit(&self, _id: &str, code: i32) {
+                *self.exited.lock().unwrap() = Some(code);
+            }
+        }
+
+        let data = Arc::new(Mutex::new(String::new()));
+        let exited = Arc::new(Mutex::new(None));
+        let sink = Arc::new(Cap { data: data.clone(), exited: exited.clone() });
+
+        let mgr = Arc::new(PtyManager::new());
+        let id = mgr
+            .spawn(
+                sink,
+                SpawnParams {
+                    command: "/bin/sh".into(),
+                    args: vec!["-c".into(), "printf MAVOK; exit 7".into()],
+                    cwd: None,
+                    env: None,
+                    cols: 80,
+                    rows: 24,
+                },
+            )
+            .expect("spawn");
+        assert!(id.starts_with("pty_"));
+
+        // Wait up to 3s for the child to exit and the waiter to reap it.
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            if exited.lock().unwrap().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*exited.lock().unwrap(), Some(7), "exit code forwarded to sink");
+        assert!(data.lock().unwrap().contains("MAVOK"), "stdout forwarded to sink");
+        assert_eq!(mgr.session_count(), 0, "waiter reaped the session via Weak");
     }
 
     #[test]

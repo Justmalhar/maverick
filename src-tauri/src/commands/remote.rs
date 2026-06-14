@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{AppHandle, Runtime, State};
+use tauri::State;
 
 use crate::remote::auth_session::PairingTicket;
 use crate::remote::{PairedDevice, RemoteServer, RemoteStatus};
@@ -13,12 +13,11 @@ use crate::remote::{PairedDevice, RemoteServer, RemoteStatus};
 /// complete the Noise_XX pairing handshake at `/pair` or it is rejected (4401).
 /// Disabled by default; callers opt in explicitly.
 #[tauri::command]
-pub async fn remote_start<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn remote_start(
     server: State<'_, Arc<RemoteServer>>,
     port: Option<u16>,
 ) -> Result<RemoteStatus, String> {
-    server.start(app, port).await
+    server.start(port).await
 }
 
 /// Stop the companion server (also stops the mDNS advertiser) and flip the
@@ -39,32 +38,29 @@ pub async fn remote_status(server: State<'_, Arc<RemoteServer>>) -> Result<Remot
 /// carries only the desktop static PUBLIC key, an ephemeral public hint, and a
 /// 128-bit single-use token — never a private key or bearer credential.
 #[tauri::command]
-pub async fn remote_pair<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn remote_pair(
     server: State<'_, Arc<RemoteServer>>,
     rendezvous: Option<String>,
     name: Option<String>,
 ) -> Result<PairingTicket, String> {
-    server.pair(app, rendezvous, name).await
+    server.pair(rendezvous, name).await
 }
 
 /// List the TOFU-pinned paired companion devices.
 #[tauri::command]
-pub async fn remote_devices<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn remote_devices(
     server: State<'_, Arc<RemoteServer>>,
 ) -> Result<Vec<PairedDevice>, String> {
-    server.devices(app).await
+    server.devices().await
 }
 
 /// Revoke a paired device by id: deletes its pinned row, tears down its live
 /// sessions, and narrows the listener back to loopback if it was the last device.
 /// Returns whether a device was removed.
 #[tauri::command]
-pub async fn remote_revoke<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn remote_revoke(
     server: State<'_, Arc<RemoteServer>>,
     device_id: String,
 ) -> Result<bool, String> {
-    server.revoke(app, device_id).await
+    server.revoke(device_id).await
 }

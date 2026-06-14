@@ -25,6 +25,7 @@ pub mod bridge;
 pub(crate) mod connection;
 pub mod device_store;
 pub mod hook_server;
+pub mod manager_pty_host;
 pub mod pairing;
 mod protocol;
 pub mod session_registry;
@@ -39,6 +40,7 @@ pub use agent_event::{
 pub use auth::{capability_of, Capability, CapabilityGate, ConnectionTrust, GateDecision};
 pub use auth_session::{PairingTicket, SecurityContext};
 pub use device_store::{DeviceStore, DeviceStoreError, PairedDevice, PinOutcome};
+pub use manager_pty_host::ManagerPtyHost;
 pub use session_registry::{SessionHandle, SessionRegistry};
 pub use pairing::{
     device_id_for, safety_number, short_fingerprint, HandshakeOutcome, NoiseResponder,

@@ -1,14 +1,16 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Runtime, State};
 
-use crate::pty::{PtyManager, SpawnParams};
+use crate::pty::{PtyEventSink, PtyManager, SpawnParams};
+use crate::pty_sink_tauri::TauriPtySink;
 
 #[tauri::command]
 pub async fn pty_spawn<R: Runtime>(
     app: AppHandle<R>,
-    manager: State<'_, PtyManager>,
+    manager: State<'_, Arc<PtyManager>>,
     command: String,
     args: Vec<String>,
     cwd: Option<String>,
@@ -16,8 +18,9 @@ pub async fn pty_spawn<R: Runtime>(
     cols: Option<u16>,
     rows: Option<u16>,
 ) -> Result<Value, String> {
+    let sink: Arc<dyn PtyEventSink> = Arc::new(TauriPtySink::new(app));
     let pty_id = manager.spawn(
-        &app,
+        sink,
         SpawnParams {
             command,
             args,
@@ -32,7 +35,7 @@ pub async fn pty_spawn<R: Runtime>(
 
 #[tauri::command]
 pub async fn pty_write(
-    manager: State<'_, PtyManager>,
+    manager: State<'_, Arc<PtyManager>>,
     pty_id: String,
     data: String,
 ) -> Result<Value, String> {
@@ -42,7 +45,7 @@ pub async fn pty_write(
 
 #[tauri::command]
 pub async fn pty_resize(
-    manager: State<'_, PtyManager>,
+    manager: State<'_, Arc<PtyManager>>,
     pty_id: String,
     cols: u16,
     rows: u16,
@@ -52,13 +55,13 @@ pub async fn pty_resize(
 }
 
 #[tauri::command]
-pub async fn pty_kill(manager: State<'_, PtyManager>, pty_id: String) -> Result<Value, String> {
+pub async fn pty_kill(manager: State<'_, Arc<PtyManager>>, pty_id: String) -> Result<Value, String> {
     manager.kill(&pty_id)?;
     Ok(json!({ "ok": true }))
 }
 
 #[tauri::command]
-pub async fn pty_close_all(manager: State<'_, PtyManager>) -> Result<Value, String> {
+pub async fn pty_close_all(manager: State<'_, Arc<PtyManager>>) -> Result<Value, String> {
     manager.close_all()?;
     Ok(json!({ "ok": true }))
 }
