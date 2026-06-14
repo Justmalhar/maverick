@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
-import { TerminalLeaf, killLeaf, killWorkspaceLeaves, __testing__ } from "./TerminalLeaf";
+import { TerminalLeaf, killLeaf, killWorkspaceLeaves, getLeafPtyId, __testing__ } from "./TerminalLeaf";
 import { makeWorkspace } from "@/test/fixtures";
+import { useWorkbench } from "@/state/store";
+import { __resetLaunchedForTests } from "@/hooks/useLaunchSpec";
 import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
@@ -20,6 +22,8 @@ beforeEach(() => {
   vi.mocked(listen).mockReset().mockResolvedValue(() => {});
   TerminalRegistry.register({ mount: () => handle } as TerminalProvider);
   __testing__.leafPtyCache.clear();
+  __resetLaunchedForTests();
+  useWorkbench.setState({ launchSpecs: {} });
   _resetSettingsStoreForTests();
 });
 
@@ -119,6 +123,49 @@ describe("TerminalLeaf", () => {
     resolveSpawn({ ptyId: "late" });
     await Promise.resolve();
     expect(__testing__.leafPtyCache.has("leaf-late")).toBe(false);
+  });
+
+  it("getLeafPtyId returns the cached pty id, undefined when absent", () => {
+    expect(getLeafPtyId("absent")).toBeUndefined();
+    __testing__.leafPtyCache.set("present", "pty-present");
+    expect(getLeafPtyId("present")).toBe("pty-present");
+  });
+
+  it("resolves the platform default shell (zsh on macOS/Linux)", async () => {
+    renderWithProviders(
+      <TerminalLeaf leafId="leaf-shell" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ command: "/bin/zsh", args: ["-l"] })
+      )
+    );
+  });
+
+  it("the primary leaf consumes the staged launch spec and types the command", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-primary" } as never);
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--yolo"] });
+    renderWithProviders(
+      <TerminalLeaf leafId="w1-1" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        { ptyId: "pty-primary", data: "claude --yolo\r" }
+      )
+    );
+    expect(useWorkbench.getState().launchSpecs["w1"]).toBeUndefined();
+  });
+
+  it("a non-primary leaf never consumes the launch spec", async () => {
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: [] });
+    renderWithProviders(
+      <TerminalLeaf leafId="w1-99" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("pty_spawn", expect.anything()));
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+    expect(useWorkbench.getState().launchSpecs["w1"]).toBeDefined();
   });
 
   it("ignores a late spawn error after unmount", async () => {

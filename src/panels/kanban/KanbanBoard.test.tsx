@@ -113,6 +113,15 @@ describe("KanbanBoard", () => {
         expect.objectContaining({ task: expect.objectContaining({ status: "in_progress" }) })
       )
     );
+
+    // The composer prompt is staged as a launch spec for the new workspace.
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws-new"]).toEqual({
+        command: "claude",
+        args: [],
+        prompt: "Fix the thing",
+      })
+    );
   });
 
   it("kanbanList error shows error bar", async () => {
@@ -242,12 +251,12 @@ describe("KanbanBoard", () => {
     );
   });
 
-  it("handleStart creates workspace, dispatches maverick:input-append with title+description, and upserts to in_progress", async () => {
+  it("handleStart creates workspace, stages a launch spec with title+description, and upserts to in_progress", async () => {
     const project = makeProject({ id: "p1", path: "/p1" });
     useWorkbench.setState({
       ...initial,
       projects: [project],
-      backends: [makeBackend({ id: "claude-code", active: true })],
+      backends: [makeBackend({ id: "claude-code", command: "claude", active: true })],
     });
     const task = makeKanbanTask({
       id: "t1",
@@ -270,7 +279,6 @@ describe("KanbanBoard", () => {
     renderWithProviders(<KanbanBoard />);
     await waitFor(() => screen.getByTestId("kanban-board"));
 
-    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
     await userEvent.click(screen.getByTestId("kanban-start"));
 
     await waitFor(() =>
@@ -280,12 +288,12 @@ describe("KanbanBoard", () => {
       )
     );
 
-    const appendCall = dispatchSpy.mock.calls.find(
-      (c) => (c[0] as CustomEvent).type === "maverick:input-append"
-    );
-    expect(appendCall).toBeDefined();
-    expect((appendCall![0] as CustomEvent).detail.text).toBe(
-      "Implement auth\n\nUse JWT tokens"
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws-new"]).toEqual({
+        command: "claude",
+        args: [],
+        prompt: "Implement auth\n\nUse JWT tokens",
+      })
     );
 
     await waitFor(() =>
@@ -294,15 +302,15 @@ describe("KanbanBoard", () => {
         expect.objectContaining({ task: expect.objectContaining({ status: "in_progress" }) })
       )
     );
-    dispatchSpy.mockRestore();
   });
 
-  it("handleStart uses task.title only when description is absent", async () => {
+  it("handleStart uses task.title only when description is absent and falls back to the backend command map", async () => {
     const project = makeProject({ id: "p2", path: "/p2" });
     useWorkbench.setState({
       ...initial,
       projects: [project],
-      backends: [makeBackend({ id: "claude-code", active: true })],
+      // No matching backend in the store → resolveLaunch uses the fallback map.
+      backends: [],
     });
     const task = makeKanbanTask({
       id: "t2",
@@ -325,15 +333,15 @@ describe("KanbanBoard", () => {
     renderWithProviders(<KanbanBoard />);
     await waitFor(() => screen.getByTestId("kanban-board"));
 
-    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
     await userEvent.click(screen.getByTestId("kanban-start"));
 
-    const appendCall = dispatchSpy.mock.calls.find(
-      (c) => (c[0] as CustomEvent).type === "maverick:input-append"
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws2"]).toEqual({
+        command: "claude",
+        args: [],
+        prompt: "No-desc task",
+      })
     );
-    expect(appendCall).toBeDefined();
-    expect((appendCall![0] as CustomEvent).detail.text).toBe("No-desc task");
-    dispatchSpy.mockRestore();
   });
 
   it("handleStart falls back to 'main' branch when task.branch is empty", async () => {

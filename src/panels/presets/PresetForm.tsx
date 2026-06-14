@@ -1,7 +1,8 @@
-// Per-node config form: terminal (agent, cwd, startup, mode) or browser (url).
+// Per-node config form: terminal (agent, cwd, startup) or browser (url).
+// Presets are terminal-first — the node mode is always "terminal".
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { PresetNode, EditorMode } from "@/lib/ipc";
+import type { PresetNode } from "@/lib/ipc";
 
 interface Props {
   node: PresetNode;
@@ -48,7 +49,7 @@ export default function PresetForm({ node, onChange }: Props) {
               type: "terminal",
               agent: "claude",
               cwd: "{{workspace_root}}",
-              mode: "agent",
+              mode: "terminal",
             })
           }
         >
@@ -97,23 +98,6 @@ export default function PresetForm({ node, onChange }: Props) {
         onChange={(e) => onChange({ ...node, startup: e.target.value })}
         placeholder="claude --continue"
       />
-
-      <label className="block text-[10px] uppercase tracking-wide text-muted-foreground">
-        Mode
-      </label>
-      <div className="flex gap-1.5">
-        {(["agent", "terminal"] as EditorMode[]).map((m) => (
-          <Button
-            key={m}
-            size="sm"
-            variant={node.mode === m ? "default" : "outline"}
-            onClick={() => onChange({ ...node, mode: m })}
-            data-testid={`preset-mode-${m}`}
-          >
-            {m}
-          </Button>
-        ))}
-      </div>
 
       <Button
         size="sm"

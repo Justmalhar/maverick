@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useWorkspace } from "./useWorkspace";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeProject } from "@/test/fixtures";
-import { __testing__ as agentTesting } from "@/components/editor/agent/AgentTerminal";
+import { __testing__ as leafTesting } from "@/components/editor/terminal/TerminalLeaf";
 import type { DetectedBackend, BootstrapStatus } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
@@ -106,16 +106,16 @@ describe("useWorkspace", () => {
     expect(useWorkbench.getState().workspaces).toHaveLength(0);
   });
 
-  it("destroy kills the workspace's cached PTYs", async () => {
-    agentTesting.agentPtyCache.set("w1", "pty-agent");
+  it("destroy kills the workspace's cached terminal-leaf PTYs", async () => {
+    leafTesting.leafPtyCache.set("w1-1", "pty-leaf");
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w1" })]);
     vi.mocked(invoke).mockResolvedValue(undefined as never);
     const { result } = renderHook(() => useWorkspace());
     await act(async () => {
       await result.current.destroy("w1");
     });
-    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-agent" });
-    expect(agentTesting.agentPtyCache.has("w1")).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-leaf" });
+    expect(leafTesting.leafPtyCache.has("w1-1")).toBe(false);
     expect(useWorkbench.getState().workspaces).toHaveLength(0);
   });
 

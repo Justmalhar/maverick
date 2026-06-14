@@ -12,7 +12,6 @@ import {
   PanelRight,
   PanelBottom,
   Sparkles,
-  TerminalSquare,
   FileSearch,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
@@ -48,8 +47,6 @@ export function CommandPalette() {
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const setQuickOpenOpen = useWorkbench((s) => s.setQuickOpenOpen);
-  const activeId = useWorkbench((s) => s.activeWorkspaceId);
-  const toggleEditorMode = useWorkbench((s) => s.toggleEditorMode);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
 
   const commands: CommandEntry[] = useMemo(
@@ -186,19 +183,8 @@ export function CommandPalette() {
         },
         shortcutId: "layout.togglePanel",
       },
-      {
-        id: "editor.toggleMode",
-        label: "Workspace: Toggle Agent ↔ Terminal",
-        icon: TerminalSquare,
-        run: () => {
-          if (activeId) toggleEditorMode(activeId);
-          setOpen(false);
-        },
-        shortcutId: "editor.toggleMode",
-      },
     ],
     [
-      activeId,
       openProjectSettings,
       showPrimarySideBar,
       openSourceControl,
@@ -208,7 +194,6 @@ export function CommandPalette() {
       setQuickOpenOpen,
       setSettingsOpen,
       toggleAuxiliaryBar,
-      toggleEditorMode,
       togglePanel,
       togglePrimarySideBar,
     ]

@@ -21,6 +21,24 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
   "done",
 ];
 
+// Mirrors the old AgentTerminal backend→command map; resolves the launch
+// command when a backend has no explicit `command` in the store.
+const BACKEND_COMMAND_FALLBACK: Record<string, string> = {
+  "claude-code": "claude",
+  codex: "codex",
+  gemini: "gemini",
+  aider: "aider",
+  ollama: "ollama",
+};
+
+function resolveLaunch(backendId: string): { command: string; args: string[] } {
+  const backend = useWorkbench.getState().backends.find((b) => b.id === backendId);
+  return {
+    command: backend?.command ?? BACKEND_COMMAND_FALLBACK[backendId] ?? backendId,
+    args: backend?.args ?? [],
+  };
+}
+
 export default function KanbanBoard() {
   const workspaces = useWorkbench((s) => s.workspaces);
   const { create } = useWorkspace();
@@ -127,13 +145,12 @@ export default function KanbanBoard() {
         useWorkbench.getState().backends.find((b) => b.active)?.id ||
         useWorkbench.getState().backends[0]?.id ||
         "claude-code";
-      await create(task.projectId, undefined, backend, baseBranch);
+      const ws = await create(task.projectId, undefined, backend, baseBranch);
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
-      window.dispatchEvent(
-        new CustomEvent("maverick:input-append", { detail: { text: prompt } })
-      );
+      const { command, args } = resolveLaunch(backend);
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
       await kanbanUpsert({
         ...task,
         status: "in_progress",
@@ -163,6 +180,8 @@ export default function KanbanBoard() {
       });
 
       const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
+      const { command, args } = resolveLaunch(payload.agentBackend);
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt: payload.prompt });
 
       await kanbanUpsert({
         id: task.id,

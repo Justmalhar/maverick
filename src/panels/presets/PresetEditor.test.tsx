@@ -87,7 +87,7 @@ describe("PresetEditor", () => {
     const leaves = screen.getAllByTestId("preset-leaf");
     await userEvent.click(leaves[1]);
     // Toggle a value in PresetForm to push updateAtPath through the head='1' branch
-    await userEvent.click(screen.getByTestId("preset-mode-terminal"));
+    await userEvent.click(screen.getByTestId("preset-agent-codex"));
   });
 
 });

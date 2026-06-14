@@ -44,7 +44,7 @@ function EmptyState({
 
 export function DiffView() {
   const active = useWorkbench(selectActiveWorkspace);
-  const setEditorMode = useWorkbench((s) => s.setEditorMode);
+  const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);
   const [diff, setDiff] = useState<DiffResult | null>(null);
@@ -85,7 +85,7 @@ export function DiffView() {
         workspaceId: active.id,
         worktreePath: active.worktreePath,
         reviewPref,
-        onAgentFocus: () => setEditorMode(active.id, "agent"),
+        onAgentFocus: () => setActiveWorkspace(active.id),
       });
     } catch (e) {
       console.error("AI review failed", e);

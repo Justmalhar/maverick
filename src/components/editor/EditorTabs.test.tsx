@@ -32,7 +32,6 @@ beforeEach(() => {
     workspaces: [],
     activeWorkspaceId: null,
     commandPaletteOpen: false,
-    editorModes: {},
     systemTabs: [],
     activeSystemTab: null,
     terminalTabs: [],

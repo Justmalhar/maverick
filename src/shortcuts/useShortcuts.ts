@@ -33,15 +33,11 @@ export function useShortcuts() {
         if (activeWorkspaceId) removeWorkspace(activeWorkspaceId);
       },
       "project.new": () => useWorkbench.getState().setCommandPaletteOpen(true),
-      "editor.toggleMode": () => {
-        const { activeWorkspaceId, toggleEditorMode } = useWorkbench.getState();
-        if (activeWorkspaceId) toggleEditorMode(activeWorkspaceId);
-      },
       "editor.focusInput": () => {
         document.querySelector<HTMLElement>("[data-input-bar]")?.focus();
       },
       "ai.review": () => {
-        const { activeWorkspaceId, workspaces, setEditorMode } = useWorkbench.getState();
+        const { activeWorkspaceId, workspaces, setActiveWorkspace } = useWorkbench.getState();
         const ws = workspaces.find((w) => w.id === activeWorkspaceId);
         if (!ws) return;
         const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
@@ -49,7 +45,7 @@ export function useShortcuts() {
           workspaceId: ws.id,
           worktreePath: ws.worktreePath,
           reviewPref,
-          onAgentFocus: () => setEditorMode(ws.id, "agent"),
+          onAgentFocus: () => setActiveWorkspace(ws.id),
         }).catch((e) => console.error("AI review failed", e));
       },
       // preview.open and preview.toggleMarkdown have been removed — the

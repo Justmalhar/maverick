@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { ptySpawn, ptyKill } from "@/lib/tauri";
 import { getGlobalEnv } from "@/lib/stores/settings";
+import { resolveDefaultShell } from "@/lib/terminal-shell";
+import { useLaunchSpec } from "@/hooks/useLaunchSpec";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
 
-// Terminal Mode panes run a login shell in the workspace worktree (mirrors
-// the Panel's Terminal tab). Each split leaf owns its OWN shell PTY — they are
-// not the agent CLI, which is Agent Mode (AgentTerminal).
-const LEAF_SHELL = "/bin/zsh";
-const LEAF_ARGS = ["-l"];
+// Every workspace surface is a real shell now: each split leaf owns its OWN
+// login-shell PTY scoped to the worktree. The workspace's primary leaf
+// (`${workspace.id}-1`) additionally consumes the staged launch spec to start a
+// CLI as a child of that shell (Ctrl-C returns to the prompt, not a dead pane).
 
 interface SpawnState {
   status: "spawning" | "ready" | "error";
@@ -29,12 +30,17 @@ export function killLeaf(leafId: string): void {
   void ptyKill(ptyId).catch(() => {});
 }
 
-/** Kill every terminal-mode leaf PTY belonging to a workspace (ids are `${workspaceId}-…`). */
+/** Kill every leaf shell PTY belonging to a workspace (ids are `${workspaceId}-…`). */
 export function killWorkspaceLeaves(workspaceId: string): void {
   const prefix = `${workspaceId}-`;
   for (const leafId of [...leafPtyCache.keys()]) {
     if (leafId.startsWith(prefix)) killLeaf(leafId);
   }
+}
+
+/** The live shell PTY id for a leaf, or undefined if it has not spawned yet. */
+export function getLeafPtyId(leafId: string): string | undefined {
+  return leafPtyCache.get(leafId);
 }
 
 interface Props {
@@ -47,7 +53,7 @@ interface Props {
   visible?: boolean;
 }
 
-/** A single Terminal-Mode pane: a login shell scoped to the workspace worktree. */
+/** A single terminal pane: a login shell scoped to the workspace worktree. */
 export function TerminalLeaf({
   leafId,
   workspace,
@@ -68,7 +74,8 @@ export function TerminalLeaf({
     }
     let cancelled = false;
     setState({ status: "spawning" });
-    ptySpawn(LEAF_SHELL, LEAF_ARGS, workspace.worktreePath, getGlobalEnv())
+    const { shell, args } = resolveDefaultShell();
+    ptySpawn(shell, args, workspace.worktreePath, getGlobalEnv())
       .then(({ ptyId }) => {
         if (cancelled) return;
         leafPtyCache.set(leafId, ptyId);
@@ -82,6 +89,15 @@ export function TerminalLeaf({
       cancelled = true;
     };
   }, [leafId, workspace.worktreePath]);
+
+  // Only the primary leaf launches the staged CLI; subsequently-split leaves are
+  // bare shells. The hook is a no-op for non-primary leaves (ready stays false).
+  const isPrimary = leafId === `${workspace.id}-1`;
+  useLaunchSpec(
+    workspace,
+    isPrimary ? state.ptyId : undefined,
+    isPrimary && state.status === "ready"
+  );
 
   if (state.status === "error") {
     return (

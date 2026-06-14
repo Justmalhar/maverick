@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
+import { ptyWrite } from "@/lib/tauri";
 import type { Workspace, SplitNode } from "@/lib/ipc";
 import { splitNode, removeNode, canSplit, findNeighbor, firstLeafId, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
-import { killLeaf } from "./TerminalLeaf";
+import { killLeaf, getLeafPtyId } from "./TerminalLeaf";
 
 interface Props {
   workspace: Workspace;
@@ -74,6 +75,23 @@ export function TerminalView({ workspace, visible = true }: Props) {
       window.removeEventListener("maverick:terminal:closePane", onClose);
     };
   }, [focusedPaneId, workspace, setSplitTree, visible]);
+
+  useEffect(() => {
+    // Send-to-terminal (e.g. BrowserPanel selection) targets the focused leaf's
+    // live shell PTY. Only the visible view reacts, mirroring the split handlers.
+    if (!visible) return;
+    function onInputAppend(e: Event) {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (!text || !focusedPaneId) return;
+      const ptyId = getLeafPtyId(focusedPaneId);
+      if (!ptyId) return;
+      void ptyWrite(ptyId, text).catch(() => {});
+    }
+    window.addEventListener("maverick:input-append", onInputAppend);
+    return () => {
+      window.removeEventListener("maverick:input-append", onInputAppend);
+    };
+  }, [focusedPaneId, visible]);
 
   useEffect(() => {
     if (!visible) return;
