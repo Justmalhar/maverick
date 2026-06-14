@@ -7,7 +7,7 @@ import type {
   Backend,
   Skill,
   SplitNode,
-  EditorMode,
+  LaunchSpec,
   AuxiliaryView,
 } from "@/lib/ipc";
 
@@ -87,8 +87,11 @@ interface WorkbenchState {
   activeWorkspaceId: string | null;
   // Most-recently-used first. Drives LRU render suspension of editor groups.
   workspaceAccessOrder: string[];
-  editorModes: Record<string, EditorMode>;
   splitTrees: Record<string, SplitNode>;
+  // Single-shot CLI launch directives, keyed by workspace id. Set when a
+  // workspace is opened for an agent (kanban / preset); consumed once by the
+  // primary terminal leaf when its shell PTY is ready, then deleted.
+  launchSpecs: Record<string, LaunchSpec>;
 
   // Layout
   layout: PanelLayout;
@@ -118,9 +121,11 @@ interface WorkbenchState {
   removeWorkspace: (id: string) => void;
   updateWorkspace: (id: string, patch: Partial<Workspace>) => void;
   setActiveWorkspace: (id: string | null) => void;
-  setEditorMode: (workspaceId: string, mode: EditorMode) => void;
-  toggleEditorMode: (workspaceId: string) => void;
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
+  /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
+  setLaunchSpec: (workspaceId: string, spec: LaunchSpec) => void;
+  /** Return and remove a workspace's launch spec (single-shot); null if none. */
+  consumeLaunchSpec: (workspaceId: string) => LaunchSpec | null;
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
   queueSetup: (workspaceId: string) => void;
@@ -191,8 +196,8 @@ export const useWorkbench = create<WorkbenchState>()(
     fileTabAccessOrder: [],
     activeWorkspaceId: null,
     workspaceAccessOrder: [],
-    editorModes: {},
     splitTrees: {},
+    launchSpecs: {},
 
     layout: {
       activitybarCollapsed: false,
@@ -232,11 +237,15 @@ export const useWorkbench = create<WorkbenchState>()(
         ],
       })),
     removeWorkspace: (id) =>
-      set((s) => ({
-        workspaces: s.workspaces.filter((w) => w.id !== id),
-        activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
-        workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
-      })),
+      set((s) => {
+        const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
+        return {
+          workspaces: s.workspaces.filter((w) => w.id !== id),
+          activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
+          workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
+          launchSpecs,
+        };
+      }),
     updateWorkspace: (id, patch) =>
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
@@ -254,17 +263,20 @@ export const useWorkbench = create<WorkbenchState>()(
           ? [id, ...s.workspaceAccessOrder.filter((wid) => wid !== id)]
           : s.workspaceAccessOrder,
       })),
-    setEditorMode: (workspaceId, mode) =>
-      set((s) => ({ editorModes: { ...s.editorModes, [workspaceId]: mode } })),
-    toggleEditorMode: (workspaceId) =>
-      set((s) => ({
-        editorModes: {
-          ...s.editorModes,
-          [workspaceId]: s.editorModes[workspaceId] === "terminal" ? "agent" : "terminal",
-        },
-      })),
     setSplitTree: (workspaceId, tree) =>
       set((s) => ({ splitTrees: { ...s.splitTrees, [workspaceId]: tree } })),
+    setLaunchSpec: (workspaceId, spec) =>
+      set((s) => ({ launchSpecs: { ...s.launchSpecs, [workspaceId]: spec } })),
+    consumeLaunchSpec: (workspaceId) => {
+      const spec = get().launchSpecs[workspaceId] ?? null;
+      if (spec) {
+        set((s) => {
+          const { [workspaceId]: _removed, ...rest } = s.launchSpecs;
+          return { launchSpecs: rest };
+        });
+      }
+      return spec;
+    },
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
     queueSetup: (workspaceId) =>
@@ -464,11 +476,6 @@ export const useWorkbench = create<WorkbenchState>()(
 // Selectors
 export const selectActiveWorkspace = (s: WorkbenchState): Workspace | undefined =>
   s.workspaces.find((w) => w.id === s.activeWorkspaceId);
-
-export const selectEditorMode =
-  (workspaceId: string) =>
-  (s: WorkbenchState): EditorMode =>
-    s.editorModes[workspaceId] ?? "agent";
 
 export const selectWorkspacesForProject =
   (projectId: string) =>

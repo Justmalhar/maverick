@@ -28,7 +28,23 @@ export interface Backend {
   active: boolean;
 }
 
+// Retained for backward-compat of persisted presets (PresetNode.mode). Maverick
+// is terminal-first: every workspace runs a shell PTY and the app only ever
+// produces "terminal". "agent" survives only so older stored presets deserialize.
 export type EditorMode = "agent" | "terminal";
+
+/**
+ * A one-shot directive to launch a CLI inside a freshly-opened workspace's shell.
+ * Frontend-only (never crosses IPC): the primary terminal leaf consumes it once
+ * when its shell PTY is ready, types `command args`, and — if `prompt` is set —
+ * bracketed-pastes the prompt after the CLI's output goes idle.
+ */
+export interface LaunchSpec {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  prompt?: string;
+}
 
 export interface ThemeDefinition {
   name: string;
