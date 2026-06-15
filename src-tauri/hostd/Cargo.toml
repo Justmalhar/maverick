@@ -1,0 +1,35 @@
+[package]
+name = "maverick-hostd"
+version = "0.1.0"
+description = "Maverick Host — headless companion daemon (no Tauri)"
+authors = ["Malhar Ujawane"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[[bin]]
+name = "maverick-hostd"
+path = "src/main.rs"
+
+[dependencies]
+# The Tauri-free core: PTY management, the companion remote protocol + server,
+# and the sidecar abstraction. This crate must NEVER pull in `tauri`.
+maverick-core = { path = "../core" }
+# Shared deps inherit pins/features from the workspace root's
+# [workspace.dependencies] table — single source of truth, no version drift.
+tokio = { workspace = true }
+dirs = { workspace = true }
+# hostd-only deps (not shared with the desktop/core crates): the CLI parser and
+# the simple env-driven logger the daemon initialises in main().
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.11"
+log = { workspace = true }
+
+[dev-dependencies]
+# Loopback integration test deps. All four are in [workspace.dependencies], so
+# inherit the exact pins the rest of the workspace already resolves — adding a
+# distinct version here would duplicate a crate in the graph.
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
