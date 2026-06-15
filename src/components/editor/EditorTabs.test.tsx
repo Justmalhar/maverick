@@ -307,6 +307,86 @@ describe("EditorTabs", () => {
     }
   });
 
+  describe("maverick:closeActiveTab (⌘W)", () => {
+    function fireCloseActiveTab() {
+      fireEvent(window, new CustomEvent("maverick:closeActiveTab"));
+    }
+
+    it("closes the active workspace tab", () => {
+      useWorkbench.setState({
+        ...initial,
+        workspaces: [makeWorkspace({ id: "w1" })],
+        activeWorkspaceId: "w1",
+      });
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      expect(useWorkbench.getState().workspaces).toHaveLength(0);
+    });
+
+    it("closes the active system tab", () => {
+      useWorkbench.setState({ ...initial });
+      useWorkbench.getState().openSystemTab("kanban");
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      expect(useWorkbench.getState().systemTabs).not.toContain("kanban");
+    });
+
+    it("closes the active terminal tab", async () => {
+      useWorkbench.setState({
+        ...initial,
+        terminalTabs: [{ id: "t1", cwd: "/tmp", title: "zsh", ptyId: "pty-t1" }],
+        activeTerminalTabId: "t1",
+      });
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(0));
+    });
+
+    it("closes a clean file tab", () => {
+      useWorkbench.setState({ ...initial });
+      useWorkbench.getState().openFileTab({
+        kind: "code",
+        path: "/repo/a.ts",
+        worktreePath: "/repo",
+        preview: false,
+      });
+      renderWithProviders(<EditorTabs />);
+      expect(useWorkbench.getState().fileTabs).toHaveLength(1);
+      fireCloseActiveTab();
+      expect(useWorkbench.getState().fileTabs).toHaveLength(0);
+    });
+
+    it("opens the unsaved-changes confirm for a dirty file tab", async () => {
+      useWorkbench.setState({ ...initial });
+      useWorkbench.getState().openFileTab({
+        kind: "code",
+        path: "/repo/b.ts",
+        worktreePath: "/repo",
+        preview: false,
+      });
+      const id = useWorkbench.getState().activeFileTabId!;
+      useWorkbench.getState().setFileTabDirty(id, true);
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+      expect(useWorkbench.getState().fileTabs).toHaveLength(1);
+    });
+
+    it("is a no-op when nothing is active", () => {
+      useWorkbench.setState({
+        ...initial,
+        workspaces: [makeWorkspace({ id: "w1" })],
+        activeWorkspaceId: "w1",
+        systemTabs: [],
+      });
+      renderWithProviders(<EditorTabs />);
+      // EditorTabs only mounts with tabs present; clear active ids then fire.
+      useWorkbench.setState({ activeWorkspaceId: null });
+      fireCloseActiveTab();
+      expect(useWorkbench.getState().workspaces).toHaveLength(1);
+    });
+  });
+
   it("closing the save-layout dialog clears the target", async () => {
     vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
     useWorkbench.setState({

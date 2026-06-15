@@ -24,7 +24,7 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "workspace.next", label: "Next workspace", category: "Workspace", keys: "$mod+]", display: "⌘]" },
   { id: "workspace.prev", label: "Previous workspace", category: "Workspace", keys: "$mod+[", display: "⌘[" },
   { id: "workspace.new", label: "New workspace", category: "Workspace", keys: "$mod+n", display: "⌘N" },
-  { id: "workspace.close", label: "Close active workspace", category: "Workspace", keys: "$mod+w", display: "⌘W" },
+  { id: "workspace.close", label: "Close active tab", category: "Workspace", keys: "$mod+w", display: "⌘W" },
   ...WORKSPACE_INDEX_JUMPS,
   { id: "project.new", label: "Add project", category: "Workspace", keys: "$mod+Shift+n", display: "⌘⇧N" },
   { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+,", display: "⌘⇧," },

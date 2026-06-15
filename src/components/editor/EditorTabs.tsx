@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   SplitSquareHorizontal,
@@ -101,6 +101,26 @@ export function EditorTabs() {
     if (!state.layout.panelVisible) state.togglePanel();
     window.dispatchEvent(new CustomEvent("maverick:panel:tab", { detail: "terminal" }));
   }
+
+  // ⌘W (native menu on macOS, tinykeys elsewhere) closes whichever tab is
+  // focused. Exactly one of the active-tab ids is set at a time; close that one
+  // with its type-specific handler (file tabs honour the dirty-confirm guard).
+  useEffect(() => {
+    function onCloseActiveTab() {
+      const s = useWorkbench.getState();
+      if (s.activeFileTabId) {
+        if (!closeFileTab(s.activeFileTabId)) setConfirmCloseId(s.activeFileTabId);
+      } else if (s.activeSystemTab) {
+        closeSystemTab(s.activeSystemTab);
+      } else if (s.activeTerminalTabId) {
+        void closeTerminal(s.activeTerminalTabId);
+      } else if (s.activeWorkspaceId) {
+        removeWorkspace(s.activeWorkspaceId);
+      }
+    }
+    window.addEventListener("maverick:closeActiveTab", onCloseActiveTab);
+    return () => window.removeEventListener("maverick:closeActiveTab", onCloseActiveTab);
+  }, [closeFileTab, closeSystemTab, closeTerminal, removeWorkspace]);
 
   return (
     <div

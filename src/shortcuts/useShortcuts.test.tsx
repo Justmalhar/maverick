@@ -91,14 +91,16 @@ describe("useShortcuts", () => {
     expect(useWorkbench.getState().commandPaletteOpen).toBe(true);
   });
 
-  it("workspace.close removes the active workspace, no-op when none", () => {
-    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "a" })]);
-    useWorkbench.getState().setActiveWorkspace("a");
+  it("workspace.close dispatches maverick:closeActiveTab (EditorTabs handles the close)", () => {
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+w"));
-    expect(useWorkbench.getState().workspaces).toHaveLength(0);
-    // Repeat with no active workspace — should not throw.
-    act(() => fire("$mod+w"));
+    const onClose = vi.fn();
+    window.addEventListener("maverick:closeActiveTab", onClose);
+    try {
+      act(() => fire("$mod+w"));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("maverick:closeActiveTab", onClose);
+    }
   });
 
   it("does not register an editor.toggleMode binding ($mod+t freed)", () => {

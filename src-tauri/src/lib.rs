@@ -1,6 +1,8 @@
 mod backend_detector;
 mod bootstrap;
 mod commands;
+#[cfg(target_os = "macos")]
+mod menu;
 mod pty_sink_tauri;
 mod state;
 
@@ -78,6 +80,20 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
+
+            // macOS: replace the default menu so ⌘W closes the focused tab (via the
+            // webview) instead of the whole window. See menu.rs.
+            #[cfg(target_os = "macos")]
+            {
+                app.set_menu(crate::menu::build_menu(&handle)?)?;
+                app.on_menu_event(|app, event| {
+                    if event.id().as_ref() == crate::menu::CLOSE_TAB_ID {
+                        if let Err(e) = app.emit(crate::menu::CLOSE_TAB_EVENT, ()) {
+                            log::warn!("failed to emit close-tab: {e}");
+                        }
+                    }
+                });
+            }
 
             // Real PTYs live in the Rust core (portable-pty), independent of the sidecar.
             app.manage(std::sync::Arc::new(maverick_core::pty::PtyManager::new()));

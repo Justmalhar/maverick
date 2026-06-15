@@ -3,13 +3,30 @@ import { useEffect } from "react";
 // @ts-expect-error — tinykeys ships types but the package.json exports
 // field hides them from TS resolution in bundler mode. The runtime export is fine.
 import { tinykeys } from "tinykeys";
+import { listen } from "@tauri-apps/api/event";
 import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { runAiReview } from "@/lib/ai-review";
 
+// Ask the active editor tab bar to close whatever tab is focused. On macOS this
+// is driven by the native Close-Tab menu item (⌘W); on Windows/Linux by the
+// tinykeys binding below. EditorTabs owns the per-tab-type close logic.
+function requestCloseActiveTab(): void {
+  window.dispatchEvent(new CustomEvent("maverick:closeActiveTab"));
+}
+
 export function useShortcuts() {
   const store = useWorkbench();
+
+  // macOS routes ⌘W through the native menu (it consumes the key before the
+  // webview sees it), which emits `menu://close-tab` from Rust.
+  useEffect(() => {
+    const unlisten = listen("menu://close-tab", () => requestCloseActiveTab());
+    return () => {
+      void unlisten.then((un) => un()).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     const handlers: Partial<Record<ActionId, () => void>> = {
@@ -28,10 +45,7 @@ export function useShortcuts() {
         if (prev) setActiveWorkspace(prev.id);
       },
       "workspace.new": () => useWorkbench.getState().setCommandPaletteOpen(true),
-      "workspace.close": () => {
-        const { activeWorkspaceId, removeWorkspace } = useWorkbench.getState();
-        if (activeWorkspaceId) removeWorkspace(activeWorkspaceId);
-      },
+      "workspace.close": () => requestCloseActiveTab(),
       "project.new": () => useWorkbench.getState().setCommandPaletteOpen(true),
       "editor.focusInput": () => {
         document.querySelector<HTMLElement>("[data-input-bar]")?.focus();
