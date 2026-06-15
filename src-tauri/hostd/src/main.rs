@@ -47,7 +47,10 @@ async fn main() -> Result<(), String> {
             // `PairingTicket::qr_payload` is the `maverick://pair/v1?...` string
             // the phone scans (a public field, not a method).
             Ok(ticket) => println!("PAIR: {}", ticket.qr_payload),
-            Err(e) => eprintln!("pairing failed: {e}"),
+            Err(e) => {
+                eprintln!("pairing failed: {e}");
+                return Err(e);
+            }
         }
     }
 
@@ -57,6 +60,7 @@ async fn main() -> Result<(), String> {
     // Run until killed (a LaunchAgent restarts on crash in M7). Park the main
     // task on Ctrl-C; on signal, stop the listener cleanly and exit.
     tokio::signal::ctrl_c().await.map_err(|e| e.to_string())?;
-    server.stop().await;
+    let status = server.stop().await;
+    log::info!("maverick-hostd stopped: {status:?}");
     Ok(())
 }

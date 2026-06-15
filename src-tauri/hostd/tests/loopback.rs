@@ -57,6 +57,7 @@ async fn terminal_happy_path_over_loopback() {
         "session id is a UUID string, got {id:?}"
     );
 
+    ws.close(None).await.unwrap();
     server.stop().await;
 }
 
@@ -78,14 +79,21 @@ async fn next_json(ws: &mut Ws) -> serde_json::Value {
 }
 
 async fn wait_for_type(ws: &mut Ws, ty: &str) -> serde_json::Value {
-    loop {
-        let v = next_json(ws).await;
-        // Surface a protocol error rather than spinning until the timeout.
-        if v["type"] == "error" {
-            panic!("server returned error while awaiting {ty:?}: {v}");
+    // Bound the whole loop so an unexpected (non-"error") frame type arriving
+    // repeatedly can't spin forever — the per-frame `next_json` timeout only
+    // guards against silence, not against a chatty server.
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let v = next_json(ws).await;
+            // Surface a protocol error rather than spinning until the timeout.
+            if v["type"] == "error" {
+                panic!("server returned error while awaiting {ty:?}: {v}");
+            }
+            if v["type"] == ty {
+                return v;
+            }
         }
-        if v["type"] == ty {
-            return v;
-        }
-    }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for frame type {ty:?}"))
 }

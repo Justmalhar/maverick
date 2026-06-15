@@ -19,8 +19,9 @@ maverick-core = { path = "../core" }
 # [workspace.dependencies] table — single source of truth, no version drift.
 tokio = { workspace = true }
 dirs = { workspace = true }
-# hostd-only deps (not shared with the desktop/core crates): the CLI parser and
-# the simple env-driven logger the daemon initialises in main().
+# hostd-only binary deps (the CLI parser + env-driven logger the daemon inits in
+# main()): intentionally pinned locally, NOT in [workspace.dependencies] — no
+# other crate uses them, so a shared pin would add noise with no dedup benefit.
 clap = { version = "4", features = ["derive"] }
 env_logger = "0.11"
 log = { workspace = true }
