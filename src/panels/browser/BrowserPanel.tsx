@@ -1,14 +1,19 @@
 // ⌘⇧B — embedded browser host. Two interchangeable engines selected by the
 // `browser.engine` setting:
 //
-//   "iframe" (DEFAULT) — a sandboxed, self-suspending <iframe> rendered inside
-//     the React tree. Fully testable headlessly, memory-safe, and cannot reach
-//     Tauri IPC (sandbox omits allow-top-navigation). See BrowserPreview.tsx.
+//   "native" (DEFAULT) — a Tauri child WebviewWindow (label "maverick-browser")
+//     pinned over the host rect by the Rust layer (browser.rs). A true top-level
+//     browsing context: it loads http://localhost and, unlike an iframe, is NOT
+//     blocked by X-Frame-Options / CSP frame-ancestors, so it can display the
+//     common public sites users expect. Its add_child geometry / z-order can't
+//     be exercised in jsdom, so it is covered by IPC-layer unit tests and
+//     verified live via `bun run tauri dev`.
 //
-//   "native" — a Tauri child WebviewWindow (label "maverick-browser") pinned
-//     over the host rect by the Rust layer (browser.rs). Embeds sites that deny
-//     iframing (X-Frame-Options/CSP). Its add_child geometry / z-order CANNOT
-//     be verified in this headless environment, so it is opt-in.
+//   "iframe" (opt-in) — a sandboxed, self-suspending <iframe> rendered inside
+//     the React tree. Fully testable headlessly and memory-safe, but the WebView
+//     refuses to render any site that sends an X-Frame-Options/CSP frame-ancestors
+//     denial (most production sites), so it suits trusted local dev previews
+//     only. See BrowserPreview.tsx.
 //
 // KEEP-ALIVE: this panel is mounted by EditorGroup for the lifetime of the
 // browser system tab and toggled via the `visible` prop. When `visible` flips
@@ -52,7 +57,7 @@ interface Props {
 }
 
 export default function BrowserPanel({ visible = true }: Props) {
-  const [engine] = useSettings("browser.engine", "iframe");
+  const [engine] = useSettings("browser.engine", "native");
   const native = engine === "native";
 
   // `url` is the committed navigation target (drives the iframe / native nav);

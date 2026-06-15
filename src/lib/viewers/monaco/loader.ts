@@ -34,11 +34,17 @@ async function boot(): Promise<Monaco> {
 
   loadedLangs = new Set(highlighter.getLoadedLanguages());
   highlighterRef = highlighter;
+  // shikiToMonaco only wires a Monaco tokenizer for the grammars loaded at the
+  // moment it runs (none at boot — langs:[]). Every lazy loadLanguage() must
+  // re-run it, otherwise the new grammar streams into shiki but Monaco keeps
+  // tokenizing as plaintext and the editor shows raw, uncolored text.
+  rewireMonaco = () => shikiToMonaco(highlighter, monaco);
   return monaco;
 }
 
 let highlighterRef: Awaited<ReturnType<typeof import("shiki").createHighlighter>> | null = null;
 let loadedLangs = new Set<string>();
+let rewireMonaco: (() => void) | null = null;
 
 export function getMonaco(): Promise<Monaco> {
   if (!instance) {
@@ -64,6 +70,9 @@ export async function ensureLanguage(path: string): Promise<string> {
     try {
       await highlighterRef.loadLanguage(lang as never);
       loadedLangs.add(lang);
+      // Re-wire Monaco so the just-loaded grammar gets a tokens provider; without
+      // this the model tokenizes as plaintext (no syntax highlighting).
+      rewireMonaco?.();
     } catch {
       return "plaintext"; // grammar unavailable — degrade, don't fail the tab
     }
