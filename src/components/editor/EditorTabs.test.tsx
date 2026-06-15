@@ -290,6 +290,23 @@ describe("EditorTabs", () => {
     );
   });
 
+  it("split button dispatches the same splitH event as ⌘D", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      activeWorkspaceId: "w1",
+    });
+    const onSplit = vi.fn();
+    window.addEventListener("maverick:terminal:splitH", onSplit);
+    try {
+      renderWithProviders(<EditorTabs />);
+      await userEvent.click(screen.getByTestId("editor-tabs-split"));
+      expect(onSplit).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("maverick:terminal:splitH", onSplit);
+    }
+  });
+
   it("closing the save-layout dialog clears the target", async () => {
     vi.mocked(invoke).mockReset().mockResolvedValue([] as never);
     useWorkbench.setState({

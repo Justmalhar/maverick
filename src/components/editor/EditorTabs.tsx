@@ -296,14 +296,22 @@ export function EditorTabs() {
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Split editor"
+              aria-label="Split terminal horizontally"
               data-testid="editor-tabs-split"
+              onClick={() => window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"))}
               className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
             >
               <SplitSquareHorizontal className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Split editor</TooltipContent>
+          <TooltipContent side="bottom" className="flex flex-col gap-0.5">
+            <span className="flex items-center justify-between gap-3">
+              Split horizontally <kbd className="font-mono text-muted-foreground">⌘D</kbd>
+            </span>
+            <span className="flex items-center justify-between gap-3">
+              Split vertically <kbd className="font-mono text-muted-foreground">⌘⇧D</kbd>
+            </span>
+          </TooltipContent>
         </Tooltip>
       </div>
 
