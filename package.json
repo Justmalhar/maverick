@@ -71,6 +71,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.6.3",

@@ -2,6 +2,9 @@
 @import "./tokens.css";
 @import "./fonts.css";
 
+/* Typography plugin — drives the `prose` classes the MarkdownViewer relies on. */
+@plugin "@tailwindcss/typography";
+
 @theme inline {
   /* Color tokens — wired into Tailwind v4 from CSS variables */
   --color-background: hsl(var(--background));
