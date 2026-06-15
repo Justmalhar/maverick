@@ -31,8 +31,45 @@ export const HARDENED_ENV: Record<string, string> = {
   LC_ALL: "C",
 };
 
+// Standard Unix tool locations. A macOS/Linux app launched from Finder/Dock (or
+// any non-login context) inherits a minimal PATH that usually omits Homebrew
+// (/opt/homebrew/bin) and /usr/local/bin, so spawning `git` — and other CLIs —
+// fails with ENOENT even though it exists. Append the standard dirs so command
+// resolution succeeds regardless of how the app was launched. Existing entries
+// keep their order/priority; only missing dirs are added.
+const UNIX_TOOL_DIRS = [
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  "/usr/bin",
+  "/bin",
+  "/usr/sbin",
+  "/sbin",
+];
+
+/** PATH with the standard Unix tool dirs appended (deduped). Unchanged on Windows. */
+export function toolAugmentedPath(
+  currentPath: string | undefined = process.env.PATH,
+  platform: NodeJS.Platform = process.platform
+): string | undefined {
+  if (platform === "win32") return currentPath;
+  const existing = (currentPath ?? "").split(":").filter(Boolean);
+  const seen = new Set<string>();
+  return [...existing, ...UNIX_TOOL_DIRS].filter((dir) => !seen.has(dir) && seen.add(dir)).join(":");
+}
+
+/**
+ * Repair the sidecar's own PATH at boot so Bun's command resolution and every
+ * child process can find `git`/CLIs even when the host app was launched from the
+ * GUI. Idempotent: re-running only ever re-appends already-present dirs.
+ */
+export function repairToolPath(): void {
+  const augmented = toolAugmentedPath();
+  if (augmented !== undefined) process.env.PATH = augmented;
+}
+
 function hardenedEnv(): Record<string, string | undefined> {
-  return { ...process.env, ...HARDENED_ENV };
+  return { ...process.env, ...HARDENED_ENV, PATH: toolAugmentedPath() };
 }
 
 export const defaultShell: Shell = {

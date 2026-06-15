@@ -1,5 +1,13 @@
 import { describe, test, expect } from "bun:test";
-import { defaultIds, emit, stdoutNotifier, defaultShell, HARDENED_ENV } from "./deps";
+import {
+  defaultIds,
+  emit,
+  stdoutNotifier,
+  defaultShell,
+  HARDENED_ENV,
+  toolAugmentedPath,
+  repairToolPath,
+} from "./deps";
 
 describe("defaultIds", () => {
   test("uuid returns prefixed unique string", () => {
@@ -38,6 +46,52 @@ describe("emit + notifier", () => {
       (process.stdout as unknown as { write: typeof orig }).write = orig;
     }
     expect(captured[0]).toBe("hello\n");
+  });
+});
+
+describe("toolAugmentedPath", () => {
+  test("appends standard Unix tool dirs missing from a minimal PATH", () => {
+    const result = toolAugmentedPath("/usr/bin:/bin", "darwin");
+    const dirs = result!.split(":");
+    expect(dirs).toContain("/opt/homebrew/bin");
+    expect(dirs).toContain("/usr/local/bin");
+    // Pre-existing dirs keep their leading position/priority.
+    expect(dirs[0]).toBe("/usr/bin");
+    expect(dirs[1]).toBe("/bin");
+  });
+
+  test("does not duplicate dirs already present", () => {
+    const result = toolAugmentedPath("/opt/homebrew/bin:/usr/bin", "darwin");
+    const dirs = result!.split(":");
+    expect(dirs.filter((d) => d === "/opt/homebrew/bin")).toHaveLength(1);
+    expect(dirs.filter((d) => d === "/usr/bin")).toHaveLength(1);
+  });
+
+  test("handles an empty/undefined PATH by returning just the tool dirs", () => {
+    const result = toolAugmentedPath(undefined, "darwin");
+    expect(result!.split(":")).toContain("/opt/homebrew/bin");
+    expect(result).not.toStartWith(":");
+  });
+
+  test("leaves PATH untouched on Windows", () => {
+    expect(toolAugmentedPath("C:\\Windows", "win32")).toBe("C:\\Windows");
+  });
+});
+
+describe("repairToolPath", () => {
+  test("augments the live process PATH (idempotently)", () => {
+    const original = process.env.PATH;
+    try {
+      process.env.PATH = "/usr/bin:/bin";
+      repairToolPath();
+      const first = process.env.PATH;
+      expect(first!.split(":")).toContain("/opt/homebrew/bin");
+      repairToolPath();
+      // Re-running does not grow the PATH with duplicates.
+      expect(process.env.PATH).toBe(first);
+    } finally {
+      process.env.PATH = original;
+    }
   });
 });
 
