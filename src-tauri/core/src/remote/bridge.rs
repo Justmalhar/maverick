@@ -64,9 +64,7 @@ impl SidecarRequest for crate::sidecar::Sidecar {
     }
 }
 
-/// Abstraction over the PTY surface the bridge drives. The production impl wraps
-/// the Tauri `PtyManager` + an `AppHandle` (so `spawn` can emit `pty:data` to the
-/// local webview too); tests use a fake backed by a seeded `Ring`.
+/// Abstraction over the PTY surface the bridge drives. The desktop uses ManagerPtyHost with a TauriPtySink; tests use a fake backed by a seeded Ring.
 pub trait PtyHost: Send + Sync {
     /// Spawn a shell, returning the core's opaque pty id. Terminal size defaults
     /// to 80x24; callers must send a `Resize` immediately after creation to apply

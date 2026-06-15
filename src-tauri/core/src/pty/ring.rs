@@ -11,12 +11,6 @@
 // replay slice = 256 KiB tail. A monotonic `next_offset` and a `dropped`
 // counter let a late consumer detect gaps when the producer overran the ring.
 //
-// The tee/read API (subscribe / read_since / Subscription / the cap consts) has
-// no in-crate caller yet: Companion-3 (cc-feature/companion-ws-server, PTY ring
-// tee) wires the WS server to it. Until then it is intentionally unused public
-// surface, hence the crate-local dead_code allowance below.
-#![allow(dead_code)]
-
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 

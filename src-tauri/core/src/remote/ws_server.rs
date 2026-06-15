@@ -5,16 +5,15 @@
 //! reply encoded back as one text frame. Binary frames are ignored; pings are
 //! auto-ponged by tungstenite.
 //!
-//! ## Safety posture (read this before enabling)
+//! ## Safety posture
 //!
-//! - **Loopback only.** The listener binds `127.0.0.1` exclusively. There is no
-//!   LAN/Tailscale exposure here — that, plus pairing/auth, is **Companion-5**.
-//! - **Disabled by default.** Nothing starts the server at boot. The
-//!   `remote_start` Tauri command must be called explicitly, and the persisted
-//!   setting (`RemoteState.enabled`) defaults to `false`. A loopback-only,
-//!   off-by-default, unauthenticated server is safe to ship in this state.
-//! - **16 MiB max frame.** Bounds a single inbound/outbound message so a hostile
-//!   or buggy client can't force unbounded allocation.
+//! - **LAN when paired.** Binds 127.0.0.1 when unpaired; widens to 0.0.0.0 once
+//!   enabled AND at least one device is paired (see `BindPolicy::resolve`).
+//! - **Noise-XX auth on every off-box connection.** Non-loopback peers must
+//!   complete the Noise_XX_25519_ChaChaPoly_SHA256 handshake; loopback peers are
+//!   trusted and served plaintext.
+//! - **Disabled by default.** A listener binds only on explicit `start()`.
+//! - **16 MiB max frame.** Bounds per-message allocation.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -66,7 +65,7 @@ pub struct RemoteStatus {
     pub paired_devices: usize,
 }
 
-/// Process-wide companion-server controller held in Tauri state. Owns the
+/// Process-wide companion-server controller. Owned by Tauri managed state in the desktop app; owned by the main task in the headless daemon. Owns the
 /// enabled flag, the (at most one) running listener, and the Companion-5 security
 /// state: the desktop static identity, the live pairing-session registry, and the
 /// persistent paired-device store (TOFU).

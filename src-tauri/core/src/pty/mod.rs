@@ -17,14 +17,12 @@ use self::utf8_carry::Utf8Carry;
 
 // Re-exported so Companion-3's WS server (a sibling module in this crate) can
 // name the tee handle and the budget constants as `crate::pty::{...}` without
-// reaching into the private `ring` submodule. Consumer-less until Companion-3
-// lands; the re-export is part of the public surface that feature will call.
-#[allow(unused_imports)]
+// reaching into the private `ring` submodule. Consumed by the WS bridge
+// (remote::bridge), ManagerPtyHost, and the headless daemon.
 pub use self::ring::{Ring, Subscription, REPLAY_CAP, RING_CAP};
 // `NoopPtySink` is consumed by the headless daemon (Phase 3) and tests; the
 // desktop crate only uses `PtyEventSink`. Re-exported now as part of the stable
 // pty surface so the daemon can name `crate::pty::NoopPtySink`.
-#[allow(unused_imports)]
 pub use self::sink::{NoopPtySink, PtyEventSink};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -106,7 +104,6 @@ struct PtySession {
     // fan-out. Additive to the `pty:data` emit — Companion-3's WS server attaches
     // here for replay-then-live. Held on the session so an attach can reach it.
     // Read only via PtyManager::subscribe/read_since, which Companion-3 calls.
-    #[allow(dead_code)]
     ring: Ring,
 }
 
@@ -451,7 +448,6 @@ impl PtyManager {
     /// entry point Companion-3's WS server uses to serve a phone/desktop
     /// re-attach with history-then-live. The returned receiver lives independent
     /// of the sessions lock, so a slow consumer never blocks PTY ops.
-    #[allow(dead_code)]
     pub fn subscribe(&self, pty_id: &str) -> Option<ring::Subscription> {
         self.sessions
             .lock()
@@ -463,7 +459,7 @@ impl PtyManager {
     /// Page history by absolute offset for a session: returns
     /// `(bytes_since_offset, next_offset, dropped)`. `None` if unknown. Lets a
     /// consumer resume from a recorded cursor and detect gaps via `dropped`.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used by history paging (M2)
     pub fn read_since(&self, pty_id: &str, offset: u64) -> Option<(Vec<u8>, u64, u64)> {
         self.sessions
             .lock()
