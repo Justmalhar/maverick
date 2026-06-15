@@ -31,7 +31,7 @@ export default function MarkdownPreview({ content }: Props) {
     >
       <div
         ref={ref}
-        className="prose prose-invert prose-sm max-w-none px-4 py-3 text-foreground prose-headings:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-card prose-pre:p-3"
+        className="prose prose-invert prose-sm max-w-none px-8 py-6 text-foreground prose-headings:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-card prose-pre:p-3"
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
