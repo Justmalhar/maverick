@@ -16,6 +16,10 @@ function useNativeEngine() {
   useSettingsStore.setState({ values: { "browser.engine": "native" }, status: "idle", lastError: null });
 }
 
+function useIframeEngine() {
+  useSettingsStore.setState({ values: { "browser.engine": "iframe" }, status: "idle", lastError: null });
+}
+
 beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue(undefined as never);
   vi.mocked(shellOpen).mockClear();
@@ -46,7 +50,11 @@ beforeEach(() => {
   });
 });
 
-describe("BrowserPanel — iframe engine (default)", () => {
+describe("BrowserPanel — iframe engine (opt-in)", () => {
+  beforeEach(() => {
+    useIframeEngine();
+  });
+
   it("renders the sandboxed iframe preview, not the native host", () => {
     renderWithProviders(<BrowserPanel />);
     expect(screen.getByTestId("browser-toolbar")).toBeInTheDocument();
@@ -196,6 +204,7 @@ describe("BrowserPanel — iframe engine (default)", () => {
 
 describe("BrowserPanel — keep-alive (visible prop)", () => {
   it("renders hidden when visible=false without unmounting", () => {
+    useIframeEngine();
     renderWithProviders(<BrowserPanel visible={false} />);
     expect(screen.getByTestId("browser-preview")).toHaveStyle({ visibility: "hidden" });
   });
@@ -215,7 +224,19 @@ describe("BrowserPanel — keep-alive (visible prop)", () => {
   });
 });
 
-describe("BrowserPanel — native engine (opt-in)", () => {
+describe("BrowserPanel — native engine (default)", () => {
+  it("is the default engine: renders the native host and opens the webview with no override", async () => {
+    renderWithProviders(<BrowserPanel />);
+    expect(screen.getByTestId("browser-host")).toBeInTheDocument();
+    expect(screen.queryByTestId("browser-iframe")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "browser_open",
+        expect.objectContaining({ url: "http://localhost:3000" })
+      )
+    );
+  });
+
   it("opens the native webview on mount and renders the native host", async () => {
     useNativeEngine();
     renderWithProviders(<BrowserPanel />);

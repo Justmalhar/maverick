@@ -59,8 +59,9 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "advanced.lruLimit": 8,
   "advanced.caffeinate": true,
 
-  // Browser — "iframe" (sandboxed, testable default) or "native" (child webview).
-  "browser.engine": "iframe",
+  // Browser — "native" (real child webview; loads localhost + sites that refuse
+  // iframing) or "iframe" (sandboxed, headless-testable, local dev previews only).
+  "browser.engine": "native",
 
   // Version
   "version.updateChannel": "stable",

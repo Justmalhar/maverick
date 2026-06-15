@@ -104,7 +104,7 @@ export function ViewerToolbar({ tab, actions, candidates }: Props) {
                   onClick={() => setFileTabMode(live.id, m)}
                   className={cn(
                     "px-2 py-0.5 text-[11px] capitalize transition-colors duration-100",
-                    live.mode === m ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-foreground/5"
+                    live.mode === m ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-foreground/5"
                   )}
                 >
                   {m === "diff" ? "Diff" : "Edit"}
@@ -118,7 +118,7 @@ export function ViewerToolbar({ tab, actions, candidates }: Props) {
                   onClick={() => setFileTabMode(live.id, m)}
                   className={cn(
                     "px-2 py-0.5 text-[11px] capitalize transition-colors duration-100",
-                    live.mode === m ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-foreground/5"
+                    live.mode === m ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-foreground/5"
                   )}
                 >
                   {m === "view" ? "View" : "Edit"}

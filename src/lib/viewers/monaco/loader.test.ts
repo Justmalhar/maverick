@@ -40,6 +40,17 @@ describe("ensureLanguage", () => {
     expect(hlInstance.loadLanguage).toHaveBeenCalledWith("rust");
   });
 
+  it("re-runs shikiToMonaco after lazily loading a new grammar so Monaco tokenizes it", async () => {
+    // Regression guard: shikiToMonaco only wires a tokenizer for grammars loaded
+    // when it runs. A lazily-loaded grammar must re-trigger it, else the editor
+    // shows raw, uncolored text.
+    const { shikiToMonaco } = await import("@shikijs/monaco");
+    vi.mocked(shikiToMonaco).mockClear();
+    const lang = await ensureLanguage("/src/app.py");
+    expect(lang).toBe("python");
+    expect(shikiToMonaco).toHaveBeenCalledTimes(1);
+  });
+
   it("boots internally when called without a prior getMonaco() call", async () => {
     // ensureLanguage must await getMonaco() internally so the highlighterRef is
     // always populated before the grammar check — boot-race regression guard.
