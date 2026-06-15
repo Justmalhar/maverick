@@ -37,6 +37,7 @@ import { EditorTab } from "./EditorTab";
 import { FileEditorTab } from "./FileEditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
 import { useTerminalTab } from "@/hooks/useTerminalTab";
+import { countLeaves } from "@/lib/splitnode";
 import { defaultTerminalCwd } from "@/lib/default-cwd";
 
 const SYSTEM_TAB_META: Record<
@@ -115,7 +116,15 @@ export function EditorTabs() {
       } else if (s.activeTerminalTabId) {
         void closeTerminal(s.activeTerminalTabId);
       } else if (s.activeWorkspaceId) {
-        removeWorkspace(s.activeWorkspaceId);
+        // A workspace with splits closes the focused pane first (TerminalView
+        // owns focusedPaneId); the tab itself closes only once its last pane is
+        // gone. Without splits, ⌘W closes the whole tab.
+        const tree = s.splitTrees[s.activeWorkspaceId];
+        if (tree && countLeaves(tree) > 1) {
+          window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
+        } else {
+          removeWorkspace(s.activeWorkspaceId);
+        }
       }
     }
     window.addEventListener("maverick:closeActiveTab", onCloseActiveTab);

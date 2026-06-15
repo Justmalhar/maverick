@@ -312,11 +312,52 @@ describe("EditorTabs", () => {
       fireEvent(window, new CustomEvent("maverick:closeActiveTab"));
     }
 
-    it("closes the active workspace tab", () => {
+    it("closes the active workspace tab when it has no splits", () => {
       useWorkbench.setState({
         ...initial,
         workspaces: [makeWorkspace({ id: "w1" })],
         activeWorkspaceId: "w1",
+      });
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      expect(useWorkbench.getState().workspaces).toHaveLength(0);
+    });
+
+    it("closes only the focused pane (not the tab) when the workspace has splits", () => {
+      useWorkbench.setState({
+        ...initial,
+        workspaces: [makeWorkspace({ id: "w1" })],
+        activeWorkspaceId: "w1",
+        splitTrees: {
+          w1: {
+            type: "split",
+            direction: "h",
+            ratio: 0.5,
+            left: { type: "terminal", id: "w1-1", backend: "claude", ptyId: "w1" },
+            right: { type: "terminal", id: "w1-2", backend: "claude", ptyId: "w1" },
+          },
+        },
+      });
+      const onClosePane = vi.fn();
+      window.addEventListener("maverick:terminal:closePane", onClosePane);
+      try {
+        renderWithProviders(<EditorTabs />);
+        fireCloseActiveTab();
+        expect(onClosePane).toHaveBeenCalledTimes(1);
+        expect(useWorkbench.getState().workspaces).toHaveLength(1);
+      } finally {
+        window.removeEventListener("maverick:terminal:closePane", onClosePane);
+      }
+    });
+
+    it("closes the tab when the workspace split tree is down to one pane", () => {
+      useWorkbench.setState({
+        ...initial,
+        workspaces: [makeWorkspace({ id: "w1" })],
+        activeWorkspaceId: "w1",
+        splitTrees: {
+          w1: { type: "terminal", id: "w1-1", backend: "claude", ptyId: "w1" },
+        },
       });
       renderWithProviders(<EditorTabs />);
       fireCloseActiveTab();
@@ -345,7 +386,7 @@ describe("EditorTabs", () => {
     it("closes a clean file tab", () => {
       useWorkbench.setState({ ...initial });
       useWorkbench.getState().openFileTab({
-        kind: "code",
+        kind: "file",
         path: "/repo/a.ts",
         worktreePath: "/repo",
         preview: false,
@@ -359,7 +400,7 @@ describe("EditorTabs", () => {
     it("opens the unsaved-changes confirm for a dirty file tab", async () => {
       useWorkbench.setState({ ...initial });
       useWorkbench.getState().openFileTab({
-        kind: "code",
+        kind: "file",
         path: "/repo/b.ts",
         worktreePath: "/repo",
         preview: false,
