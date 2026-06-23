@@ -8,6 +8,7 @@ import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { runAiReview } from "@/lib/ai-review";
+import { primaryAgentPtyId } from "@/components/editor/terminal/TerminalLeaf";
 
 // Ask the active editor tab bar to close whatever tab is focused. On macOS this
 // is driven by the native Close-Tab menu item (⌘W); on Windows/Linux by the
@@ -56,7 +57,7 @@ export function useShortcuts() {
         if (!ws) return;
         const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
         void runAiReview({
-          workspaceId: ws.id,
+          agentPtyId: primaryAgentPtyId(ws.id),
           worktreePath: ws.worktreePath,
           reviewPref,
           onAgentFocus: () => setActiveWorkspace(ws.id),

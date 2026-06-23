@@ -5,6 +5,7 @@ import { useShortcuts } from "./useShortcuts";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/TerminalLeaf";
 
 const initial = useWorkbench.getState();
 
@@ -302,6 +303,8 @@ describe("useShortcuts", () => {
     });
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w1", worktreePath: "/wt" })]);
     useWorkbench.getState().setActiveWorkspace("w1");
+    // Agent runs in the primary leaf; seed its live PTY id so the review sends.
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
     renderHook(() => useShortcuts());
     act(() => fire("$mod+Shift+r"));
     await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));

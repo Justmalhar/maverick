@@ -6,6 +6,7 @@ import { DiffView } from "./DiffView";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
 import { fileTabId } from "@/state/store";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/TerminalLeaf";
 
 const initial = useWorkbench.getState();
 
@@ -19,6 +20,7 @@ function activeWorkspaceWithDiff() {
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  terminalLeafTesting.leafPtyCache.clear();
   useWorkbench.setState({ ...initial, workspaces: [], activeWorkspaceId: null });
 });
 
@@ -75,6 +77,8 @@ describe("DiffView", () => {
 
   it("AI Code Review writes a review prompt and brings the workspace to the front", async () => {
     activeWorkspaceWithDiff();
+    // The agent runs in the primary leaf; pty_write must target its live PTY id.
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
     vi.mocked(invoke)
       .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
       .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // runAiReview diff_get
@@ -84,7 +88,7 @@ describe("DiffView", () => {
 
     await userEvent.click(screen.getByTestId("diff-ai-review"));
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("pty_write", expect.objectContaining({ ptyId: "w1" }))
+      expect(invoke).toHaveBeenCalledWith("pty_write", expect.objectContaining({ ptyId: "pty-w1-1" }))
     );
     // onAgentFocus brings the reviewed workspace to the front (no editor mode).
     await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));

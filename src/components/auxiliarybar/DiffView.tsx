@@ -5,6 +5,7 @@ import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview } from "@/lib/ai-review";
+import { primaryAgentPtyId } from "@/components/editor/terminal/TerminalLeaf";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -82,7 +83,7 @@ export function DiffView() {
     if (!active) return;
     try {
       await runAiReview({
-        workspaceId: active.id,
+        agentPtyId: primaryAgentPtyId(active.id),
         worktreePath: active.worktreePath,
         reviewPref,
         onAgentFocus: () => setActiveWorkspace(active.id),

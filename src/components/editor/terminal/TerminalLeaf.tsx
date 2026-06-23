@@ -43,6 +43,16 @@ export function getLeafPtyId(leafId: string): string | undefined {
   return leafPtyCache.get(leafId);
 }
 
+/**
+ * The live PTY id of a workspace's PRIMARY leaf (`${workspaceId}-1`) — the leaf
+ * that runs the agent CLI. Undefined until it spawns. This is what agent-facing
+ * writes (review prompts, comment batches) must target; `pty_write` keys off the
+ * PTY id, never the workspace id.
+ */
+export function primaryAgentPtyId(workspaceId: string): string | undefined {
+  return leafPtyCache.get(`${workspaceId}-1`);
+}
+
 interface Props {
   leafId: string;
   workspace: Workspace;

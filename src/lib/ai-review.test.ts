@@ -34,7 +34,7 @@ describe("runAiReview", () => {
     vi.mocked(invoke).mockResolvedValueOnce({ files: [] } as never); // diff_get
     const onAgentFocus = vi.fn();
     const result = await runAiReview({
-      workspaceId: "w1",
+      agentPtyId: "pty-w1-1",
       worktreePath: "/wt",
       onAgentFocus,
     });
@@ -43,13 +43,28 @@ describe("runAiReview", () => {
     expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
   });
 
-  it("focuses the agent and writes the review prompt to the PTY", async () => {
+  it("returns ran:false when no agent PTY is available", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(
       makeDiff({ files: [makeDiffFile({ path: "x.ts" })] }) as never
     ); // diff_get
     const onAgentFocus = vi.fn();
     const result = await runAiReview({
-      workspaceId: "w1",
+      agentPtyId: undefined,
+      worktreePath: "/wt",
+      onAgentFocus,
+    });
+    expect(result.ran).toBe(false);
+    expect(onAgentFocus).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
+  it("focuses the agent and writes the review prompt to the resolved PTY", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(
+      makeDiff({ files: [makeDiffFile({ path: "x.ts" })] }) as never
+    ); // diff_get
+    const onAgentFocus = vi.fn();
+    const result = await runAiReview({
+      agentPtyId: "pty-w1-1",
       worktreePath: "/wt",
       reviewPref: "Be terse.",
       onAgentFocus,
@@ -58,7 +73,7 @@ describe("runAiReview", () => {
     expect(onAgentFocus).toHaveBeenCalledTimes(1);
     const call = vi.mocked(invoke).mock.calls.find((c) => c[0] === "pty_write");
     expect(call).toBeDefined();
-    expect((call?.[1] as { ptyId: string; data: string }).ptyId).toBe("w1");
+    expect((call?.[1] as { ptyId: string; data: string }).ptyId).toBe("pty-w1-1");
     expect((call?.[1] as { data: string }).data).toContain("Be terse.");
     expect((call?.[1] as { data: string }).data).toContain("- M x.ts");
   });

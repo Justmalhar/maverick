@@ -15,7 +15,8 @@ export function buildReviewPrompt(diff: DiffResult, reviewPref?: string): string
 }
 
 export interface RunAiReviewOptions {
-  workspaceId: string;
+  /** The agent leaf's live PTY id (resolved by the caller). */
+  agentPtyId: string | undefined;
   worktreePath: string;
   reviewPref?: string;
   /** Called before writing the prompt so callers can surface the agent view. */
@@ -23,14 +24,17 @@ export interface RunAiReviewOptions {
 }
 
 /**
- * Fetch the worktree diff and send a review prompt to the workspace's agent PTY.
- * Returns `{ ran: false }` when the working tree is clean (nothing to review).
+ * Fetch the worktree diff and send a review prompt to the agent PTY.
+ * Returns `{ ran: false }` when the tree is clean OR the agent PTY hasn't spawned
+ * yet — `pty_write` keys off the PTY id, not the workspace id, so a missing id
+ * would otherwise silently no-op.
  */
 export async function runAiReview(opts: RunAiReviewOptions): Promise<{ ran: boolean }> {
   const diff = await diffGet(opts.worktreePath);
   if (diff.files.length === 0) return { ran: false };
+  if (!opts.agentPtyId) return { ran: false };
   const prompt = buildReviewPrompt(diff, opts.reviewPref);
   opts.onAgentFocus?.();
-  await ptyWrite(opts.workspaceId, `${prompt}\n`);
+  await ptyWrite(opts.agentPtyId, `${prompt}\n`);
   return { ran: true };
 }
