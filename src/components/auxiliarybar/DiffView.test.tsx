@@ -65,7 +65,7 @@ describe("DiffView", () => {
     }) as never);
     renderWithProviders(<DiffView />);
     await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    expect(screen.getByText("a.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("diff-file-a.ts")).toBeInTheDocument();
   });
 
   it("clears diff when fetch fails", async () => {
@@ -210,7 +210,7 @@ describe("DiffView", () => {
     renderWithProviders(<DiffView />);
     await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
 
-    await userEvent.click(screen.getByText("src/a.ts"));
+    await userEvent.click(screen.getByTestId("diff-file-src/a.ts"));
     const state = useWorkbench.getState();
     expect(state.fileTabs).toHaveLength(1);
     expect(state.fileTabs[0]).toMatchObject({

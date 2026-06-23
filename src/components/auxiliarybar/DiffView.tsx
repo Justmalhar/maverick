@@ -4,6 +4,7 @@ import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useReviewComments } from "@/lib/stores/review-comments";
+import { ReviewComments } from "./ReviewComments";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview, sendReviewComments } from "@/lib/ai-review";
@@ -244,6 +245,8 @@ export function DiffView() {
           ))}
         </ul>
       </ScrollArea>
+
+      <ReviewComments workspaceId={active.id} files={files.map((f) => f.path)} />
     </div>
   );
 }
