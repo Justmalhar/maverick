@@ -131,6 +131,26 @@ describe("useShortcuts", () => {
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
   });
 
+  it("diff.nextHunk / diff.prevHunk dispatch hunk-nav events when no field is focused", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("] c"));
+    act(() => fire("[ c"));
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:nextHunk" }));
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:prevHunk" }));
+  });
+
+  it("diff.nextHunk is suppressed while a text field is focused", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("] c"));
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:nextHunk" }));
+    input.remove();
+  });
+
   it("terminal.splitH dispatches maverick:terminal:splitH", () => {
     renderHook(() => useShortcuts());
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");

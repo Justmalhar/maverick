@@ -33,6 +33,9 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   // Editor
   { id: "editor.focusInput", label: "Focus input bar", category: "Editor", keys: "$mod+l", display: "⌘L" },
   { id: "ai.review", label: "AI Code Review of working changes", category: "Editor", keys: "$mod+Shift+r", display: "⌘⇧R" },
+  // Vim-style bracket sequences; suppressed while typing in a text field.
+  { id: "diff.nextHunk", label: "Diff: next change", category: "Editor", keys: "] c", display: "]c" },
+  { id: "diff.prevHunk", label: "Diff: previous change", category: "Editor", keys: "[ c", display: "[c" },
 
   // Browser
   { id: "browser.toggleInspect", label: "Toggle element inspector", category: "Global", keys: "$mod+Shift+i", display: "⌘⇧I" },

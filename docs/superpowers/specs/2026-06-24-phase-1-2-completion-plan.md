@@ -87,7 +87,12 @@ Gate after every task: `bun run build` ✅ + full `bunx vitest run` ✅ (**1455 
 - **P2-C ✅ DONE.** `buildReviewCommentsPrompt` → `Re: <file>:<line> — <body>` batch. 3 tests.
 - **P2-D ✅ DONE.** `sendReviewComments` + DiffView "Send N comments to agent" button, disabled
   while the agent is `working`, writes to the primary PTY, clears comments. 3 lib + 3 UI tests.
-- **P2-E ⏸ DEFERRED (deliberate — would introduce bugs).** Reasons: (1) the spec's stage key
+- **P2-E ◑ PARTIAL.** **Hunk navigation `]c`/`[c` ✅ DONE** — vim-style key *sequences* with a
+  localized input-focus guard (`isTextEntryFocused`, so they never steal keystrokes in the comment
+  textarea), dispatching window events that the Monaco `DiffViewer` turns into `goToDiff('next'|
+  'previous')`. Monaco mock extended with `goToDiff`. 2 shortcut tests + 1 DiffViewer test.
+  **Stage/unstage ⏸ still deferred** — see below.
+- **Stage/unstage (⌘⇧A/⌘⇧U) ⏸ DEFERRED (deliberate — would introduce bugs).** Reasons: (1) the spec's stage key
   `⌘⇧A` is already bound to **Automations** (`view.automations`); (2) `]c`/`[c` are *unmodified
   key sequences* — every existing binding uses a modifier, and the shortcut handler has **no
   input-focus guard**, so they would fire while typing in the comment textarea; (3) Monaco
