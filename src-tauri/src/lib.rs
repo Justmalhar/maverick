@@ -81,6 +81,15 @@ pub fn run() {
 
             let handle = app.handle().clone();
 
+            // Windows/Linux render their own window chrome (WindowControls), so
+            // hide the native frame — otherwise the OS title bar and our custom
+            // controls both show. macOS keeps its native traffic lights via
+            // titleBarStyle "Overlay", so leave its decorations untouched.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_decorations(false);
+            }
+
             // macOS: replace the default menu so ⌘W closes the focused tab (via the
             // webview) instead of the whole window. See menu.rs.
             #[cfg(target_os = "macos")]
