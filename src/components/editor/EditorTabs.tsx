@@ -3,6 +3,7 @@ import {
   Plus,
   SplitSquareHorizontal,
   LayoutDashboard,
+  Gauge,
   Globe,
   CheckSquare2,
   Zap,
@@ -53,6 +54,7 @@ const SYSTEM_TAB_META: Record<
   { label: string; icon: typeof Globe; shortcut?: string }
 > = {
   dashboard: { label: "Dashboard", icon: LayoutDashboard },
+  usage: { label: "Usage", icon: Gauge },
   browser: { label: "Browser", icon: Globe, shortcut: "⌘⇧B" },
   kanban: { label: "Tasks", icon: CheckSquare2, shortcut: "⌘⇧K" },
   automations: { label: "Automations", icon: Zap, shortcut: "⌘⇧A" },
@@ -61,7 +63,7 @@ const SYSTEM_TAB_META: Record<
   "skill-editor": { label: "New Skill", icon: SquarePen },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps", "skills"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "automations", "mcps", "skills"];
 
 export function EditorTabs() {
   const workspaces = useWorkbench((s) => s.workspaces);
