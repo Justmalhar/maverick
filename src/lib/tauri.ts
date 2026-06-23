@@ -124,8 +124,9 @@ export async function remoteRevoke(deviceId: string): Promise<boolean> {
   return invoke("remote_revoke", { deviceId });
 }
 
-export async function defaultShell(): Promise<string> {
-  return invoke("default_shell");
+/** True when a usable WSL installation is present (Windows only). */
+export async function wslAvailable(): Promise<boolean> {
+  return invoke("wsl_available");
 }
 
 export async function configLoad(projectPath: string): Promise<MaverickConfig> {

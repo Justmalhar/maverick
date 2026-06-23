@@ -65,7 +65,7 @@ pub use project_settings::{
     project_settings_get, project_settings_open_file, project_settings_update,
 };
 pub use pty::{pty_close_all, pty_kill, pty_resize, pty_spawn, pty_write};
-pub use shell::default_shell;
+pub use shell::wsl_available;
 pub use skills::{skills_create_global, skills_list, skills_list_global, skills_run};
 pub use usage::usage_summary;
 pub use workspace::{workspace_create, workspace_destroy, workspace_list};

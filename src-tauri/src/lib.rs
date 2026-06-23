@@ -6,7 +6,7 @@ mod menu;
 mod pty_sink_tauri;
 mod state;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -36,11 +36,60 @@ fn dev_sidecar_command() -> (String, Vec<String>, Option<PathBuf>) {
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest_dir.clone());
     let entry = repo_root.join("sidecar").join("main.ts");
-    (
-        "bun".to_string(),
-        vec!["run".to_string(), entry.to_string_lossy().into_owned()],
-        Some(repo_root),
-    )
+    let (program, mut args) = bun_launcher();
+    args.push("run".to_string());
+    args.push(entry.to_string_lossy().into_owned());
+    (program, args, Some(repo_root))
+}
+
+#[cfg(windows)]
+fn bun_launcher() -> (String, Vec<String>) {
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("USERPROFILE").ok();
+    resolve_bun(&path_var, home.as_deref(), |p| p.exists())
+}
+
+#[cfg(not(windows))]
+fn bun_launcher() -> (String, Vec<String>) {
+    ("bun".to_string(), Vec::new())
+}
+
+/// Locate the `bun` launcher on Windows. npm installs bun as a `bun.cmd` shim
+/// (plus an extensionless script) rather than a real `bun.exe`, and
+/// `CreateProcessW` only appends `.exe` — it never consults `PATHEXT` — so a
+/// bare `Command::new("bun")` reports "program not found". We search `PATH`
+/// (then `~/.bun/bin`) for a concrete launcher: a `.exe` runs directly, while a
+/// `.cmd`/`.bat` must be invoked through `cmd.exe /C` because batch files are
+/// not executables. Falling back to `"bun"` preserves the original error path.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn resolve_bun(
+    path_var: &str,
+    home: Option<&str>,
+    exists: impl Fn(&Path) -> bool,
+) -> (String, Vec<String>) {
+    const CANDIDATES: [&str; 3] = ["bun.exe", "bun.cmd", "bun.bat"];
+    let mut dirs: Vec<PathBuf> = path_var
+        .split(';')
+        .filter(|seg| !seg.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    if let Some(home) = home {
+        dirs.push(Path::new(home).join(".bun").join("bin"));
+    }
+    for dir in &dirs {
+        for name in CANDIDATES {
+            let candidate = dir.join(name);
+            if exists(&candidate) {
+                let full = candidate.to_string_lossy().into_owned();
+                return if name.ends_with(".exe") {
+                    (full, Vec::new())
+                } else {
+                    ("cmd.exe".to_string(), vec!["/C".to_string(), full])
+                };
+            }
+        }
+    }
+    ("bun".to_string(), Vec::new())
 }
 
 fn release_sidecar_command(handle: &AppHandle) -> (String, Vec<String>, Option<PathBuf>) {
@@ -195,7 +244,7 @@ pub fn run() {
             pty_resize,
             pty_kill,
             pty_close_all,
-            default_shell,
+            wsl_available,
             config_load,
             config_save,
             messages_list,
@@ -307,4 +356,79 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_bun;
+    use std::collections::HashSet;
+    use std::path::{Path, PathBuf};
+
+    fn exists_in(present: &[&str]) -> impl Fn(&Path) -> bool {
+        let set: HashSet<PathBuf> = present.iter().map(PathBuf::from).collect();
+        move |p: &Path| set.contains(p)
+    }
+
+    #[test]
+    fn prefers_a_real_exe_and_runs_it_directly() {
+        let (program, args) = resolve_bun(
+            r"C:\bin;C:\tools",
+            None,
+            exists_in(&[r"C:\tools\bun.exe"]),
+        );
+        assert_eq!(program, r"C:\tools\bun.exe");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn wraps_a_cmd_shim_through_cmd_exe() {
+        let (program, args) = resolve_bun(
+            r"C:\npm",
+            None,
+            exists_in(&[r"C:\npm\bun.cmd"]),
+        );
+        assert_eq!(program, "cmd.exe");
+        assert_eq!(args, vec!["/C".to_string(), r"C:\npm\bun.cmd".to_string()]);
+    }
+
+    #[test]
+    fn wraps_a_bat_shim_through_cmd_exe() {
+        let (program, args) = resolve_bun(r"C:\npm", None, exists_in(&[r"C:\npm\bun.bat"]));
+        assert_eq!(program, "cmd.exe");
+        assert_eq!(args, vec!["/C".to_string(), r"C:\npm\bun.bat".to_string()]);
+    }
+
+    #[test]
+    fn exe_on_path_wins_over_later_cmd_shim() {
+        let (program, _) = resolve_bun(
+            r"C:\real;C:\npm",
+            None,
+            exists_in(&[r"C:\real\bun.exe", r"C:\npm\bun.cmd"]),
+        );
+        assert_eq!(program, r"C:\real\bun.exe");
+    }
+
+    #[test]
+    fn falls_back_to_home_bun_bin_when_not_on_path() {
+        let (program, args) = resolve_bun(
+            r"C:\bin",
+            Some(r"C:\Users\me"),
+            exists_in(&[r"C:\Users\me\.bun\bin\bun.exe"]),
+        );
+        assert_eq!(program, r"C:\Users\me\.bun\bin\bun.exe");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn falls_back_to_bare_bun_when_nothing_found() {
+        let (program, args) = resolve_bun(r"C:\bin", Some(r"C:\Users\me"), exists_in(&[]));
+        assert_eq!(program, "bun");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn ignores_empty_path_segments() {
+        let (program, _) = resolve_bun(r";;C:\npm;", None, exists_in(&[r"C:\npm\bun.cmd"]));
+        assert_eq!(program, "cmd.exe");
+    }
 }

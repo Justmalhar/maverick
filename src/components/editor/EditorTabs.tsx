@@ -37,8 +37,16 @@ import { EditorTab } from "./EditorTab";
 import { FileEditorTab } from "./FileEditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
 import { useTerminalTab } from "@/hooks/useTerminalTab";
+import { availableShells, type ShellKind } from "@/lib/terminal-shell";
+import { wslAvailable } from "@/lib/tauri";
 import { countLeaves } from "@/lib/splitnode";
 import { defaultTerminalCwd } from "@/lib/default-cwd";
+
+const SHELL_LABELS: Record<ShellKind, string> = {
+  powershell: "PowerShell",
+  cmd: "Command Prompt",
+  wsl: "WSL",
+};
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
@@ -88,10 +96,33 @@ export function EditorTabs() {
   const pinFileTab = useWorkbench((s) => s.pinFileTab);
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
-  async function onNewTerminal() {
+  // Shell profiles for the "+" menu. Windows offers PowerShell / Command Prompt /
+  // WSL; WSL is dropped unless a usable install is detected. Other platforms get
+  // an empty list and fall back to the single "Terminal" item.
+  const [shellKinds, setShellKinds] = useState<ShellKind[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const offered = availableShells();
+    if (!offered.includes("wsl")) {
+      setShellKinds(offered);
+      return;
+    }
+    wslAvailable()
+      .then((ok) => {
+        if (!cancelled) setShellKinds(ok ? offered : offered.filter((k) => k !== "wsl"));
+      })
+      .catch(() => {
+        if (!cancelled) setShellKinds(offered.filter((k) => k !== "wsl"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onNewTerminal(kind?: ShellKind) {
     try {
       const cwd = await defaultTerminalCwd();
-      await openTerminalTab(cwd);
+      await openTerminalTab(cwd, kind);
     } catch (err) {
       console.error("Failed to open terminal tab", err);
     }
@@ -279,13 +310,26 @@ export function EditorTabs() {
           </Tooltip>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>New</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={onNewTerminal}
-              data-testid="editor-tabs-open-terminal-tab"
-            >
-              <TerminalSquare className="h-3.5 w-3.5" />
-              <span className="flex-1">Terminal</span>
-            </DropdownMenuItem>
+            {shellKinds.length === 0 ? (
+              <DropdownMenuItem
+                onClick={() => onNewTerminal()}
+                data-testid="editor-tabs-open-terminal-tab"
+              >
+                <TerminalSquare className="h-3.5 w-3.5" />
+                <span className="flex-1">Terminal</span>
+              </DropdownMenuItem>
+            ) : (
+              shellKinds.map((kind) => (
+                <DropdownMenuItem
+                  key={kind}
+                  onClick={() => onNewTerminal(kind)}
+                  data-testid={`editor-tabs-open-terminal-${kind}`}
+                >
+                  <TerminalSquare className="h-3.5 w-3.5" />
+                  <span className="flex-1">{SHELL_LABELS[kind]}</span>
+                </DropdownMenuItem>
+              ))
+            )}
             <DropdownMenuItem
               onClick={onOpenPanelTerminal}
               data-testid="editor-tabs-open-terminal"
