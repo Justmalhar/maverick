@@ -124,6 +124,41 @@ describe("KanbanBoard", () => {
     );
   });
 
+  it("onSend prepends project AI preferences to the launch prompt", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "A", path: "/p1" })],
+      backends: [makeBackend({ id: "claude", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [];
+      if (cmd === "git_branches") return ["main"];
+      if (cmd === "kanban_upsert") return makeKanbanTask({ id: "t-new", status: "todo" });
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "main" });
+      if (cmd === "project_settings_get") return { preferences: { general: "be terse" } };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByRole("option", { name: "A" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
+    await userEvent.click(screen.getByTestId("composer-branch"));
+    await userEvent.click(await screen.findByRole("option", { name: "main" }));
+    await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
+    await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
+    await userEvent.click(screen.getByTestId("composer-send"));
+
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws-new"]?.prompt).toBe(
+        "[Project preferences]\n- general: be terse\n\nFix the thing"
+      )
+    );
+  });
+
   it("kanbanList error shows error bar", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("listfail"));
     renderWithProviders(<KanbanBoard />);

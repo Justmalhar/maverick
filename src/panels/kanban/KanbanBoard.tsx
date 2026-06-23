@@ -6,7 +6,9 @@ import {
   gitDiffStat,
   kanbanList,
   kanbanUpsert,
+  projectSettingsGet,
 } from "@/lib/tauri";
+import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -181,7 +183,16 @@ export default function KanbanBoard() {
 
       const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
       const { command, args } = resolveLaunch(payload.agentBackend);
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt: payload.prompt });
+      // Prepend the project's AI preferences so the launched agent honors them.
+      // Best-effort: a settings fetch failure must not block starting the task.
+      let prompt = payload.prompt;
+      try {
+        const settings = await projectSettingsGet(payload.projectId);
+        prompt = buildLaunchPrompt(settings.preferences, payload.prompt);
+      } catch (e) {
+        console.warn("projectSettingsGet failed; launching without preferences", e);
+      }
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
 
       await kanbanUpsert({
         id: task.id,
