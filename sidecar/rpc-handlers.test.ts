@@ -1489,4 +1489,19 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     const res = await handlers.dispatch("git.discard_file", { worktreePath: "/wt", filePath: "a.ts" });
     expect(res).toEqual({ ok: true });
   });
+
+  test("automation.activateTriggers / deactivateTriggers delegate to TriggerManager", async () => {
+    const calls: string[] = [];
+    const triggers = {
+      activate: (p: { workspaceId: string }) => calls.push(`activate:${p.workspaceId}`),
+      deactivate: (id: string) => calls.push(`deactivate:${id}`),
+    };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, triggers: triggers as never, notifier: { write: () => {} } });
+    await handlers.dispatch("automation.activateTriggers", {
+      workspaceId: "w1", projectPath: "/p", worktreePath: "/wt",
+    });
+    await handlers.dispatch("automation.deactivateTriggers", { workspaceId: "w1" });
+    expect(calls).toEqual(["activate:w1", "deactivate:w1"]);
+  });
 });

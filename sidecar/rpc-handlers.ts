@@ -14,13 +14,15 @@ import { GitModule } from "./git-module";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
 import { AutomationRunner } from "./automation-runner";
+import { TriggerManager } from "./trigger-manager";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
-import { FsWatcher } from "./fs-watcher";
+import { FsWatcher, SKIP_DIRS } from "./fs-watcher";
+import { watch as fsWatch } from "fs";
 import { FileSearch } from "./file-search";
 import { FileReader } from "./file-reader";
 import { FileWriter } from "./file-writer";
@@ -217,6 +219,12 @@ const Schemas = {
     worktreePath: nullishOptional(z.string()),
     vars: nullishOptional(z.record(z.string(), z.string())),
   }),
+  automationActivateTriggers: z.object({
+    workspaceId: z.string(),
+    projectPath: z.string(),
+    worktreePath: z.string(),
+  }),
+  automationDeactivateTriggers: z.object({ workspaceId: z.string() }),
   notifySend: z.object({
     title: z.string(),
     body: z.string(),
@@ -256,6 +264,7 @@ export interface RpcHandlersOptions {
   kanban?: KanbanStore;
   automations?: AutomationRunner;
   mcp?: MCPManager;
+  triggers?: TriggerManager;
   notifications?: NotificationService;
   context?: ContextTracker;
   usage?: UsageTracker;
@@ -272,6 +281,30 @@ export interface RpcHandlersOptions {
   notifier?: Notifier;
 }
 
+// Recursively watch a worktree, firing onChange for non-noise paths. fs.watch
+// `recursive` is supported on the desktop targets (Windows + macOS); returns an
+// unwatch fn. TriggerManager debounces on top of this.
+function watchWorktree(worktreePath: string, onChange: () => void): () => void {
+  try {
+    const w = fsWatch(worktreePath, { recursive: true }, (_event, filename) => {
+      if (filename) {
+        const segs = filename.toString().split(/[/\\]/);
+        if (segs.some((s) => SKIP_DIRS.has(s))) return;
+      }
+      onChange();
+    });
+    return () => {
+      try {
+        w.close();
+      } catch {
+        /* already closed */
+      }
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 export class RpcHandlers {
   readonly store: SQLiteStore;
   readonly process: ProcessManager;
@@ -284,6 +317,7 @@ export class RpcHandlers {
   readonly presets: PresetLauncher;
   readonly kanban: KanbanStore;
   readonly automations: AutomationRunner;
+  readonly triggers: TriggerManager;
   readonly mcp: MCPManager;
   readonly notifications: NotificationService;
   readonly context: ContextTracker;
@@ -322,6 +356,13 @@ export class RpcHandlers {
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
     this.automations =
       opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
+    this.triggers =
+      opts.triggers ??
+      new TriggerManager({
+        loadAutomations: (projectPath) => this.config.load(projectPath).automations ?? [],
+        runAutomation: (p) => this.automations.run(p),
+        watch: watchWorktree,
+      });
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
     this.notifications =
       opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
@@ -809,6 +850,16 @@ export class RpcHandlers {
           worktreePath,
           vars: p.vars,
         });
+      }
+      case "automation.activateTriggers": {
+        const p = Schemas.automationActivateTriggers.parse(params);
+        this.triggers.activate(p);
+        return { ok: true };
+      }
+      case "automation.deactivateTriggers": {
+        const p = Schemas.automationDeactivateTriggers.parse(params);
+        this.triggers.deactivate(p.workspaceId);
+        return { ok: true };
       }
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);
