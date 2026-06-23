@@ -7,7 +7,18 @@ import {
   HARDENED_ENV,
   toolAugmentedPath,
   repairToolPath,
+  shellCommandArgs,
 } from "./deps";
+
+describe("shellCommandArgs", () => {
+  test("uses cmd.exe on Windows", () => {
+    expect(shellCommandArgs("echo hi", "win32")).toEqual(["cmd", "/c", "echo hi"]);
+  });
+  test("uses /bin/sh on POSIX", () => {
+    expect(shellCommandArgs("echo hi", "linux")).toEqual(["/bin/sh", "-c", "echo hi"]);
+    expect(shellCommandArgs("echo hi", "darwin")).toEqual(["/bin/sh", "-c", "echo hi"]);
+  });
+});
 
 describe("defaultIds", () => {
   test("uuid returns prefixed unique string", () => {

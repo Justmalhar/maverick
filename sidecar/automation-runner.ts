@@ -3,7 +3,7 @@ import { GitModule } from "./git-module";
 import { SkillsEngine } from "./skills-engine";
 import { NotificationService } from "./notification-service";
 import { WorktreeManager } from "./worktree-manager";
-import { defaultShell, emit, stdoutNotifier } from "./deps";
+import { defaultShell, emit, stdoutNotifier, shellCommandArgs } from "./deps";
 import type { Automation, AutomationStep, Notifier, Shell } from "./types";
 
 interface RunParams {
@@ -81,7 +81,7 @@ export class AutomationRunner {
     switch (step.type) {
       case "shell": {
         const command = String(step.command ?? "");
-        const { exitCode, stderr } = await this.shell.run(["sh", "-c", command], worktreePath);
+        const { exitCode, stderr } = await this.shell.run(shellCommandArgs(command), worktreePath);
         if (exitCode !== 0) throw new Error(stderr || `shell step failed (exit ${exitCode})`);
         return;
       }

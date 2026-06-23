@@ -68,6 +68,18 @@ export function repairToolPath(): void {
   if (augmented !== undefined) process.env.PATH = augmented;
 }
 
+/**
+ * argv that runs a shell command STRING on the host's default shell. Windows
+ * has no `/bin/sh`, so user-authored scripts (setup/run/archive, automation
+ * shell steps) must go through `cmd.exe /c` there; POSIX uses `/bin/sh -c`.
+ */
+export function shellCommandArgs(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  return platform === "win32" ? ["cmd", "/c", command] : ["/bin/sh", "-c", command];
+}
+
 function hardenedEnv(): Record<string, string | undefined> {
   return { ...process.env, ...HARDENED_ENV, PATH: toolAugmentedPath() };
 }

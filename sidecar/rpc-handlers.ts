@@ -27,7 +27,7 @@ import { FileWriter } from "./file-writer";
 import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
-import { stdoutNotifier } from "./deps";
+import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
@@ -485,10 +485,12 @@ export class RpcHandlers {
         if (project) {
           const settings = this.projectSettings.read(project.path);
           if (settings.scripts.archive.trim() !== "") {
+            // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
+            const [archiveCmd, ...archiveArgs] = shellCommandArgs(settings.scripts.archive);
             const { proc, exited } = this.process.spawnOnceHandle({
               cwd: ws.worktreePath,
-              command: "/bin/sh",
-              args: ["-c", settings.scripts.archive],
+              command: archiveCmd,
+              args: archiveArgs,
             });
             const archive = exited
               .then((code) => ({ code }))

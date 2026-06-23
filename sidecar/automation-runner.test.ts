@@ -5,6 +5,7 @@ import { GitModule } from "./git-module";
 import { SkillsEngine } from "./skills-engine";
 import { NotificationService } from "./notification-service";
 import { WorktreeManager } from "./worktree-manager";
+import { shellCommandArgs } from "./deps";
 import type { AutomationStep, Shell } from "./types";
 
 interface Step { stdout?: string; exitCode?: number; stderr?: string }
@@ -163,7 +164,7 @@ describe("AutomationRunner.executeStep", () => {
       "/r",
       {}
     );
-    expect(calls[0]).toEqual(["sh", "-c", "echo"]);
+    expect(calls[0]).toEqual(shellCommandArgs("echo"));
   });
 
   test("shell step throws on non-zero exit", async () => {
