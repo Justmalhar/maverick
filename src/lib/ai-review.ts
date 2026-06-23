@@ -30,6 +30,29 @@ export function buildReviewPrompt(diff: DiffResult, reviewPref?: string): string
   return `${instruction}\n\nChanged files:\n${fileList}`;
 }
 
+export interface SendReviewCommentsOptions {
+  agentPtyId: string | undefined;
+  comments: ReviewComment[];
+  /** Called before writing so callers can surface the agent view. */
+  onAgentFocus?: () => void;
+}
+
+/**
+ * Write a batched `Re:`-prompt of inline review comments to the agent PTY.
+ * Returns `{ ran: false }` with no side effects when there are no comments or
+ * the agent PTY hasn't spawned. Idle-gating is the caller's responsibility (the
+ * button is disabled while the agent is working).
+ */
+export async function sendReviewComments(
+  opts: SendReviewCommentsOptions
+): Promise<{ ran: boolean }> {
+  if (opts.comments.length === 0) return { ran: false };
+  if (!opts.agentPtyId) return { ran: false };
+  opts.onAgentFocus?.();
+  await ptyWrite(opts.agentPtyId, `${buildReviewCommentsPrompt(opts.comments)}\n`);
+  return { ran: true };
+}
+
 export interface RunAiReviewOptions {
   /** The agent leaf's live PTY id (resolved by the caller). */
   agentPtyId: string | undefined;

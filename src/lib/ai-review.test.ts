@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { buildReviewPrompt, buildReviewCommentsPrompt, runAiReview } from "./ai-review";
+import { buildReviewPrompt, buildReviewCommentsPrompt, runAiReview, sendReviewComments } from "./ai-review";
 import { makeDiff, makeDiffFile } from "@/test/fixtures";
 import type { ReviewComment } from "@/lib/stores/review-comments";
 
@@ -52,6 +52,34 @@ describe("buildReviewCommentsPrompt", () => {
   it("includes an instructional header", () => {
     const prompt = buildReviewCommentsPrompt([comment()]);
     expect(prompt).toContain("review comments");
+  });
+});
+
+describe("sendReviewComments", () => {
+  it("returns ran:false with no comments", async () => {
+    const r = await sendReviewComments({ agentPtyId: "pty-1", comments: [] });
+    expect(r.ran).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
+  it("returns ran:false when no agent PTY is available", async () => {
+    const r = await sendReviewComments({ agentPtyId: undefined, comments: [comment()] });
+    expect(r.ran).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
+  it("writes the batched prompt to the agent PTY and focuses it", async () => {
+    const onAgentFocus = vi.fn();
+    const r = await sendReviewComments({
+      agentPtyId: "pty-1",
+      comments: [comment({ file: "src/a.ts", line: 9, body: "tidy" })],
+      onAgentFocus,
+    });
+    expect(r.ran).toBe(true);
+    expect(onAgentFocus).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(invoke).mock.calls.find((c) => c[0] === "pty_write");
+    expect((call?.[1] as { ptyId: string }).ptyId).toBe("pty-1");
+    expect((call?.[1] as { data: string }).data).toContain("Re: src/a.ts:9 — tidy");
   });
 });
 
