@@ -325,9 +325,22 @@ impl PtyManager {
                         .remove(&id_exit)
                 });
                 if let Some(mut session) = reaped {
-                    if let Some(handle) = session.reader_handle.take() {
+                    let reader_handle = session.reader_handle.take();
+                    // Windows ConPTY does not EOF a cloned reader until the
+                    // conpty (master) handle is closed, so the reader stays
+                    // blocked in read() and joining it here would deadlock —
+                    // pty:exit would never fire and the session would leak. Drop
+                    // the session (closing the master) BEFORE the join to force
+                    // the reader to unblock. On unix the reader already EOFs when
+                    // the child exits (slave close) and an early master close
+                    // could truncate buffered tail output, so keep join-then-drop.
+                    #[cfg(windows)]
+                    drop(session);
+                    if let Some(handle) = reader_handle {
                         let _ = handle.join();
                     }
+                    #[cfg(not(windows))]
+                    drop(session);
                 }
 
                 // Reader is joined, so the buffer is now final. Under the pending
@@ -480,6 +493,25 @@ mod tests {
     use portable_pty::{Child, CommandBuilder};
     use std::time::Instant;
 
+    // Windows has no /bin/sh; a PTY child built from it fails to spawn with
+    // CreateProcessW os error 3. cmd.exe is always present on Windows, /bin/sh
+    // on unix. `ping -n 31 127.0.0.1` is the reliable headless ~30s sleep.
+    #[cfg(windows)]
+    const SLEEP_CMD: &[&str] = &["cmd", "/c", "ping -n 31 127.0.0.1 >nul"];
+    #[cfg(not(windows))]
+    const SLEEP_CMD: &[&str] = &["/bin/sh", "-c", "sleep 30"];
+
+    #[cfg(windows)]
+    const EXIT0_CMD: &[&str] = &["cmd", "/c", "exit 0"];
+    #[cfg(not(windows))]
+    const EXIT0_CMD: &[&str] = &["/bin/sh", "-c", "exit 0"];
+
+    // Prints MAVOK then exits 7 — verifies stdout streaming + exit-code forwarding.
+    #[cfg(windows)]
+    const PRINT_EXIT: (&str, &[&str]) = ("cmd", &["/c", "echo MAVOK& exit 7"]);
+    #[cfg(not(windows))]
+    const PRINT_EXIT: (&str, &[&str]) = ("/bin/sh", &["-c", "printf MAVOK; exit 7"]);
+
     // Build a PtySession wired the same way `spawn` does, but driven directly so
     // tests don't need a Tauri AppHandle. Returns the session plus a handle to
     // the child so the test can observe the child's liveness.
@@ -532,7 +564,7 @@ mod tests {
 
     #[test]
     fn drop_kills_child() {
-        let (session, mut child) = make_session(&["/bin/sh", "-c", "sleep 30"]);
+        let (session, mut child) = make_session(SLEEP_CMD);
         assert!(
             child.try_wait().unwrap().is_none(),
             "child must be alive before drop"
@@ -546,14 +578,14 @@ mod tests {
 
     #[test]
     fn drop_after_child_exited_does_not_panic() {
-        let (session, mut child) = make_session(&["/bin/sh", "-c", "exit 0"]);
+        let (session, mut child) = make_session(EXIT0_CMD);
         let _ = child.wait();
         drop(session); // killing an already-dead child must be a no-op, not a panic.
     }
 
     #[test]
     fn drop_sets_done_and_wakes_threads() {
-        let (session, _child) = make_session(&["/bin/sh", "-c", "sleep 30"]);
+        let (session, _child) = make_session(SLEEP_CMD);
         let done = session.done.clone();
         let pending = session.pending.clone();
         // A stand-in flusher blocked on the condvar must wake on drop.
@@ -625,8 +657,8 @@ mod tests {
     fn kill_removes_session_and_close_all_clears_map() {
         let mgr = PtyManager::new();
         // Insert two sessions directly (no AppHandle needed for map mechanics).
-        let (s1, mut c1) = make_session(&["/bin/sh", "-c", "sleep 30"]);
-        let (s2, mut c2) = make_session(&["/bin/sh", "-c", "sleep 30"]);
+        let (s1, mut c1) = make_session(SLEEP_CMD);
+        let (s2, mut c2) = make_session(SLEEP_CMD);
         mgr.sessions.lock().unwrap().insert("a".into(), s1);
         mgr.sessions.lock().unwrap().insert("b".into(), s2);
         assert_eq!(mgr.session_count(), 2);
@@ -679,8 +711,8 @@ mod tests {
             .spawn(
                 sink,
                 SpawnParams {
-                    command: "/bin/sh".into(),
-                    args: vec!["-c".into(), "printf MAVOK; exit 7".into()],
+                    command: PRINT_EXIT.0.into(),
+                    args: PRINT_EXIT.1.iter().map(|s| (*s).into()).collect(),
                     cwd: None,
                     env: None,
                     cols: 80,
@@ -690,8 +722,9 @@ mod tests {
             .expect("spawn");
         assert!(id.starts_with("pty_"));
 
-        // Wait up to 3s for the child to exit and the waiter to reap it.
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Wait for the child to exit and the waiter to reap it. Windows ConPTY
+        // can lag the exit signal vs unix, so allow generous headroom.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while std::time::Instant::now() < deadline {
             if exited.lock().unwrap().is_some() {
                 break;
