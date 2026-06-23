@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ptySpawn, ptyKill } from "@/lib/tauri";
-import { getGlobalEnv } from "@/lib/stores/settings";
-import { resolveDefaultShell } from "@/lib/terminal-shell";
+import { getGlobalEnv, getDefaultShellKind } from "@/lib/stores/settings";
+import { resolveShell } from "@/lib/terminal-shell";
 import { useLaunchSpec } from "@/hooks/useLaunchSpec";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
@@ -74,7 +74,7 @@ export function TerminalLeaf({
     }
     let cancelled = false;
     setState({ status: "spawning" });
-    const { shell, args } = resolveDefaultShell();
+    const { shell, args } = resolveShell(getDefaultShellKind());
     ptySpawn(shell, args, workspace.worktreePath, getGlobalEnv())
       .then(({ ptyId }) => {
         if (cancelled) return;

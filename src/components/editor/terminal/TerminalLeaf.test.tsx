@@ -143,6 +143,19 @@ describe("TerminalLeaf", () => {
     );
   });
 
+  it("spawns the chosen shell when terminal.defaultShell is set", async () => {
+    useSettingsStore.setState({ values: { "terminal.defaultShell": "cmd" } });
+    renderWithProviders(
+      <TerminalLeaf leafId="leaf-cmd" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ command: "cmd.exe", args: [] })
+      )
+    );
+  });
+
   it("the primary leaf consumes the staged launch spec and types the command", async () => {
     vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-primary" } as never);
     useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--yolo"] });

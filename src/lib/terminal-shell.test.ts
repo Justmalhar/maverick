@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { isWindows, resolveDefaultShell } from "./terminal-shell";
+import { isWindows, resolveDefaultShell, resolveShell, availableShells } from "./terminal-shell";
+
+const WIN = { platform: "Win32" };
+const MAC = { platform: "MacIntel" };
 
 describe("isWindows", () => {
   it("detects Windows from userAgent", () => {
@@ -39,5 +42,42 @@ describe("resolveDefaultShell", () => {
       shell: "/bin/zsh",
       args: ["-l"],
     });
+  });
+});
+
+describe("availableShells", () => {
+  it("offers PowerShell, cmd, and WSL on Windows", () => {
+    expect(availableShells(WIN)).toEqual(["powershell", "cmd", "wsl"]);
+  });
+
+  it("offers nothing on macOS/Linux", () => {
+    expect(availableShells(MAC)).toEqual([]);
+  });
+});
+
+describe("resolveShell", () => {
+  it("resolves PowerShell", () => {
+    expect(resolveShell("powershell", WIN)).toEqual({ shell: "powershell.exe", args: ["-NoLogo"] });
+  });
+
+  it("resolves cmd", () => {
+    expect(resolveShell("cmd", WIN)).toEqual({ shell: "cmd.exe", args: [] });
+  });
+
+  it("resolves WSL", () => {
+    expect(resolveShell("wsl", WIN)).toEqual({ shell: "wsl.exe", args: [] });
+  });
+
+  it("honors an explicit kind regardless of detected platform", () => {
+    expect(resolveShell("cmd", MAC)).toEqual({ shell: "cmd.exe", args: [] });
+  });
+
+  it("falls back to the platform default for an unknown kind", () => {
+    expect(resolveShell("fish", MAC)).toEqual({ shell: "/bin/zsh", args: ["-l"] });
+    expect(resolveShell("fish", WIN)).toEqual({ shell: "powershell.exe", args: ["-NoLogo"] });
+  });
+
+  it("falls back to the platform default when no kind is given", () => {
+    expect(resolveShell(undefined, MAC)).toEqual({ shell: "/bin/zsh", args: ["-l"] });
   });
 });

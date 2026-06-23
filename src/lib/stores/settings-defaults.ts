@@ -53,6 +53,8 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "terminal.codex.command": "codex",
   "terminal.gemini.command": "gemini",
   "terminal.pi.command": "pi",
+  // Default shell new terminals launch under (Windows: powershell | cmd | wsl).
+  "terminal.defaultShell": "powershell",
 
   // Advanced
   "advanced.largeTextThreshold": 5000,

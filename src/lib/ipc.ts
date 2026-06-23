@@ -412,6 +412,7 @@ export type SettingsKey =
   | "terminal.codex.command"
   | "terminal.gemini.command"
   | "terminal.pi.command"
+  | "terminal.defaultShell"
   | "advanced.largeTextThreshold"
   | "advanced.lruLimit"
   | "advanced.caffeinate"

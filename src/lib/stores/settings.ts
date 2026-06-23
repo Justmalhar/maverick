@@ -110,6 +110,16 @@ export function getGlobalEnv(): Record<string, string> {
   return parseEnvMap(useSettingsStore.getState().values["general.env"]);
 }
 
+/**
+ * Imperative read of the persisted default terminal shell kind for non-React
+ * callers (PTY spawns). Returns undefined when unset so the caller falls back
+ * to the platform default.
+ */
+export function getDefaultShellKind(): string | undefined {
+  const v = useSettingsStore.getState().values["terminal.defaultShell"];
+  return typeof v === "string" ? v : undefined;
+}
+
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);

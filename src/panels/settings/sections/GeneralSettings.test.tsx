@@ -40,6 +40,26 @@ describe("GeneralSettings", () => {
     expect(useSettingsStore.getState().values["general.defaultBackendBinPath"]).toBe("/usr/local/bin/myagent");
   });
 
+  it("hides the shell selector on non-Windows platforms", () => {
+    renderWithProviders(<GeneralSettings />);
+    expect(screen.queryByTestId("general-default-shell")).not.toBeInTheDocument();
+  });
+
+  it("renders the Windows shell selector defaulting to PowerShell", () => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      configurable: true,
+    });
+    try {
+      renderWithProviders(<GeneralSettings />);
+      const select = screen.getByTestId("general-default-shell");
+      expect(select).toBeInTheDocument();
+      expect(select).toHaveTextContent("PowerShell");
+    } finally {
+      Reflect.deleteProperty(navigator, "userAgent");
+    }
+  });
+
   it("Run setup wizard button calls reset_first_run", async () => {
     mockInvoke.mockResolvedValueOnce(undefined);
     renderWithProviders(<GeneralSettings />);
