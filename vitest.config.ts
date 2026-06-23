@@ -19,7 +19,12 @@ export default defineConfig({
         // @lobehub/icons re-exports brand SVGs and uses directory imports
         // (e.g. ".../FluentEmoji") that Node's strict ESM resolver rejects.
         // Inlining lets vite's resolver handle them through the dev pipeline.
-        inline: [/@lobehub/],
+        //
+        // @testing-library/jest-dom must be inlined too: left external, node
+        // resolves its own `vitest` instance, so the setupFiles expect.extend
+        // mutates a different expect than test files use and matchers like
+        // toBeInTheDocument never register (node 24 + vitest 2 surfaced this).
+        inline: [/@lobehub/, /@testing-library\/jest-dom/],
       },
     },
     coverage: {
