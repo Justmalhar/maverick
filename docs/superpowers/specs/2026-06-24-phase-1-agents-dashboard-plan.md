@@ -42,7 +42,10 @@ The codebase is ahead of the docs. Phase 1 building blocks already exist:
   project, branch+backend, click-to-focus; Workspaces + Active stats; empty state). 8 tests.
 - **Step 2 done.** `dashboard`→`DashboardView`, new `usage` tab→`UsagePanel`; nav + tab-meta +
   dropdown updated; `EditorGroup` routing tests updated (dashboard→Agents, +usage test).
-- **Gate:** `bun run build` ✅ (tsc + vite clean). Full vitest **1420 passing / 172 files** ✅.
+- **Step 3 done (enhancement).** Each card now fetches its worktree diff (`diffGet`) and shows
+  changed-file count + `+adds`/`−dels` — Conductor's at-a-glance review cue. Refetches on live
+  status change; hidden when clean. 3 tests. Frontend-only (consumes existing `diff_get`).
+- **Gate:** `bun run build` ✅ (tsc + vite clean). Full vitest **1423 passing / 172 files** ✅.
   Rust gate **unaffected** — `git diff` shows zero `.rs`/`Cargo` changes (frontend-only), so the
   base (`0b9effc`) Rust-green state carries; no cold cargo build run (separate target dir +
   concurrent-session CPU contention, zero Rust delta).
