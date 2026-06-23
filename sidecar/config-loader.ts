@@ -64,6 +64,8 @@ const AutomationStepSchema = z
 const AutomationSchema = z.object({
   name: z.string(),
   trigger: z.enum(["manual", "schedule", "on-file-change"]),
+  // Cadence for schedule triggers, e.g. "30m" / "2h" / "1d".
+  interval: z.string().optional(),
   steps: z.array(AutomationStepSchema),
 });
 

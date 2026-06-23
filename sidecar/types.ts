@@ -96,6 +96,8 @@ export type PresetNode =
 export interface Automation {
   name: string;
   trigger: "manual" | "schedule" | "on-file-change";
+  // Cadence for `trigger: "schedule"` — simple interval like "30m" / "2h" / "1d".
+  interval?: string;
   steps: AutomationStep[];
 }
 
