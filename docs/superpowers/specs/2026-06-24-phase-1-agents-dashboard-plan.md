@@ -37,6 +37,19 @@ The codebase is ahead of the docs. Phase 1 building blocks already exist:
 3. **Verify gate:** `bun run build`, full vitest suite, `cargo check -p maverick`,
    `cargo test -p maverick-core`. Note manual-click items.
 
+## Result (2026-06-24 — shipped)
+- **Step 1 done.** `DashboardView` rebuilt as the Agents Dashboard (cards w/ live status,
+  project, branch+backend, click-to-focus; Workspaces + Active stats; empty state). 8 tests.
+- **Step 2 done.** `dashboard`→`DashboardView`, new `usage` tab→`UsagePanel`; nav + tab-meta +
+  dropdown updated; `EditorGroup` routing tests updated (dashboard→Agents, +usage test).
+- **Gate:** `bun run build` ✅ (tsc + vite clean). Full vitest **1420 passing / 172 files** ✅.
+  Rust gate **unaffected** — `git diff` shows zero `.rs`/`Cargo` changes (frontend-only), so the
+  base (`0b9effc`) Rust-green state carries; no cold cargo build run (separate target dir +
+  concurrent-session CPU contention, zero Rust delta).
+- **Needs a human click** (GUI, can't automate here): open the **Dashboard** tab → see a card per
+  open workspace; run an agent → watch its card flip working→idle/attention/done; open the new
+  **Usage** tab → Usage Manager still renders.
+
 ## Carry-forward (do not chase — same as Phase 0 plan)
 Coverage% unmeasurable on node 24 (tests-pass is the signal); `cargo test -p maverick` GUI crate
 won't launch (wry/webview2); `bun test sidecar/` ~23 POSIX-fixture failures (CI-green).
