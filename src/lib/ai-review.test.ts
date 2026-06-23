@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { buildReviewPrompt, runAiReview } from "./ai-review";
+import { buildReviewPrompt, buildReviewCommentsPrompt, runAiReview } from "./ai-review";
 import { makeDiff, makeDiffFile } from "@/test/fixtures";
+import type { ReviewComment } from "@/lib/stores/review-comments";
+
+function comment(over: Partial<ReviewComment> = {}): ReviewComment {
+  return { id: "c1", workspaceId: "w1", file: "src/a.ts", line: 1, side: "new", body: "fix", ...over };
+}
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue(undefined as never);
@@ -26,6 +31,27 @@ describe("buildReviewPrompt", () => {
   it("falls back to the default instruction for a whitespace-only preference", () => {
     const prompt = buildReviewPrompt(makeDiff(), "   ");
     expect(prompt).toContain("Review the staged and unstaged changes");
+  });
+});
+
+describe("buildReviewCommentsPrompt", () => {
+  it("returns an empty string for no comments", () => {
+    expect(buildReviewCommentsPrompt([])).toBe("");
+  });
+
+  it("emits one Re: file:line — body line per comment, in order", () => {
+    const prompt = buildReviewCommentsPrompt([
+      comment({ file: "src/a.ts", line: 12, body: "rename this" }),
+      comment({ file: "src/b.ts", line: 3, body: "handle null" }),
+    ]);
+    expect(prompt).toContain("Re: src/a.ts:12 — rename this");
+    expect(prompt).toContain("Re: src/b.ts:3 — handle null");
+    expect(prompt.indexOf("src/a.ts")).toBeLessThan(prompt.indexOf("src/b.ts"));
+  });
+
+  it("includes an instructional header", () => {
+    const prompt = buildReviewCommentsPrompt([comment()]);
+    expect(prompt).toContain("review comments");
   });
 });
 

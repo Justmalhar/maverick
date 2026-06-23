@@ -1,5 +1,21 @@
 import { diffGet, ptyWrite } from "@/lib/tauri";
 import type { DiffResult } from "@/lib/ipc";
+import type { ReviewComment } from "@/lib/stores/review-comments";
+
+const REVIEW_COMMENTS_HEADER =
+  "Please address these review comments on the current diff. Each line references a " +
+  "file and line number:";
+
+/**
+ * Compose a structured prompt from inline diff comments — one
+ * `Re: <file>:<line> — <body>` line per comment, in insertion order. Returns an
+ * empty string when there are no comments so callers can skip sending.
+ */
+export function buildReviewCommentsPrompt(comments: ReviewComment[]): string {
+  if (comments.length === 0) return "";
+  const lines = comments.map((c) => `Re: ${c.file}:${c.line} — ${c.body}`);
+  return `${REVIEW_COMMENTS_HEADER}\n\n${lines.join("\n")}`;
+}
 
 const DEFAULT_REVIEW_INSTRUCTION =
   "Review the staged and unstaged changes in this worktree. Flag correctness bugs, " +
