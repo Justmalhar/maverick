@@ -24,12 +24,26 @@ a small set of Windows-shell bugs + two stubbed sub-features.
    `sh`. Both fail on Windows. Add `shellCommandArgs(command)` to `deps.ts` → `["cmd","/c",cmd]`
    on Windows, `["/bin/sh","-c",cmd]` on POSIX; use at both sites. Update tests to assert via the
    helper (platform-aware).
-2. **Automations triggers.** `schedule` + `on-file-change` are accepted by the schema and shown
-   in the builder but never executed. Wire `on-file-change` to the existing fs-watcher and
-   `schedule` to a simple interval/cron tick in the sidecar. (Larger; after #1.)
-3. **AI preferences consumption.** Verify whether `project.preferences.*` is read by any
-   execution path (workspace create / agent launch). If genuinely dead, wire it into the launch
-   spec; if intentionally future, document it.
+2. **[DONE] Cross-platform shell** — committed: `shellCommandArgs()` used by archive + automation
+   shell steps. Verified (deps + automation tests pass; sidecar imports clean).
+
+## Remaining — design-needed sub-features (NOT Windows bugs; incomplete on all platforms)
+
+These need a design decision, so they're left for a focused design+build pass rather than a
+blind unattended build:
+
+3. **Automations `schedule` + `on-file-change` triggers** — CONFIRMED no scheduler/watcher exists
+   (`automation-runner.ts` has no cron/setInterval/watch). Recommended design: register active
+   triggers per open workspace; `on-file-change` → debounced (≈500ms) hook on the existing
+   fs-watcher running `automation.run` in that worktree; `schedule` → sidecar interval tick
+   (simple `Nm/Nh` cadence, not full cron). Open questions: activation lifecycle (per
+   workspace-open? persisted + auto-start on sidecar boot?), watcher scope, overlap guarding —
+   hence design-first.
+4. **AI preferences consumption** — CONFIRMED `project.preferences.*` is parsed/persisted
+   (`project-settings.ts`) but read by NO execution path (only `InstructionsResolver`, which is
+   MAVERICK.md, is wired). Recommended: inject the preferences map into the agent launch prompt
+   or merge into resolved instructions on workspace create. Open question: where prefs sit
+   relative to MAVERICK.md and per-skill prompts — design-first.
 
 ## Carry-forward (do not chase)
 Coverage% on node 24 (both providers fail; tests-pass is the signal; don't weaken thresholds);
