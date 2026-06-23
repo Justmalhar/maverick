@@ -1,6 +1,14 @@
 # Automation triggers + AI-preferences injection — Design
 
-*Date: 2026-06-24 · Branch: Maverick-Windows · Status: approved*
+*Date: 2026-06-24 · Branch: Maverick-Windows · Status: IMPLEMENTED*
+
+> **DONE (2026-06-24).** Both features built + tested + wired through all layers; app boots
+> clean. Feature B: `agent-prompt.ts` (`formatPreferences`/`buildLaunchPrompt`) + composer
+> wiring. Feature A: `trigger-manager.ts` (11 tests) → sidecar RPC (`automation.activate/
+> deactivateTriggers` + fs.watch adapter) → Rust commands → `useAutomationTriggers` on
+> `WorkspaceEditor`. Gate: tsc clean, vitest 1422/1422, cargo check ✅, sidecar additions green
+> (22 pre-existing POSIX-fixture fails only), tauri dev boots. Interactive confirmation (a
+> schedule firing / a file-change run / prefs reaching a live agent) needs a human click.
 
 Completes the two PARTIAL features from the feature-completeness audit
 (`2026-06-23-feature-completeness-plan.md`). Both are incomplete on all platforms (not Windows
