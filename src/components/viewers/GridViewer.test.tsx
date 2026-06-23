@@ -112,6 +112,9 @@ describe("GridViewer", () => {
       />
     );
     await screen.findByRole("columnheader", { name: /name/i });
+    // Wait for the parsed rows (not just the header) so copyContents reads the
+    // full grid — under parallel-suite load the rows can lag the header.
+    await screen.findByText("banana");
     await actions.copyContents?.();
     expect(writeText).toHaveBeenCalledWith("name\tqty\nbanana\t5\napple\t3");
   });
@@ -216,6 +219,9 @@ describe("GridViewer", () => {
         registerActions={(a) => { actions = a; }}
       />
     );
+    // Ensure rows are parsed before sorting/copying (rows can lag the header
+    // under parallel-suite load).
+    await screen.findByText("banana");
     // Sort by name asc: apple < banana
     fireEvent.click(await screen.findByRole("columnheader", { name: /name/i }));
     await actions.copyContents?.();
