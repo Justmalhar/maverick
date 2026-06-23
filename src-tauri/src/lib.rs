@@ -300,6 +300,8 @@ pub fn run() {
             usage_summary,
             attachment_create,
             automation_run,
+            automation_activate_triggers,
+            automation_deactivate_triggers,
             notify_send,
             notify_list,
             notify_mark_read,

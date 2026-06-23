@@ -405,6 +405,18 @@ export async function automationRun(
   return invoke("automation_run", { automationName, workspaceId, projectPath, worktreePath });
 }
 
+export async function automationActivateTriggers(
+  workspaceId: string,
+  projectPath: string,
+  worktreePath: string
+): Promise<void> {
+  return invoke("automation_activate_triggers", { workspaceId, projectPath, worktreePath });
+}
+
+export async function automationDeactivateTriggers(workspaceId: string): Promise<void> {
+  return invoke("automation_deactivate_triggers", { workspaceId });
+}
+
 export async function notifySend(
   title: string,
   body: string,
