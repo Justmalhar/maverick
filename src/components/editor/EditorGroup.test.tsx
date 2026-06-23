@@ -119,7 +119,9 @@ describe("EditorGroup", () => {
   it("renders kanban system tab (KanbanBoard)", async () => {
     useWorkbench.setState({ ...initial, systemTabs: ["kanban"], activeSystemTab: "kanban", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);
-    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // KanbanBoard is a lazy() chunk (dnd + react-window); the first cold import
+    // can exceed waitFor's 1000ms default under coverage instrumentation.
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument(), { timeout: 5000 });
   });
 
   it("renders automations system tab (AutomationsPanel)", async () => {
@@ -154,8 +156,8 @@ describe("EditorGroup", () => {
       activeWorkspaceId: null,
     });
     renderWithProviders(<EditorGroup />);
-    // The active kanban tab renders…
-    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // The active kanban tab renders… (lazy chunk; allow cold-import headroom)
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument(), { timeout: 5000 });
     // …while the browser stays in the DOM (keep-alive), just hidden.
     const browser = await screen.findByTestId("browser-panel");
     expect(browser).toBeInTheDocument();
