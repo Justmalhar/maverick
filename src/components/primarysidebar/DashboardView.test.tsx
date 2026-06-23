@@ -1,14 +1,17 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen, within } from "@/test/utils";
+import { invoke } from "@tauri-apps/api/core";
+import { renderWithProviders, screen, within, waitFor } from "@/test/utils";
 import { DashboardView } from "./DashboardView";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
-import { makeWorkspace, makeProject } from "@/test/fixtures";
+import { makeWorkspace, makeProject, makeDiff, makeDiffFile } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
+  // Cards fetch a diff summary on mount; default to no result (no stats row).
+  vi.mocked(invoke).mockReset().mockResolvedValue(undefined as never);
   useWorkbench.setState({
     ...initial,
     projects: [],
@@ -92,6 +95,44 @@ describe("DashboardView", () => {
     renderWithProviders(<DashboardView />);
     await userEvent.click(screen.getByTestId("dashboard-agent-w1"));
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
+  });
+
+  it("shows the worktree diff summary (files + adds/dels) on a card", async () => {
+    vi.mocked(invoke).mockResolvedValue(
+      makeDiff({
+        files: [
+          makeDiffFile({ path: "src/a.ts", additions: 7, deletions: 2 }),
+          makeDiffFile({ path: "src/b.ts", additions: 3, deletions: 1 }),
+        ],
+      }) as never
+    );
+    useWorkbench.setState({ ...initial, workspaces: [makeWorkspace({ id: "w1" })] });
+    renderWithProviders(<DashboardView />);
+    const stats = await screen.findByTestId("dashboard-agent-stats-w1");
+    expect(stats).toHaveTextContent("2 files");
+    expect(stats).toHaveTextContent("+10");
+    expect(stats).toHaveTextContent("3");
+    expect(invoke).toHaveBeenCalledWith(
+      "diff_get",
+      expect.objectContaining({ worktreePath: "/tmp/demo/.maverick/worktrees/ws-1" })
+    );
+  });
+
+  it("shows a singular file label for a single changed file", async () => {
+    vi.mocked(invoke).mockResolvedValue(
+      makeDiff({ files: [makeDiffFile({ additions: 1, deletions: 0 })] }) as never
+    );
+    useWorkbench.setState({ ...initial, workspaces: [makeWorkspace({ id: "w1" })] });
+    renderWithProviders(<DashboardView />);
+    expect(await screen.findByTestId("dashboard-agent-stats-w1")).toHaveTextContent("1 file");
+  });
+
+  it("omits the diff summary when the worktree is clean", async () => {
+    vi.mocked(invoke).mockResolvedValue(makeDiff({ files: [] }) as never);
+    useWorkbench.setState({ ...initial, workspaces: [makeWorkspace({ id: "w1" })] });
+    renderWithProviders(<DashboardView />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("diff_get", expect.anything()));
+    expect(screen.queryByTestId("dashboard-agent-stats-w1")).not.toBeInTheDocument();
   });
 
   it("marks the active workspace's card", () => {

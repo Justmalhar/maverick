@@ -1,8 +1,16 @@
+import { useEffect, useState } from "react";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatus, useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
+import { diffGet } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/ipc";
+
+interface DiffStats {
+  files: number;
+  additions: number;
+  deletions: number;
+}
 
 export function DashboardView() {
   const workspaces = useWorkbench((s) => s.workspaces);
@@ -58,6 +66,33 @@ function AgentCard({
   const status = useAgentStatus(workspace.id);
   const isActive = useWorkbench((s) => s.activeWorkspaceId === workspace.id);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const [stats, setStats] = useState<DiffStats | null>(null);
+
+  // Re-fetch the worktree diff summary whenever the agent goes quiet — a fresh
+  // `working`/`done` transition is the cheapest signal that the tree changed.
+  useEffect(() => {
+    let cancelled = false;
+    diffGet(workspace.worktreePath)
+      .then((diff) => {
+        if (cancelled) return;
+        const files = diff?.files ?? [];
+        setStats(
+          files.length === 0
+            ? null
+            : {
+                files: files.length,
+                additions: files.reduce((n, f) => n + f.additions, 0),
+                deletions: files.reduce((n, f) => n + f.deletions, 0),
+              }
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.worktreePath, status]);
 
   return (
     <li>
@@ -87,6 +122,18 @@ function AgentCard({
           <span className="shrink-0">·</span>
           <span className="shrink-0 font-mono">{workspace.agentBackend}</span>
         </div>
+        {stats && (
+          <div
+            data-testid={`dashboard-agent-stats-${workspace.id}`}
+            className="flex items-center gap-2 text-[10px] font-mono"
+          >
+            <span className="text-muted-foreground">
+              {stats.files} file{stats.files === 1 ? "" : "s"}
+            </span>
+            <span className="text-success">+{stats.additions}</span>
+            <span className="text-destructive">−{stats.deletions}</span>
+          </div>
+        )}
       </button>
     </li>
   );
