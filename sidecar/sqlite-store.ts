@@ -144,7 +144,10 @@ export class SQLiteStore {
 
   projectAdd(input: { path: string; name?: string }): Project {
     const id = this.ids.uuid("proj");
-    const name = input.name ?? input.path.split("/").filter(Boolean).pop() ?? "project";
+    // Split on BOTH separators: the Windows folder picker returns backslash
+    // paths (C:\…\repo), so splitting only on "/" would make the whole path the
+    // project name. Platform-independent so it's deterministic in tests too.
+    const name = input.name ?? input.path.split(/[/\\]/).filter(Boolean).pop() ?? "project";
     const createdAt = Math.floor(this.ids.now() / 1000);
     this.db
       .query("INSERT INTO projects (id, name, path, created_at) VALUES (?, ?, ?, ?)")

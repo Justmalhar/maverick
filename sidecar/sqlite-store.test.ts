@@ -40,6 +40,17 @@ describe("SQLiteStore", () => {
     expect(p.name).toBe("project");
   });
 
+  test("projectAdd infers name from a Windows backslash path", () => {
+    const p = store.projectAdd({ path: "C:\\Users\\me\\my-repo" });
+    expect(p.name).toBe("my-repo");
+    expect(p.path).toBe("C:\\Users\\me\\my-repo");
+  });
+
+  test("projectAdd infers name from a Windows path with trailing separator", () => {
+    const p = store.projectAdd({ path: "C:\\dev\\maverick\\" });
+    expect(p.name).toBe("maverick");
+  });
+
   test("projectList returns projects in descending order", () => {
     store.projectAdd({ path: "/a" });
     store.projectAdd({ path: "/b" });
