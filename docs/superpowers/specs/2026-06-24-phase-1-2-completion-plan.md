@@ -70,6 +70,33 @@ worktree-manager.
   - Files: `src/shortcuts/registry.ts` + `useShortcuts.ts`, `DiffViewer.tsx` (expose goToDiff/stage).
   - Tests: shortcut registry entries exist + dispatch the right action when a diff tab is active.
 
+## RESULTS (2026-06-24 — overnight run, all green)
+Gate after every task: `bun run build` ✅ + full `bunx vitest run` ✅ (**1455 passing / 176 files**,
++32 tests). Rust gate **unaffected** — zero `.rs`/`Cargo` changes (frontend-only).
+
+- **P1-B ✅ DONE.** `useAgentNotifications` (mounted in Workbench) fires `notify_send` on agent
+  transitions into done/error/attention; Toaster routes by focus. 7 tests.
+- **P1-C ✅ DONE.** `primaryAgentPtyId(workspaceId)` → primary-leaf PTY; `runAiReview` now takes
+  `agentPtyId` (was sending to a workspace id → silent no-op). Fixed both call sites (DiffView +
+  ai.review shortcut). 3 helper tests + updated ai-review/DiffView/useShortcuts tests.
+- **P2-A ✅ DONE.** `useReviewComments` store (per-workspace {file,line,side,body}; add/update/
+  remove/clearForWorkspace + selector). 6 tests.
+- **P2-B ✅ DONE.** `ReviewComments` inline authoring (file+line composer, list, edit, delete),
+  rendered in DiffView under the changed-file list. 6 tests. (Authoring lives in the testable
+  React surface, not the Monaco gutter — see P2-E note.)
+- **P2-C ✅ DONE.** `buildReviewCommentsPrompt` → `Re: <file>:<line> — <body>` batch. 3 tests.
+- **P2-D ✅ DONE.** `sendReviewComments` + DiffView "Send N comments to agent" button, disabled
+  while the agent is `working`, writes to the primary PTY, clears comments. 3 lib + 3 UI tests.
+- **P2-E ⏸ DEFERRED (deliberate — would introduce bugs).** Reasons: (1) the spec's stage key
+  `⌘⇧A` is already bound to **Automations** (`view.automations`); (2) `]c`/`[c` are *unmodified
+  key sequences* — every existing binding uses a modifier, and the shortcut handler has **no
+  input-focus guard**, so they would fire while typing in the comment textarea; (3) Monaco
+  `goToDiff`/gutter wiring isn't exercisable under the test Monaco mock, and CI enforces 100% line
+  coverage, so the code would fail CI without first extending the shared mock. Hunk *staging* is
+  already available at the API level (`diffStageHunk`). **Follow-up:** add an input-focus guard to
+  `useShortcuts`, pick non-conflicting keys (or Monaco-scoped commands), extend the Monaco mock
+  with `goToDiff`, then wire Next/Prev-change + stage/unstage with tests.
+
 ## Final gate (before declaring Phase 1+2 done)
 `bun run build` ✅ · `bunx vitest run` all green ✅ · Rust gate unaffected (no `.rs` changes) or
 `cargo check -p maverick` + `cargo test -p maverick-core` ✅ if Rust touched. Per feature, report:
