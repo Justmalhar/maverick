@@ -9,6 +9,7 @@ import {
   projectSettingsGet,
 } from "@/lib/tauri";
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
+import { resolveLaunch } from "@/lib/launch";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -23,23 +24,6 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
   "done",
 ];
 
-// Mirrors the old AgentTerminal backend→command map; resolves the launch
-// command when a backend has no explicit `command` in the store.
-const BACKEND_COMMAND_FALLBACK: Record<string, string> = {
-  "claude-code": "claude",
-  codex: "codex",
-  gemini: "gemini",
-  aider: "aider",
-  ollama: "ollama",
-};
-
-function resolveLaunch(backendId: string): { command: string; args: string[] } {
-  const backend = useWorkbench.getState().backends.find((b) => b.id === backendId);
-  return {
-    command: backend?.command ?? BACKEND_COMMAND_FALLBACK[backendId] ?? backendId,
-    args: backend?.args ?? [],
-  };
-}
 
 export default function KanbanBoard() {
   const workspaces = useWorkbench((s) => s.workspaces);

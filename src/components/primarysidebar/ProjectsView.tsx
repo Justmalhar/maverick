@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProjectItem } from "./ProjectItem";
 import { CreateFromDialog } from "./CreateFromDialog";
 import { pickProjectFolder } from "@/lib/dialog";
+import { resolveLaunch } from "@/lib/launch";
 
 const DEFAULT_BACKEND = "claude-code";
 
@@ -27,10 +28,14 @@ export function ProjectsView() {
   }
 
   // Branch name and base branch are resolved by the sidecar (generated
-  // callsign, branched from project settings' branchFrom).
+  // callsign, branched from project settings' branchFrom). Stage a launch spec
+  // so the default agent CLI (e.g. `claude`) auto-starts in the terminal —
+  // the user shouldn't have to type it on every new workspace.
   async function onAddWorkspace(projectId: string, baseBranch?: string) {
     try {
-      await create(projectId, undefined, DEFAULT_BACKEND, baseBranch);
+      const ws = await create(projectId, undefined, DEFAULT_BACKEND, baseBranch);
+      const { command, args } = resolveLaunch(DEFAULT_BACKEND);
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
     } catch (e) {
       console.error("addWorkspace failed", e);
     }
