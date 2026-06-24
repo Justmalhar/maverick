@@ -19,6 +19,11 @@ export function emit(notifier: Notifier, method: string, params: unknown): void 
 // GIT_TERMINAL_PROMPT/GIT_ASKPASS/SSH_ASKPASS suppress interactive credential
 // prompts (which would otherwise hang a headless sidecar forever); LC_ALL=C
 // forces stable, parseable English git output regardless of the user's locale.
+// GCM_INTERACTIVE=Never keeps Git Credential Manager non-interactive.
+// We deliberately do NOT set GCM_PROVIDER: an empty value makes GCM emit
+// "warning: a host provider override was used" and breaks provider
+// auto-detection, so `git push` (and PR creation) fail with stored creds on
+// Windows. Letting GCM auto-detect uses the user's existing credentials.
 // CLAUDE.md rule 5: we never read or store keys — a network op that needs
 // credentials fails fast and surfaces as a typed auth error upstream.
 export const HARDENED_ENV: Record<string, string> = {
@@ -27,7 +32,6 @@ export const HARDENED_ENV: Record<string, string> = {
   SSH_ASKPASS: "",
   GIT_OPTIONAL_LOCKS: "0",
   GCM_INTERACTIVE: "Never",
-  GCM_PROVIDER: "",
   LC_ALL: "C",
 };
 
