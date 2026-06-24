@@ -3,6 +3,7 @@ import {
   Plus,
   SplitSquareHorizontal,
   LayoutDashboard,
+  Gauge,
   Globe,
   CheckSquare2,
   Zap,
@@ -15,6 +16,8 @@ import {
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { usePresets } from "@/hooks/usePresets";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -50,20 +53,23 @@ const SHELL_LABELS: Record<ShellKind, string> = {
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
-  { label: string; icon: typeof Globe; shortcut?: string }
+  // shortcutKeys is the canonical tinykeys binding; rendered per-platform.
+  { label: string; icon: typeof Globe; shortcutKeys?: string }
 > = {
   dashboard: { label: "Dashboard", icon: LayoutDashboard },
-  browser: { label: "Browser", icon: Globe, shortcut: "⌘⇧B" },
-  kanban: { label: "Tasks", icon: CheckSquare2, shortcut: "⌘⇧K" },
-  automations: { label: "Automations", icon: Zap, shortcut: "⌘⇧A" },
+  usage: { label: "Usage", icon: Gauge },
+  browser: { label: "Browser", icon: Globe, shortcutKeys: "$mod+Shift+b" },
+  kanban: { label: "Tasks", icon: CheckSquare2, shortcutKeys: "$mod+Shift+k" },
+  automations: { label: "Automations", icon: Zap, shortcutKeys: "$mod+Shift+a" },
   mcps: { label: "MCP Servers", icon: Plug },
   skills: { label: "Skills", icon: Sparkles },
   "skill-editor": { label: "New Skill", icon: SquarePen },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "kanban", "automations", "mcps", "skills"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "automations", "mcps", "skills"];
 
 export function EditorTabs() {
+  const platform = useOSPlatform();
   const workspaces = useWorkbench((s) => s.workspaces);
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
@@ -289,7 +295,7 @@ export function EditorTabs() {
               <Globe className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Open browser ⌘⇧B</TooltipContent>
+          <TooltipContent side="bottom">Open browser {formatKeybinding("$mod+Shift+b", platform)}</TooltipContent>
         </Tooltip>
 
         <DropdownMenu>
@@ -336,7 +342,7 @@ export function EditorTabs() {
             >
               <TerminalSquare className="h-3.5 w-3.5" />
               <span className="flex-1">New Terminal in Panel</span>
-              <kbd className="text-[10px] text-muted-foreground">⌘⇧T</kbd>
+              <kbd className="text-[10px] text-muted-foreground">{formatKeybinding("$mod+Shift+t", platform)}</kbd>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Open as tab</DropdownMenuLabel>
@@ -351,8 +357,8 @@ export function EditorTabs() {
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span className="flex-1">{meta.label}</span>
-                  {meta.shortcut && (
-                    <kbd className="text-[10px] text-muted-foreground">{meta.shortcut}</kbd>
+                  {meta.shortcutKeys && (
+                    <kbd className="text-[10px] text-muted-foreground">{formatKeybinding(meta.shortcutKeys, platform)}</kbd>
                   )}
                 </DropdownMenuItem>
               );
@@ -360,7 +366,7 @@ export function EditorTabs() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
               <span className="flex-1">All commands…</span>
-              <kbd className="text-[10px] text-muted-foreground">⌘⇧P</kbd>
+              <kbd className="text-[10px] text-muted-foreground">{formatKeybinding("$mod+Shift+p", platform)}</kbd>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -379,10 +385,10 @@ export function EditorTabs() {
           </TooltipTrigger>
           <TooltipContent side="bottom" className="flex flex-col gap-0.5">
             <span className="flex items-center justify-between gap-3">
-              Split horizontally <kbd className="font-mono text-muted-foreground">⌘D</kbd>
+              Split horizontally <kbd className="font-mono text-muted-foreground">{formatKeybinding("$mod+d", platform)}</kbd>
             </span>
             <span className="flex items-center justify-between gap-3">
-              Split vertically <kbd className="font-mono text-muted-foreground">⌘⇧D</kbd>
+              Split vertically <kbd className="font-mono text-muted-foreground">{formatKeybinding("$mod+Shift+d", platform)}</kbd>
             </span>
           </TooltipContent>
         </Tooltip>

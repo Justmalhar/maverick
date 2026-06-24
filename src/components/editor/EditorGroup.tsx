@@ -5,6 +5,7 @@ import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
 import { TerminalPane } from "./terminal/TerminalPane";
+import { DashboardView } from "@/components/primarysidebar/DashboardView";
 import { cn } from "@/lib/utils";
 
 const FileTabPane = lazy(() => import("@/components/viewers/FileTabPane"));
@@ -22,6 +23,8 @@ const SkillEditorPanel = lazy(() => import("@/panels/skills/SkillEditorPanel"));
 function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
   switch (id) {
     case "dashboard":
+      return <DashboardView />;
+    case "usage":
       return <UsagePanel />;
     case "kanban":
       return <KanbanBoard />;

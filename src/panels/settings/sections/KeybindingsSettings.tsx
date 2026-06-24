@@ -3,8 +3,11 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { KEYBINDINGS, type KeybindingDef } from "@/shortcuts/registry";
+import { formatKeybinding } from "@/shortcuts/format";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
 
 export default function KeybindingsSettings() {
+  const platform = useOSPlatform();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
     if (!query) return KEYBINDINGS;
@@ -56,7 +59,7 @@ export default function KeybindingsSettings() {
                     </td>
                     <td className="px-2 py-1 text-right">
                       <Badge variant="outline" className="font-mono">
-                        {k.display ?? k.keys}
+                        {formatKeybinding(k.keys, platform)}
                       </Badge>
                     </td>
                   </tr>

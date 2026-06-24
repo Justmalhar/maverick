@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
+import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
 import { DiffView } from "./DiffView";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
 import { fileTabId } from "@/state/store";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/TerminalLeaf";
+import { useReviewComments } from "@/lib/stores/review-comments";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 
 const initial = useWorkbench.getState();
 
@@ -19,6 +22,9 @@ function activeWorkspaceWithDiff() {
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  terminalLeafTesting.leafPtyCache.clear();
+  useReviewComments.setState({ comments: [] });
+  useAgentStatusStore.setState({ statuses: {} });
   useWorkbench.setState({ ...initial, workspaces: [], activeWorkspaceId: null });
 });
 
@@ -59,7 +65,7 @@ describe("DiffView", () => {
     }) as never);
     renderWithProviders(<DiffView />);
     await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    expect(screen.getByText("a.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("diff-file-a.ts")).toBeInTheDocument();
   });
 
   it("clears diff when fetch fails", async () => {
@@ -75,6 +81,8 @@ describe("DiffView", () => {
 
   it("AI Code Review writes a review prompt and brings the workspace to the front", async () => {
     activeWorkspaceWithDiff();
+    // The agent runs in the primary leaf; pty_write must target its live PTY id.
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
     vi.mocked(invoke)
       .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
       .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // runAiReview diff_get
@@ -84,7 +92,7 @@ describe("DiffView", () => {
 
     await userEvent.click(screen.getByTestId("diff-ai-review"));
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("pty_write", expect.objectContaining({ ptyId: "w1" }))
+      expect(invoke).toHaveBeenCalledWith("pty_write", expect.objectContaining({ ptyId: "pty-w1-1" }))
     );
     // onAgentFocus brings the reviewed workspace to the front (no editor mode).
     await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));
@@ -146,6 +154,48 @@ describe("DiffView", () => {
     expect(await screen.findByTestId("diff-pr-error")).toHaveTextContent("gh: not authenticated");
   });
 
+  it("shows a 'send comments to agent' button only when the workspace has comments", async () => {
+    activeWorkspaceWithDiff();
+    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never);
+    const { rerender } = renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+    expect(screen.queryByTestId("diff-send-comments")).not.toBeInTheDocument();
+
+    act(() => {
+      useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 3, side: "new", body: "nit" });
+    });
+    rerender(<DiffView />);
+    expect(screen.getByTestId("diff-send-comments")).toHaveTextContent("Send 1 comment to agent");
+  });
+
+  it("disables the send button while the agent is working", async () => {
+    activeWorkspaceWithDiff();
+    useAgentStatusStore.setState({ statuses: { w1: "working" } });
+    useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 3, side: "new", body: "nit" });
+    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never);
+    renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+    expect(screen.getByTestId("diff-send-comments")).toBeDisabled();
+  });
+
+  it("sends the batched comments to the agent PTY and clears them when idle", async () => {
+    activeWorkspaceWithDiff();
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
+    useReviewComments.getState().addComment({ workspaceId: "w1", file: "src/a.ts", line: 9, side: "new", body: "tidy this" });
+    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "src/a.ts" })] }) as never);
+    renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId("diff-send-comments"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        expect.objectContaining({ ptyId: "pty-w1-1", data: expect.stringContaining("Re: src/a.ts:9 — tidy this") })
+      )
+    );
+    expect(useReviewComments.getState().comments).toHaveLength(0);
+  });
+
   it("clicking a changed-file row opens a diff tab for that file", async () => {
     useWorkbench.setState({
       ...initial,
@@ -160,7 +210,7 @@ describe("DiffView", () => {
     renderWithProviders(<DiffView />);
     await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
 
-    await userEvent.click(screen.getByText("src/a.ts"));
+    await userEvent.click(screen.getByTestId("diff-file-src/a.ts"));
     const state = useWorkbench.getState();
     expect(state.fileTabs).toHaveLength(1);
     expect(state.fileTabs[0]).toMatchObject({

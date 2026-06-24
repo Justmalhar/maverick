@@ -104,8 +104,14 @@ describe("EditorGroup", () => {
     expect(screen.queryByTestId("workspace-editor-w2")).not.toBeInTheDocument();
   });
 
-  it("renders dashboard system tab (UsagePanel)", async () => {
+  it("renders dashboard system tab (Agents Dashboard)", async () => {
     useWorkbench.setState({ ...initial, systemTabs: ["dashboard"], activeSystemTab: "dashboard", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("dashboard-view")).toBeInTheDocument());
+  });
+
+  it("renders usage system tab (UsagePanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["usage"], activeSystemTab: "usage", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);
     await waitFor(() => expect(screen.getByTestId("usage-panel")).toBeInTheDocument());
   });

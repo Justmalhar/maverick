@@ -8,12 +8,27 @@ import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { runAiReview } from "@/lib/ai-review";
+import { primaryAgentPtyId } from "@/components/editor/terminal/TerminalLeaf";
 
 // Ask the active editor tab bar to close whatever tab is focused. On macOS this
 // is driven by the native Close-Tab menu item (⌘W); on Windows/Linux by the
 // tinykeys binding below. EditorTabs owns the per-tab-type close logic.
 function requestCloseActiveTab(): void {
   window.dispatchEvent(new CustomEvent("maverick:closeActiveTab"));
+}
+
+// Unmodified bracket sequences (]c/[c) must not steal keystrokes while the user
+// is typing into an input, textarea, select, or contenteditable.
+function isTextEntryFocused(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    (el as HTMLElement).isContentEditable === true
+  );
 }
 
 export function useShortcuts() {
@@ -56,11 +71,19 @@ export function useShortcuts() {
         if (!ws) return;
         const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
         void runAiReview({
-          workspaceId: ws.id,
+          agentPtyId: primaryAgentPtyId(ws.id),
           worktreePath: ws.worktreePath,
           reviewPref,
           onAgentFocus: () => setActiveWorkspace(ws.id),
         }).catch((e) => console.error("AI review failed", e));
+      },
+      "diff.nextHunk": () => {
+        if (isTextEntryFocused()) return;
+        window.dispatchEvent(new CustomEvent("maverick:diff:nextHunk"));
+      },
+      "diff.prevHunk": () => {
+        if (isTextEntryFocused()) return;
+        window.dispatchEvent(new CustomEvent("maverick:diff:prevHunk"));
       },
       // preview.open and preview.toggleMarkdown have been removed — the
       // AuxiliaryBar preview tab is gone; files now open as editor file tabs.
