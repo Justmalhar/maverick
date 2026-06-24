@@ -394,6 +394,25 @@ describe("renderer-pool unhide + WebGL", () => {
     rafSpy.mockRestore();
   });
 
+  it("repaints on unhide even when the slot is fresh (not stale)", () => {
+    let now = 100_000;
+    const perfSpy = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const rafSpy = vi
+      .spyOn(globalThis, "requestAnimationFrame")
+      .mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+    const slot = acquire("a");
+    releaseSlot("a");
+    now = 100_100; // +100ms — well under SLOT_STALE_MS, so NOT stale
+    mterm(slot).refresh.mockClear();
+    acquire("a");
+    expect(mterm(slot).refresh).toHaveBeenCalled();
+    perfSpy.mockRestore();
+    rafSpy.mockRestore();
+  });
+
   it("cancels a pending unhide RAF when re-binding before it fires", () => {
     const cancelSpy = vi.spyOn(globalThis, "cancelAnimationFrame");
     // Real rAF — schedule but don't flush, then re-acquire to cancel it.
