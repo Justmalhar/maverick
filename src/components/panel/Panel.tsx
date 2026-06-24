@@ -43,7 +43,7 @@ function ScriptPane({ kind }: { kind: "setup" | "run" }) {
   const clearPendingSetup = useWorkbench((s) => s.clearPendingSetup);
 
   const script = useMemo(() => settings?.scripts?.[kind] ?? "", [settings, kind]);
-  const runner = useScriptRunner(activeWs?.id ?? null, activeWs?.worktreePath ?? null, script);
+  const runner = useScriptRunner(activeWs?.id ?? null, activeWs?.worktreePath ?? null, script, kind);
 
   // Auto-run setup for freshly created workspaces. Wait until the loaded
   // settings belong to THIS workspace's project so a stale store can't run the

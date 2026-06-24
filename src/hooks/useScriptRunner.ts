@@ -1,75 +1,52 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { ptySpawn, ptyKill, onPtyData, onPtyExit } from "@/lib/tauri";
-import { shellCommandArgs } from "@/lib/terminal-shell";
+import { useCallback, useSyncExternalStore } from "react";
+import {
+  getRunnerSnapshot,
+  runnerKey,
+  startRunner,
+  stopRunner,
+  subscribeRunner,
+  type ScriptKind,
+  type ScriptSnapshot,
+  type ScriptState,
+} from "@/lib/script-runner";
 
-export type ScriptState = "idle" | "running" | "exited";
+export type { ScriptState };
 
-const BUFFER_CAP = 256 * 1024;
+const IDLE: ScriptSnapshot = { state: "idle", exitCode: null, startedAt: null, output: "" };
+const NOOP = () => () => {};
 
+// Thin React binding over the keep-alive script-runner registry. The live PTY,
+// output buffer, and state live in the registry (src/lib/script-runner.ts), so
+// they survive this hook's component unmounting — see that file's header.
 export function useScriptRunner(
   workspaceId: string | null,
   cwd: string | null,
-  script: string
+  script: string,
+  kind: ScriptKind
 ) {
-  const [state, setState] = useState<ScriptState>("idle");
-  const [exitCode, setExitCode] = useState<number | null>(null);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [output, setOutput] = useState("");
-  const ptyIdRef = useRef<string | null>(null);
+  const key = workspaceId ? runnerKey(workspaceId, kind) : null;
 
-  useEffect(() => {
-    let off1: (() => void) | undefined;
-    let off2: (() => void) | undefined;
-    onPtyData(({ ptyId, data }) => {
-      if (ptyId !== ptyIdRef.current) return;
-      setOutput((prev) => {
-        const next = prev + data;
-        return next.length > BUFFER_CAP ? next.slice(next.length - BUFFER_CAP) : next;
-      });
-    })
-      .then((fn) => {
-        off1 = fn;
-      })
-      .catch(() => {});
-    onPtyExit(({ ptyId, code }) => {
-      if (ptyId !== ptyIdRef.current) return;
-      setExitCode(code);
-      setState("exited");
-      ptyIdRef.current = null;
-    })
-      .then((fn) => {
-        off2 = fn;
-      })
-      .catch(() => {});
-    return () => {
-      off1?.();
-      off2?.();
-    };
-  }, []);
+  const snapshot = useSyncExternalStore(
+    key ? (cb) => subscribeRunner(key, cb) : NOOP,
+    () => (key ? getRunnerSnapshot(key) : IDLE)
+  );
 
   const start = useCallback(async () => {
-    if (!workspaceId || !script.trim()) return;
-    setOutput("");
-    setExitCode(null);
-    setStartedAt(Date.now());
-    // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
-    const [shellCmd, ...shellArgs] = shellCommandArgs(script);
-    const { ptyId } = await ptySpawn(shellCmd, shellArgs, cwd ?? undefined);
-    ptyIdRef.current = ptyId;
-    setState("running");
-  }, [workspaceId, cwd, script]);
+    if (!key || !workspaceId || !script.trim()) return;
+    await startRunner(key, script, cwd);
+  }, [key, workspaceId, script, cwd]);
 
   const stop = useCallback(async () => {
-    if (!ptyIdRef.current) return;
-    const id = ptyIdRef.current;
-    ptyIdRef.current = null;
-    try {
-      await ptyKill(id);
-    /* v8 ignore next 3 */
-    } catch {
-      // idempotent: kill may race with natural exit
-    }
-  }, []);
+    if (!key) return;
+    await stopRunner(key);
+  }, [key]);
 
-  return { state, exitCode, startedAt, output, start, stop };
+  return {
+    state: snapshot.state,
+    exitCode: snapshot.exitCode,
+    startedAt: snapshot.startedAt,
+    output: snapshot.output,
+    start,
+    stop,
+  };
 }
