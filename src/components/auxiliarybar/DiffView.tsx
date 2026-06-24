@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2 } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { diffGet, prCreate } from "@/lib/tauri";
@@ -43,7 +43,7 @@ function EmptyState({
 }
 
 export function DiffView() {
-  const active = useWorkbench(selectActiveWorkspace);
+  const active = useWorkbench(selectContextWorkspace);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);

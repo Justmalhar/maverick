@@ -44,13 +44,18 @@ export function AuxiliaryBar() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            <TabsContent value="files" className="flex-1 overflow-hidden">
+            {/* forceMount keeps all three panels mounted; Radix hides the
+                inactive ones via the `hidden` attribute (display:none). This is
+                the keep-alive contract (CLAUDE.md #6): switching tabs must not
+                tear down a panel and lose its in-progress state — e.g. a
+                half-typed commit message or staging selection in SourceControl. */}
+            <TabsContent value="files" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
               <FilesView />
             </TabsContent>
-            <TabsContent value="diff" className="flex-1 overflow-hidden">
+            <TabsContent value="diff" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
               <DiffView />
             </TabsContent>
-            <TabsContent value="scm" className="flex-1 overflow-hidden">
+            <TabsContent value="scm" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
               <SourceControlView />
             </TabsContent>
           </Tabs>

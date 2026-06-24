@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useScriptRunner } from "./useScriptRunner";
 import {
   __resetRunnersForTests,
+  disposeWorkspaceRunners,
   getRunnerSnapshot,
   runnerKey,
   startRunner,
@@ -233,6 +234,36 @@ describe("useScriptRunner", () => {
     });
     await waitFor(() => expect(result.current.output.length).toBe(cap));
     expect(result.current.output.endsWith("B".repeat(10))).toBe(true);
+  });
+
+  it("disposeWorkspaceRunners kills a live process and drops the runners", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-disp" } as never);
+    const key = runnerKey("ws-close", "run");
+    const { result } = renderHook(() => useScriptRunner("ws-close", "/tmp", "bun run dev", "run"));
+    await waitFor(() => expect(exitCallbacks.length).toBeGreaterThan(0));
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(getRunnerSnapshot(key).state).toBe("running");
+    vi.mocked(invoke).mockClear();
+    disposeWorkspaceRunners("ws-close");
+    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-disp" });
+    expect(getRunnerSnapshot(key).state).toBe("idle");
+  });
+
+  it("disposeWorkspaceRunners drops an idle runner without killing a process", () => {
+    const key = runnerKey("ws-idle", "setup");
+    // Create an idle runner entry via subscription, then dispose.
+    const { unmount } = renderHook(() => useScriptRunner("ws-idle", "/tmp", "bun install", "setup"));
+    unmount();
+    disposeWorkspaceRunners("ws-idle");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(getRunnerSnapshot(key).state).toBe("idle");
+  });
+
+  it("disposeWorkspaceRunners is a no-op for a workspace with no runners", () => {
+    disposeWorkspaceRunners("never-seen");
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("ignores a pty:exit whose id is not the runner's current process", async () => {

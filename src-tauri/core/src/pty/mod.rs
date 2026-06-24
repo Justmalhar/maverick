@@ -684,6 +684,48 @@ mod tests {
         assert!(mgr.kill("nope").is_ok());
     }
 
+    // DIAGNOSTIC (Windows): does `powershell.exe -NoLogo` — the interactive shell
+    // the terminal spawns — actually stream output through the ConPTY? If this
+    // captures nothing, the black-terminal bug is the shell/ConPTY, not the UI.
+    #[cfg(windows)]
+    #[test]
+    fn diag_powershell_streams_output() {
+        use crate::pty::sink::PtyEventSink;
+        use std::sync::{Arc, Mutex};
+        struct Cap {
+            data: Arc<Mutex<String>>,
+        }
+        impl PtyEventSink for Cap {
+            fn data(&self, _id: &str, chunk: &str) {
+                self.data.lock().unwrap().push_str(chunk);
+            }
+            fn exit(&self, _id: &str, _code: i32) {}
+        }
+        let run = |args: Vec<String>| -> String {
+            let data = Arc::new(Mutex::new(String::new()));
+            let mgr = Arc::new(PtyManager::new());
+            mgr.spawn(
+                Arc::new(Cap { data: data.clone() }),
+                SpawnParams { command: "powershell.exe".into(), args, cwd: None, env: None, cols: 80, rows: 24 },
+            )
+            .expect("spawn powershell");
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            // Wait until a real prompt (">") shows, not just the mode-enable bytes.
+            while std::time::Instant::now() < deadline {
+                if data.lock().unwrap().contains('>') {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            let out = data.lock().unwrap().clone();
+            out
+        };
+        let with_profile = run(vec!["-NoLogo".into()]);
+        let no_profile = run(vec!["-NoLogo".into(), "-NoProfile".into()]);
+        eprintln!("DIAG_PS_WITH_PROFILE len={} head={:?}", with_profile.len(), with_profile.chars().take(120).collect::<String>());
+        eprintln!("DIAG_PS_NO_PROFILE len={} head={:?}", no_profile.len(), no_profile.chars().take(120).collect::<String>());
+    }
+
     #[test]
     fn spawn_streams_output_to_sink_and_reaps_on_exit() {
         use crate::pty::sink::PtyEventSink;

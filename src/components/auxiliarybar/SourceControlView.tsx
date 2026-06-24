@@ -12,7 +12,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useSourceControl } from "@/hooks/useSourceControl";
 import {
@@ -79,7 +79,7 @@ function ActionButton({
 }
 
 export function SourceControlView() {
-  const active = useWorkbench(selectActiveWorkspace);
+  const active = useWorkbench(selectContextWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const scm = useSourceControl(active?.worktreePath ?? null);
   const [files, setFiles] = useState<DiffFile[]>([]);

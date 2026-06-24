@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import * as scriptRunner from "@/lib/script-runner";
 import {
   useWorkbench,
   selectActiveWorkspace,
+  selectContextWorkspace,
   selectWorkspacesForProject,
   computeLiveWorkspaceIds,
   computeLiveFileTabIds,
@@ -89,6 +91,14 @@ describe("workbench store", () => {
     useWorkbench.getState().setActiveWorkspace("w1");
     useWorkbench.getState().removeWorkspace("w-other");
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
+  });
+
+  it("removeWorkspace disposes that workspace's Run/Setup runners", () => {
+    const spy = vi.spyOn(scriptRunner, "disposeWorkspaceRunners").mockImplementation(() => {});
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w-kill" })]);
+    useWorkbench.getState().removeWorkspace("w-kill");
+    expect(spy).toHaveBeenCalledWith("w-kill");
+    spy.mockRestore();
   });
 
   it("tracks workspace access order (MRU first) across add/activate/remove", () => {
@@ -231,6 +241,29 @@ describe("workbench store", () => {
     expect(selectActiveWorkspace(useWorkbench.getState())).toBeUndefined();
 
     expect(selectWorkspacesForProject("p1")(useWorkbench.getState())).toHaveLength(1);
+  });
+
+  it("selectContextWorkspace recovers the worktree from the active file tab", () => {
+    const ws = makeWorkspace({ id: "wA", worktreePath: "/wt" });
+    useWorkbench.getState().setWorkspaces([ws]);
+    useWorkbench.getState().setActiveWorkspace("wA");
+    // Active workspace wins.
+    expect(selectContextWorkspace(useWorkbench.getState())?.id).toBe("wA");
+
+    // Opening a file/diff clears activeWorkspaceId; context falls back to the
+    // workspace whose worktree matches the active file tab.
+    useWorkbench.getState().openFileTab({
+      kind: "diff",
+      path: "/wt/src/a.ts",
+      worktreePath: "/wt",
+      preview: true,
+    });
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+    expect(selectContextWorkspace(useWorkbench.getState())?.id).toBe("wA");
+
+    // No active workspace and no matching file tab → undefined.
+    useWorkbench.getState().closeFileTab("diff:/wt/src/a.ts");
+    expect(selectContextWorkspace(useWorkbench.getState())).toBeUndefined();
   });
 
   it("openProjectSettings sets projectId and section, marks open", () => {

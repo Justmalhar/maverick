@@ -165,6 +165,23 @@ export async function stopRunner(key: string): Promise<void> {
   }
 }
 
+// Tear down both runners for a workspace when it closes. Kills any live PTY so
+// a dev server isn't orphaned past the workspace's lifetime, and drops the
+// entries so the registry doesn't grow unbounded across the session.
+export function disposeWorkspaceRunners(workspaceId: string): void {
+  for (const kind of ["setup", "run"] as ScriptKind[]) {
+    const key = runnerKey(workspaceId, kind);
+    const r = runners.get(key);
+    if (!r) continue;
+    if (r.ptyId) {
+      const id = r.ptyId;
+      ptyToKey.delete(id);
+      void ptyKill(id).catch(() => {});
+    }
+    runners.delete(key);
+  }
+}
+
 export function __resetRunnersForTests(): void {
   runners.clear();
   ptyToKey.clear();

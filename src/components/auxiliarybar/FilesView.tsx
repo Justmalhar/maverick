@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
 import { File, FileText, FolderOpen, Folder, Files, ChevronRight, ChevronDown } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { useFileTree, absPath } from "@/hooks/useFileTree";
 import type { FileEntry } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -122,7 +122,7 @@ function EmptyState({
 }
 
 export function FilesView() {
-  const active = useWorkbench(selectActiveWorkspace);
+  const active = useWorkbench(selectContextWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const { entries, expanded, toggle } = useFileTree(active?.worktreePath ?? null);
 

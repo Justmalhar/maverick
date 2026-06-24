@@ -1,6 +1,7 @@
 // Central Zustand store — single source of truth for the Workbench
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { disposeWorkspaceRunners } from "@/lib/script-runner";
 import type {
   Project,
   Workspace,
@@ -236,7 +237,10 @@ export const useWorkbench = create<WorkbenchState>()(
           ...s.workspaceAccessOrder.filter((wid) => wid !== workspace.id),
         ],
       })),
-    removeWorkspace: (id) =>
+    removeWorkspace: (id) => {
+      // Kill any Run/Setup process and drop its keep-alive registry entries so a
+      // closed workspace can't leave an orphaned dev server holding a port.
+      disposeWorkspaceRunners(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
         return {
@@ -245,7 +249,8 @@ export const useWorkbench = create<WorkbenchState>()(
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
           launchSpecs,
         };
-      }),
+      });
+    },
     updateWorkspace: (id, patch) =>
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
@@ -476,6 +481,23 @@ export const useWorkbench = create<WorkbenchState>()(
 // Selectors
 export const selectActiveWorkspace = (s: WorkbenchState): Workspace | undefined =>
   s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+
+/**
+ * The workspace whose worktree the AuxiliaryBar (Files / Changes / Source
+ * Control) operates on. Opening a file or diff tab clears `activeWorkspaceId`
+ * (the editor shows the file, not the workspace), so this falls back to the
+ * active file tab's worktree — keeping the file tree, change list, and commit
+ * UI populated while you inspect a diff instead of blanking to the empty state.
+ */
+export const selectContextWorkspace = (s: WorkbenchState): Workspace | undefined => {
+  const active = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+  if (active) return active;
+  if (s.activeFileTabId) {
+    const tab = s.fileTabs.find((t) => t.id === s.activeFileTabId);
+    if (tab) return s.workspaces.find((w) => w.worktreePath === tab.worktreePath);
+  }
+  return undefined;
+};
 
 export const selectWorkspacesForProject =
   (projectId: string) =>
