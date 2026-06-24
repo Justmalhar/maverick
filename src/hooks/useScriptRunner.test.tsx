@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useScriptRunner } from "./useScriptRunner";
+import { shellCommandArgs } from "@/lib/terminal-shell";
 
 type Callback = (e: { payload: { ptyId: string; code?: number; data?: string } }) => void;
 
@@ -39,6 +40,20 @@ describe("useScriptRunner", () => {
     });
     await waitFor(() => expect(result.current.state).toBe("exited"));
     expect(result.current.exitCode).toBe(0);
+  });
+
+  it("spawns the script through the platform shell (cmd.exe / sh)", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ ptyId: "pty-sh" } as never);
+    const { result } = renderHook(() => useScriptRunner("ws-1", "/tmp", "bun install"));
+    await waitFor(() => expect(exitCallbacks.length).toBeGreaterThan(0));
+    await act(async () => {
+      await result.current.start();
+    });
+    const argv = shellCommandArgs("bun install");
+    expect(invoke).toHaveBeenCalledWith(
+      "pty_spawn",
+      expect.objectContaining({ command: argv[0], args: argv.slice(1), cwd: "/tmp" }),
+    );
   });
 
   it("start is a no-op when script string is empty", async () => {

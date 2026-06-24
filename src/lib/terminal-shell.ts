@@ -42,6 +42,24 @@ export function resolveDefaultShell(nav?: { userAgent?: string; platform?: strin
   return isWindows(nav) ? WINDOWS : MACOS_LINUX;
 }
 
+/**
+ * argv that runs a shell command STRING on the host's default shell — for
+ * Setup/Run scripts and other one-shot script spawns. Windows has no /bin/sh,
+ * so it goes through `cmd.exe /c`; POSIX uses `/bin/sh -c`. Mirrors the sidecar
+ * `deps.shellCommandArgs`.
+ */
+export function shellCommandArgs(
+  command: string,
+  nav?: { userAgent?: string; platform?: string },
+): string[] {
+  // Windows: PowerShell -Command. Always present; treats newlines as statement
+  // separators (multi-line setup scripts) and aliases cp/ls/mv/rm/cat to
+  // cmdlets, so POSIX-style scripts mostly work. POSIX uses /bin/sh -c.
+  return isWindows(nav)
+    ? ["powershell", "-NoProfile", "-Command", command]
+    : ["/bin/sh", "-c", command];
+}
+
 /** Shell kinds offered in the picker for this platform — Windows only. */
 export function availableShells(nav?: { userAgent?: string; platform?: string }): ShellKind[] {
   return isWindows(nav) ? ["powershell", "cmd", "wsl"] : [];

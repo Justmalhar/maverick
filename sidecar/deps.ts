@@ -71,13 +71,18 @@ export function repairToolPath(): void {
 /**
  * argv that runs a shell command STRING on the host's default shell. Windows
  * has no `/bin/sh`, so user-authored scripts (setup/run/archive, automation
- * shell steps) must go through `cmd.exe /c` there; POSIX uses `/bin/sh -c`.
+ * shell steps) go through PowerShell there; POSIX uses `/bin/sh -c`.
  */
 export function shellCommandArgs(
   command: string,
   platform: NodeJS.Platform = process.platform,
 ): string[] {
-  return platform === "win32" ? ["cmd", "/c", command] : ["/bin/sh", "-c", command];
+  // Windows: PowerShell -Command. Always present; treats newlines as statement
+  // separators (multi-line scripts) and aliases cp/ls/mv/rm/cat to cmdlets, so
+  // POSIX-style setup/archive scripts mostly work. POSIX uses /bin/sh -c.
+  return platform === "win32"
+    ? ["powershell", "-NoProfile", "-Command", command]
+    : ["/bin/sh", "-c", command];
 }
 
 function hardenedEnv(): Record<string, string | undefined> {

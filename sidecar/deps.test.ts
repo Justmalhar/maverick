@@ -11,8 +11,13 @@ import {
 } from "./deps";
 
 describe("shellCommandArgs", () => {
-  test("uses cmd.exe on Windows", () => {
-    expect(shellCommandArgs("echo hi", "win32")).toEqual(["cmd", "/c", "echo hi"]);
+  test("uses PowerShell on Windows", () => {
+    expect(shellCommandArgs("echo hi", "win32")).toEqual([
+      "powershell",
+      "-NoProfile",
+      "-Command",
+      "echo hi",
+    ]);
   });
   test("uses /bin/sh on POSIX", () => {
     expect(shellCommandArgs("echo hi", "linux")).toEqual(["/bin/sh", "-c", "echo hi"]);

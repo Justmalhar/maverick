@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ptySpawn, ptyKill, onPtyData, onPtyExit } from "@/lib/tauri";
+import { shellCommandArgs } from "@/lib/terminal-shell";
 
 export type ScriptState = "idle" | "running" | "exited";
 
@@ -51,7 +52,9 @@ export function useScriptRunner(
     setOutput("");
     setExitCode(null);
     setStartedAt(Date.now());
-    const { ptyId } = await ptySpawn("/bin/sh", ["-c", script], cwd ?? undefined);
+    // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
+    const [shellCmd, ...shellArgs] = shellCommandArgs(script);
+    const { ptyId } = await ptySpawn(shellCmd, shellArgs, cwd ?? undefined);
     ptyIdRef.current = ptyId;
     setState("running");
   }, [workspaceId, cwd, script]);

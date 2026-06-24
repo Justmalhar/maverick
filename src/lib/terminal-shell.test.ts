@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isWindows, resolveDefaultShell, resolveShell, availableShells } from "./terminal-shell";
+import {
+  isWindows,
+  resolveDefaultShell,
+  resolveShell,
+  availableShells,
+  shellCommandArgs,
+} from "./terminal-shell";
 
 const WIN = { platform: "Win32" };
 const MAC = { platform: "MacIntel" };
@@ -52,6 +58,20 @@ describe("availableShells", () => {
 
   it("offers nothing on macOS/Linux", () => {
     expect(availableShells(MAC)).toEqual([]);
+  });
+});
+
+describe("shellCommandArgs", () => {
+  it("runs a command string via PowerShell on Windows", () => {
+    expect(shellCommandArgs("bun install", WIN)).toEqual([
+      "powershell",
+      "-NoProfile",
+      "-Command",
+      "bun install",
+    ]);
+  });
+  it("runs a command string via /bin/sh on macOS/Linux", () => {
+    expect(shellCommandArgs("bun install", MAC)).toEqual(["/bin/sh", "-c", "bun install"]);
   });
 });
 
