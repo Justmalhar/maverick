@@ -7,7 +7,9 @@ export interface KeybindingDef {
   category: "Workspace" | "Editor" | "Terminal" | "Panel" | "Git" | "Global";
   // Empty string means the action is palette-only with no global shortcut bound.
   keys: string;
-  // Display form (rendered as ⌘⇧K etc.). Falls back to keys.
+  // Legacy macOS-only display hint. NOT used for rendering — UI must derive the
+  // per-platform label via formatKeybinding(keys, platform) so Windows/Linux
+  // never show the ⌘ glyph (they have no Command key).
   display?: string;
 }
 
