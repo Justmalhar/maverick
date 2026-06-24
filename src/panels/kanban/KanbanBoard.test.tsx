@@ -104,7 +104,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ projectId: "p1", projectPath: "/p1", branch: undefined, baseBranch: "main" })
+        expect.objectContaining({ projectId: "p1", projectPath: "/p1", branch: "maverick/fix-the-thing", baseBranch: "main" })
       )
     );
     await waitFor(() =>
@@ -319,7 +319,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ projectId: "p1", branch: undefined, baseBranch: "feat/auth" })
+        expect.objectContaining({ projectId: "p1", branch: "maverick/implement-auth", baseBranch: "feat/auth" })
       )
     );
 
@@ -410,7 +410,7 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "workspace_create",
-        expect.objectContaining({ branch: undefined, baseBranch: "main" })
+        expect.objectContaining({ branch: "maverick/no-branch-task", baseBranch: "main" })
       )
     );
   });

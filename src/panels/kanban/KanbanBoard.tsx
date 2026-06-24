@@ -10,6 +10,8 @@ import {
 } from "@/lib/tauri";
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
+import { applyNamingScheme } from "@/lib/branch-name";
+import { getNamingScheme } from "@/lib/stores/settings";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -131,7 +133,8 @@ export default function KanbanBoard() {
         useWorkbench.getState().backends.find((b) => b.active)?.id ||
         useWorkbench.getState().backends[0]?.id ||
         "claude-code";
-      const ws = await create(task.projectId, undefined, backend, baseBranch);
+      const branch = applyNamingScheme(getNamingScheme(), { featureName: task.title, backend });
+      const ws = await create(task.projectId, branch, backend, baseBranch);
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
@@ -165,7 +168,13 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
+      // Name the branch from the configured scheme (e.g. feature/{feature-name})
+      // using the task title as the feature name, instead of a random callsign.
+      const branch = applyNamingScheme(getNamingScheme(), {
+        featureName: payload.prompt.split("\n")[0],
+        backend: payload.agentBackend,
+      });
+      const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
       const { command, args } = resolveStartupLaunch(payload.agentBackend);
       // Prepend the project's AI preferences so the launched agent honors them.
       // Best-effort: a settings fetch failure must not block starting the task.

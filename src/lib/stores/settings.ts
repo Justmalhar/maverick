@@ -129,6 +129,12 @@ export function getStartupCommand(): string {
   return typeof v === "string" ? v : "";
 }
 
+/** Imperative read of the branch naming scheme. Defaults to maverick/{feature-name}. */
+export function getNamingScheme(): string {
+  const v = useSettingsStore.getState().values["general.namingScheme"];
+  return typeof v === "string" && v.trim() ? v : "maverick/{feature-name}";
+}
+
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);
