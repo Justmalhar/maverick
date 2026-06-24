@@ -3,10 +3,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { pickProjectFolder } from "@/lib/dialog";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import { cn } from "@/lib/utils";
 
 export function EmptyEditor() {
   const reduce = useReducedMotion();
+  const platform = useOSPlatform();
   const setCommandPaletteOpen = useWorkbench((s) => s.setCommandPaletteOpen);
   const setPresetLauncherOpen = useWorkbench((s) => s.setPresetLauncherOpen);
   const showPrimarySideBar = useWorkbench((s) => s.showPrimarySideBar);
@@ -50,21 +53,21 @@ export function EmptyEditor() {
           <QuickAction
             icon={FolderPlus}
             label="Add project"
-            shortcut="⌘O"
+            shortcut={formatKeybinding("$mod+o", platform)}
             onClick={onAddProject}
             testId="empty-add-project"
           />
           <QuickAction
             icon={Rocket}
             label="Open preset"
-            shortcut="⌘⇧Space"
+            shortcut={formatKeybinding("$mod+Shift+Space", platform)}
             onClick={() => setPresetLauncherOpen(true)}
             testId="empty-presets"
           />
           <QuickAction
             icon={CommandIcon}
             label="Command palette"
-            shortcut="⌘⇧P"
+            shortcut={formatKeybinding("$mod+Shift+p", platform)}
             onClick={() => setCommandPaletteOpen(true)}
             testId="empty-commands"
           />

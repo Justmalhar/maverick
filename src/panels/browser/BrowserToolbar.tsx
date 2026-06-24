@@ -2,6 +2,8 @@
 import { ArrowLeft, ArrowRight, MousePointer2, RotateCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -31,6 +33,7 @@ export default function BrowserToolbar({
   inspecting,
   onToggleInspect,
 }: Props) {
+  const platform = useOSPlatform();
   return (
     <div
       data-testid="browser-toolbar"
@@ -73,7 +76,7 @@ export default function BrowserToolbar({
         onClick={onToggleInspect}
         data-testid="browser-inspect"
         className={cn(inspecting && "ring-1 ring-primary")}
-        title="Toggle element inspector (⌘⇧I)"
+        title={`Toggle element inspector (${formatKeybinding("$mod+Shift+i", platform)})`}
       >
         <MousePointer2 className="h-3.5 w-3.5" />
       </Button>

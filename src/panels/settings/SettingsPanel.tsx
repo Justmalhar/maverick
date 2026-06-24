@@ -75,7 +75,7 @@ const SECTIONS: Record<SectionId, SectionMeta> = {
   },
   terminal: {
     title: "Terminal Presets",
-    description: "Named PTY launchers usable from the preset launcher (⌘⇧Space).",
+    description: "Named PTY launchers usable from the preset launcher.",
     Component: TerminalPresets,
   },
   notifications: {

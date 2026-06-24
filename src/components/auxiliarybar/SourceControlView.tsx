@@ -15,6 +15,8 @@ import {
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useSourceControl } from "@/hooks/useSourceControl";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import {
   aiCommitMessage,
   diffGet,
@@ -79,6 +81,7 @@ function ActionButton({
 }
 
 export function SourceControlView() {
+  const platform = useOSPlatform();
   const active = useWorkbench(selectActiveWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const scm = useSourceControl(active?.worktreePath ?? null);
@@ -243,7 +246,7 @@ export function SourceControlView() {
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Commit message (⌘⏎ to commit)"
+            placeholder={`Commit message (${formatKeybinding("$mod+Enter", platform)} to commit)`}
             rows={3}
             data-testid="scm-message"
             className="resize-none pr-8 font-mono text-[11px]"

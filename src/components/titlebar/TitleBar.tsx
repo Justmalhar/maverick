@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkbench } from "@/state/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { WindowControls } from "./WindowControls";
 
@@ -95,11 +96,11 @@ export function TitleBar() {
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1 text-left">Search files, commands, projects…</span>
               <kbd className="rounded-md bg-background/60 px-1.5 py-px text-[10px] tracking-wide text-muted-foreground">
-                ⌘P
+                {formatKeybinding("$mod+p", platform)}
               </kbd>
             </button>
           </TooltipTrigger>
-          <TooltipContent>Quick open ⌘P</TooltipContent>
+          <TooltipContent>Quick open {formatKeybinding("$mod+p", platform)}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -147,7 +148,7 @@ export function TitleBar() {
               <Settings className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Settings ⌘,</TooltipContent>
+          <TooltipContent side="bottom">Settings {formatKeybinding("$mod+,", platform)}</TooltipContent>
         </Tooltip>
         {!isMac && <WindowControls className="ml-1" />}
       </div>
