@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import type { ThemeDefinition } from "@/lib/ipc";
+import { ThemeContext } from "./theme-context";
 import MaverickDark from "./definitions/maverick-dark.json";
 import MaverickLight from "./definitions/maverick-light.json";
 import GithubDarkClassic from "./definitions/github-dark-classic.json";
@@ -31,14 +32,6 @@ const BUILTIN_THEMES: ThemeDefinition[] = [
   SolarizedDark as ThemeDefinition,
   GruvboxDark as ThemeDefinition,
 ];
-
-interface ThemeContextValue {
-  theme: ThemeDefinition;
-  themes: ThemeDefinition[];
-  setTheme: (def: ThemeDefinition) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, "-");
@@ -251,10 +244,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
-}
-
-export function useThemeContext(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useThemeContext must be used inside ThemeProvider");
-  return ctx;
 }

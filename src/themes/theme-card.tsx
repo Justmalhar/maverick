@@ -1,5 +1,6 @@
 import type { ThemeDefinition } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
+import { themeSlug } from "./theme-slug";
 
 function themeBackground(colors?: Record<string, string>, ui?: Record<string, string>): string {
   /* v8 ignore next */
@@ -14,10 +15,6 @@ function themeAccent(colors?: Record<string, string>, ui?: Record<string, string
 function themeForeground(colors?: Record<string, string>, ui?: Record<string, string>): string {
   /* v8 ignore next */
   return colors?.["editor.foreground"] ?? ui?.["text-primary"] ?? "hsl(var(--foreground))";
-}
-
-export function themeSlug(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, "-");
 }
 
 interface ThemeCardProps {

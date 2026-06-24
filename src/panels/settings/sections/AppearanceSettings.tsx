@@ -3,7 +3,7 @@ import { SettingsGroup } from "../primitives/SettingsGroup";
 import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
 import { useSettings, useSettingsStore } from "@/lib/stores/settings";
-import { useThemeContext } from "@/themes/theme-provider";
+import { useThemeContext } from "@/themes/theme-context";
 import { ThemeCard } from "@/themes/theme-card";
 import type { SettingsKey } from "@/lib/ipc";
 import { Button } from "@/components/ui/button";

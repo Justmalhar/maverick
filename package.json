@@ -17,7 +17,8 @@
     "test:rust": "cd src-tauri && cargo test",
     "test:all": "bun run test:coverage && bun run test:sidecar && bun run test:rust",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:fast-refresh": "node scripts/check-fast-refresh.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^16.6.0",

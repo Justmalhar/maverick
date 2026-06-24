@@ -1,5 +1,6 @@
-import { useThemeContext } from "@/themes/theme-provider";
-import { ThemeCard, themeSlug } from "@/themes/theme-card";
+import { useThemeContext } from "@/themes/theme-context";
+import { ThemeCard } from "@/themes/theme-card";
+import { themeSlug } from "@/themes/theme-slug";
 import { bootstrapUpdateSettings } from "@/lib/tauri";
 
 export function ThemeStep() {

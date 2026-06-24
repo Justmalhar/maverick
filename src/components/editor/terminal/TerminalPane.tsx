@@ -6,7 +6,7 @@ import {
   type PooledTerminalHandle,
   type PtyBridge,
 } from "@/lib/terminal-provider";
-import { useThemeContext } from "@/themes/theme-provider";
+import { useThemeContext } from "@/themes/theme-context";
 import { usePty } from "@/hooks/usePty";
 import { setLeafFocused } from "@/lib/providers/terminal-session";
 import { registerFileDropTarget, shellEscapePaths } from "@/lib/file-drop";

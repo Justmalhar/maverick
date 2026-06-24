@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
-import { FilesView, flattenTree } from "./FilesView";
+import { FilesView } from "./FilesView";
+import { flattenTree } from "./files-tree";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import type { FileEntry } from "@/lib/ipc";

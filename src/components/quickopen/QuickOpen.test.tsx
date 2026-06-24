@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
-import { QuickOpen, basename } from "./QuickOpen";
-import { joinPath } from "@/lib/paths";
+import { QuickOpen } from "./QuickOpen";
+import { joinPath, basename } from "@/lib/paths";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import type { SearchResult } from "@/lib/ipc";

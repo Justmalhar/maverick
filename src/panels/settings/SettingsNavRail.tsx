@@ -1,89 +1,8 @@
-import { useMemo, useRef, useState, type ComponentType, type KeyboardEvent } from "react";
-import {
-  Bell,
-  Code2,
-  Cpu,
-  GitBranch,
-  Info,
-  Keyboard,
-  Palette,
-  Plug,
-  Server,
-  Settings as SettingsIcon,
-  SlidersHorizontal,
-  Sparkles,
-  Terminal,
-  Variable,
-} from "lucide-react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsSearchInput } from "./primitives/SettingsSearchInput";
-
-export type SectionId =
-  | "general"
-  | "environment"
-  | "git"
-  | "models"
-  | "providers"
-  | "mcps"
-  | "skills"
-  | "appearance"
-  | "keybindings"
-  | "terminal"
-  | "notifications"
-  | "advanced"
-  | "version";
-
-interface NavItem {
-  id: SectionId;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-}
-
-interface NavGroup {
-  id: string;
-  label: string;
-  items: NavItem[];
-}
-
-export const NAV_GROUPS: NavGroup[] = [
-  {
-    id: "workspace",
-    label: "Workspace",
-    items: [
-      { id: "general", label: "General", icon: SettingsIcon },
-      { id: "environment", label: "Environment", icon: Variable },
-      { id: "git", label: "Git", icon: GitBranch },
-    ],
-  },
-  {
-    id: "ai",
-    label: "AI",
-    items: [
-      { id: "models", label: "Models", icon: Cpu },
-      { id: "providers", label: "Providers", icon: Plug },
-      { id: "mcps", label: "MCPs", icon: Server },
-      { id: "skills", label: "Skills", icon: Sparkles },
-    ],
-  },
-  {
-    id: "editor",
-    label: "Editor",
-    items: [
-      { id: "appearance", label: "Appearance", icon: Palette },
-      { id: "keybindings", label: "Keybindings", icon: Keyboard },
-      { id: "terminal", label: "Terminal", icon: Terminal },
-    ],
-  },
-  {
-    id: "system",
-    label: "System",
-    items: [
-      { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
-      { id: "version", label: "Version", icon: Info },
-    ],
-  },
-];
+import { NAV_GROUPS, type SectionId } from "./settings-nav";
 
 interface Props {
   section: SectionId;
@@ -207,5 +126,3 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
     </nav>
   );
 }
-
-export type { NavGroup, NavItem };

@@ -6,6 +6,7 @@ import { useFileTree, absPath } from "@/hooks/useFileTree";
 import type { FileEntry } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { type FlatNode, flattenTree } from "./files-tree";
 
 const STATUS_COLOR: Record<NonNullable<FileEntry["status"]>, string> = {
   M: "text-warning",
@@ -22,28 +23,6 @@ const ROW_HEIGHT = 22;
 // list long enough to virtualize (>50 rows) overflows this, so react-window
 // only mounts the visible window.
 const VIRTUAL_VIEWPORT_HEIGHT = 600;
-
-export interface FlatNode {
-  entry: FileEntry;
-  depth: number;
-}
-
-// Depth-first flatten honoring the expanded set: collapsed directories hide
-// their subtree so the rendered list matches what the user sees.
-export function flattenTree(
-  entries: FileEntry[],
-  expanded: Set<string>,
-  depth = 0,
-  acc: FlatNode[] = []
-): FlatNode[] {
-  for (const entry of entries) {
-    acc.push({ entry, depth });
-    if (entry.isDirectory && entry.children && expanded.has(entry.path)) {
-      flattenTree(entry.children, expanded, depth + 1, acc);
-    }
-  }
-  return acc;
-}
 
 interface RowProps {
   node: FlatNode;
