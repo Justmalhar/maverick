@@ -8,7 +8,7 @@ import { ReviewComments } from "./ReviewComments";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview, sendReviewComments } from "@/lib/ai-review";
-import { primaryAgentPtyId } from "@/components/editor/terminal/TerminalLeaf";
+import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";

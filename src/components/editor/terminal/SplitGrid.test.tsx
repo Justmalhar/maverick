@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen } from "@/test/utils";
 import { SplitGrid } from "./SplitGrid";
-import { __testing__ } from "./TerminalLeaf";
+import { __testing__ } from "./leaf-registry";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalProvider, type TerminalHandle } from "@/lib/terminal-provider";
 

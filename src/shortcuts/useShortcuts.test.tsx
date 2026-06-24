@@ -5,7 +5,7 @@ import { useShortcuts } from "./useShortcuts";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
-import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/TerminalLeaf";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/leaf-registry";
 
 const initial = useWorkbench.getState();
 

@@ -1,56 +1,23 @@
 import { useEffect, useState } from "react";
-import { ptySpawn, ptyKill } from "@/lib/tauri";
+import { ptySpawn } from "@/lib/tauri";
 import { getGlobalEnv, getDefaultShellKind } from "@/lib/stores/settings";
 import { resolveShell } from "@/lib/terminal-shell";
 import { useLaunchSpec } from "@/hooks/useLaunchSpec";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
+import { leafPtyCache } from "./leaf-registry";
 
 // Every workspace surface is a real shell now: each split leaf owns its OWN
 // login-shell PTY scoped to the worktree. The workspace's primary leaf
 // (`${workspace.id}-1`) additionally consumes the staged launch spec to start a
 // CLI as a child of that shell (Ctrl-C returns to the prompt, not a dead pane).
+// The live-PTY registry and its kill/lookup helpers live in ./leaf-registry so
+// this file exports only the component (Fast Refresh requirement).
 
 interface SpawnState {
   status: "spawning" | "ready" | "error";
   ptyId?: string;
   error?: string;
-}
-
-// Keyed by split-leaf id so a pane's shell survives splits / remounts / tab
-// switches. The SplitNode.ptyId field is no longer the source of truth for the
-// live PTY — this cache is. Entries are evicted by killLeaf() on pane close.
-const leafPtyCache = new Map<string, string>();
-
-/** Kill and evict a terminal-mode leaf's shell PTY. Called when a pane closes. */
-export function killLeaf(leafId: string): void {
-  const ptyId = leafPtyCache.get(leafId);
-  if (!ptyId) return;
-  leafPtyCache.delete(leafId);
-  void ptyKill(ptyId).catch(() => {});
-}
-
-/** Kill every leaf shell PTY belonging to a workspace (ids are `${workspaceId}-…`). */
-export function killWorkspaceLeaves(workspaceId: string): void {
-  const prefix = `${workspaceId}-`;
-  for (const leafId of [...leafPtyCache.keys()]) {
-    if (leafId.startsWith(prefix)) killLeaf(leafId);
-  }
-}
-
-/** The live shell PTY id for a leaf, or undefined if it has not spawned yet. */
-export function getLeafPtyId(leafId: string): string | undefined {
-  return leafPtyCache.get(leafId);
-}
-
-/**
- * The live PTY id of a workspace's PRIMARY leaf (`${workspaceId}-1`) — the leaf
- * that runs the agent CLI. Undefined until it spawns. This is what agent-facing
- * writes (review prompts, comment batches) must target; `pty_write` keys off the
- * PTY id, never the workspace id.
- */
-export function primaryAgentPtyId(workspaceId: string): string | undefined {
-  return leafPtyCache.get(`${workspaceId}-1`);
 }
 
 interface Props {
@@ -141,5 +108,3 @@ export function TerminalLeaf({
     />
   );
 }
-
-export const __testing__ = { leafPtyCache };

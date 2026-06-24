@@ -4,7 +4,7 @@ import { ptyWrite } from "@/lib/tauri";
 import type { Workspace, SplitNode } from "@/lib/ipc";
 import { splitNode, removeNode, canSplit, findNeighbor, firstLeafId, type FocusDirection } from "@/lib/splitnode";
 import { SplitGrid } from "./SplitGrid";
-import { killLeaf, getLeafPtyId } from "./TerminalLeaf";
+import { killLeaf, getLeafPtyId } from "./leaf-registry";
 
 interface Props {
   workspace: Workspace;

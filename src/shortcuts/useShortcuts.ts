@@ -8,7 +8,7 @@ import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { runAiReview } from "@/lib/ai-review";
-import { primaryAgentPtyId } from "@/components/editor/terminal/TerminalLeaf";
+import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
 
 // Ask the active editor tab bar to close whatever tab is focused. On macOS this
 // is driven by the native Close-Tab menu item (⌘W); on Windows/Linux by the

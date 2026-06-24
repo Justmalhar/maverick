@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { act } from "@testing-library/react";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { TerminalView } from "./TerminalView";
-import { __testing__ } from "./TerminalLeaf";
+import { __testing__ } from "./leaf-registry";
 import { __resetLaunchedForTests } from "@/hooks/useLaunchSpec";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";

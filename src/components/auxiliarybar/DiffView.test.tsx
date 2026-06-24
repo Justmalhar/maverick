@@ -6,7 +6,7 @@ import { DiffView } from "./DiffView";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
 import { fileTabId } from "@/state/store";
-import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/TerminalLeaf";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/leaf-registry";
 import { useReviewComments } from "@/lib/stores/review-comments";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 

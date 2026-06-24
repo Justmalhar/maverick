@@ -10,7 +10,7 @@ import {
   bootstrapStatus,
 } from "@/lib/tauri";
 import { brandFor } from "@/lib/backend-brand";
-import { killWorkspaceLeaves } from "@/components/editor/terminal/TerminalLeaf";
+import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
 import type { Backend } from "@/lib/ipc";
 
 export function useWorkspace() {

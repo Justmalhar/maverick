@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useWorkspace } from "./useWorkspace";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeProject } from "@/test/fixtures";
-import { __testing__ as leafTesting } from "@/components/editor/terminal/TerminalLeaf";
+import { __testing__ as leafTesting } from "@/components/editor/terminal/leaf-registry";
 import type { DetectedBackend, BootstrapStatus } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();

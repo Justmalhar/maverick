@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { primaryAgentPtyId, getLeafPtyId, __testing__ } from "./TerminalLeaf";
+import { primaryAgentPtyId, getLeafPtyId, __testing__ } from "./leaf-registry";
 
 beforeEach(() => {
   __testing__.leafPtyCache.clear();
