@@ -86,31 +86,36 @@ export function Workbench() {
       <div className="flex flex-1 overflow-hidden" style={{ borderTop: "1px solid hsl(var(--border))" }}>
         <ResizablePanelGroup
           direction="horizontal"
+          autoSaveId="mv-workbench-layout"
           className="h-full flex-1"
         >
           {layout.primarySideBarVisible && !collapsed && (
             <>
               <ResizablePanel
+                id="primary-sidebar"
+                order={1}
                 defaultSize={15}
                 minSize={11}
-                maxSize={30}
+                maxSize={40}
                 data-testid="primarysidebar-panel"
                 className="bg-sidebar"
               >
                 <PrimarySideBar />
               </ResizablePanel>
-              <ResizableHandle />
+              <ResizableHandle withHandle />
             </>
           )}
 
-          <ResizablePanel defaultSize={layout.auxiliaryBarVisible ? 63 : 85} className="bg-editor" style={{ borderLeft: "1px solid hsl(var(--border))" }}>
+          <ResizablePanel id="editor-area" order={2} defaultSize={layout.auxiliaryBarVisible ? 63 : 85} className="bg-editor" style={{ borderLeft: "1px solid hsl(var(--border))" }}>
             <EditorArea />
           </ResizablePanel>
 
           {layout.auxiliaryBarVisible && (
             <>
-              <ResizableHandle />
+              <ResizableHandle withHandle />
               <ResizablePanel
+                id="auxiliary-bar"
+                order={3}
                 defaultSize={22}
                 minSize={14}
                 maxSize={36}
