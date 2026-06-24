@@ -120,6 +120,15 @@ export function getDefaultShellKind(): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+/**
+ * Imperative read of the configured workspace startup command for non-React
+ * callers (workspace create). Empty string when unset.
+ */
+export function getStartupCommand(): string {
+  const v = useSettingsStore.getState().values["general.startupCommand"];
+  return typeof v === "string" ? v : "";
+}
+
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);

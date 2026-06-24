@@ -13,6 +13,9 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "general.restoreSession": true,
   // JSON-encoded Record<string,string> of global env vars merged into every PTY.
   "general.env": "{}",
+  // Command auto-run in each new workspace terminal (e.g. "claude
+  // --dangerously-skip-permissions"). Blank → use the default backend's command.
+  "general.startupCommand": "",
 
   // Appearance
   "appearance.theme": "",

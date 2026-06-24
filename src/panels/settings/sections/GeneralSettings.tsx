@@ -28,6 +28,7 @@ export default function GeneralSettings() {
   const [binPath, setBinPath] = useSettings("general.defaultBackendBinPath", "");
   const [defaultBranch, setDefaultBranch] = useSettings("general.defaultBranch", "origin/main");
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");
+  const [startupCommand, setStartupCommand] = useSettings("general.startupCommand", "");
   const [restore, setRestore] = useSettings("general.restoreSession", true);
   const [defaultShell, setDefaultShell] = useSettings("terminal.defaultShell", DEFAULT_SHELL_KIND);
   const shells = availableShells();
@@ -93,6 +94,19 @@ export default function GeneralSettings() {
               value={namingScheme}
               onChange={(e) => setNamingScheme(e.target.value)}
               placeholder="maverick/{feature-name}"
+              className="w-72 font-mono"
+            />
+          }
+        />
+        <SettingsRow
+          title="Workspace startup command"
+          description="Runs automatically in each new workspace terminal, e.g. claude --dangerously-skip-permissions. Leave blank to use the default backend's command."
+          control={
+            <Input
+              data-testid="general-startup-command"
+              value={startupCommand}
+              onChange={(e) => setStartupCommand(e.target.value)}
+              placeholder="claude --dangerously-skip-permissions"
               className="w-72 font-mono"
             />
           }

@@ -382,6 +382,7 @@ export type SettingsKey =
   | "general.namingScheme"
   | "general.restoreSession"
   | "general.env"
+  | "general.startupCommand"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"

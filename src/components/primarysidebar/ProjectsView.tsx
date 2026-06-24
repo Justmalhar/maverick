@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProjectItem } from "./ProjectItem";
 import { CreateFromDialog } from "./CreateFromDialog";
 import { pickProjectFolder } from "@/lib/dialog";
-import { resolveLaunch } from "@/lib/launch";
+import { resolveStartupLaunch } from "@/lib/launch";
 
 const DEFAULT_BACKEND = "claude-code";
 
@@ -34,7 +34,7 @@ export function ProjectsView() {
   async function onAddWorkspace(projectId: string, baseBranch?: string) {
     try {
       const ws = await create(projectId, undefined, DEFAULT_BACKEND, baseBranch);
-      const { command, args } = resolveLaunch(DEFAULT_BACKEND);
+      const { command, args } = resolveStartupLaunch(DEFAULT_BACKEND);
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
     } catch (e) {
       console.error("addWorkspace failed", e);

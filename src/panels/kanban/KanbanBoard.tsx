@@ -9,7 +9,7 @@ import {
   projectSettingsGet,
 } from "@/lib/tauri";
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
-import { resolveLaunch } from "@/lib/launch";
+import { resolveStartupLaunch } from "@/lib/launch";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -135,7 +135,7 @@ export default function KanbanBoard() {
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
-      const { command, args } = resolveLaunch(backend);
+      const { command, args } = resolveStartupLaunch(backend);
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
       await kanbanUpsert({
         ...task,
@@ -166,7 +166,7 @@ export default function KanbanBoard() {
       });
 
       const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
-      const { command, args } = resolveLaunch(payload.agentBackend);
+      const { command, args } = resolveStartupLaunch(payload.agentBackend);
       // Prepend the project's AI preferences so the launched agent honors them.
       // Best-effort: a settings fetch failure must not block starting the task.
       let prompt = payload.prompt;
