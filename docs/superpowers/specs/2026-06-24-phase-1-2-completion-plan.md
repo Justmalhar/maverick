@@ -92,7 +92,11 @@ Gate after every task: `bun run build` ✅ + full `bunx vitest run` ✅ (**1455 
   textarea), dispatching window events that the Monaco `DiffViewer` turns into `goToDiff('next'|
   'previous')`. Monaco mock extended with `goToDiff`. 2 shortcut tests + 1 DiffViewer test.
   **Stage/unstage ⏸ still deferred** — see below.
-- **Stage/unstage (⌘⇧A/⌘⇧U) ⏸ DEFERRED (deliberate — would introduce bugs).** Reasons: (1) the spec's stage key
+- **Stage/unstage FUNCTIONALITY ✅ ALREADY EXISTS** — `src/panels/git/StagingArea.tsx` is a full
+  interactive Unstaged/Staged UI with per-hunk **Stage hunk** / **Unstage hunk** buttons
+  (`diffStageHunk` / `diffUnstageHunk`, both RPCs present) + commit. So this is **not a product
+  gap**; only the *keyboard shortcut* below is outstanding.
+- **Stage/unstage KEYBOARD SHORTCUT (⌘⇧A/⌘⇧U) ⏸ DEFERRED (deliberate — would introduce bugs).** Reasons: (1) the spec's stage key
   `⌘⇧A` is already bound to **Automations** (`view.automations`); (2) `]c`/`[c` are *unmodified
   key sequences* — every existing binding uses a modifier, and the shortcut handler has **no
   input-focus guard**, so they would fire while typing in the comment textarea; (3) Monaco
@@ -101,6 +105,17 @@ Gate after every task: `bun run build` ✅ + full `bunx vitest run` ✅ (**1455 
   already available at the API level (`diffStageHunk`). **Follow-up:** add an input-focus guard to
   `useShortcuts`, pick non-conflicting keys (or Monaco-scoped commands), extend the Monaco mock
   with `goToDiff`, then wire Next/Prev-change + stage/unstage with tests.
+
+### Follow-up pass (2026-06-24) — loop concluding
+- Re-verified gate green (build + full vitest **1459/176**).
+- Confirmed stage/unstage already ships via `StagingArea` (above) — no clean+tested keyboard work
+  remained without a design decision (the `⌘⇧A` conflict), so per the loop's guardrails I did NOT
+  ship a fragile binding.
+- Added one clean, tested polish instead: **Agents Dashboard per-card "open changes"** (focus +
+  `openSourceControl`). 1 test.
+- **Loop STOPPED** — Phase 1 fully functioning; Phase 2 review loop complete; the only outstanding
+  item (stage/unstage *shortcut*) is intentionally deferred and documented. Nothing safe remains to
+  do unattended.
 
 ## Final gate (before declaring Phase 1+2 done)
 `bun run build` ✅ · `bunx vitest run` all green ✅ · Rust gate unaffected (no `.rs` changes) or
