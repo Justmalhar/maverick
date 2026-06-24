@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { GitCompare } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatus, useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
@@ -66,7 +67,15 @@ function AgentCard({
   const status = useAgentStatus(workspace.id);
   const isActive = useWorkbench((s) => s.activeWorkspaceId === workspace.id);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const openSourceControl = useWorkbench((s) => s.openSourceControl);
   const [stats, setStats] = useState<DiffStats | null>(null);
+
+  function openChanges(e: React.MouseEvent) {
+    // Don't also trigger the card's focus handler — this does both itself.
+    e.stopPropagation();
+    setActiveWorkspace(workspace.id);
+    openSourceControl();
+  }
 
   // Re-fetch the worktree diff summary whenever the agent goes quiet — a fresh
   // `working`/`done` transition is the cheapest signal that the tree changed.
@@ -95,7 +104,7 @@ function AgentCard({
   }, [workspace.worktreePath, status]);
 
   return (
-    <li>
+    <li className="group relative">
       <button
         type="button"
         data-testid={`dashboard-agent-${workspace.id}`}
@@ -134,6 +143,16 @@ function AgentCard({
             <span className="text-destructive">−{stats.deletions}</span>
           </div>
         )}
+      </button>
+      <button
+        type="button"
+        data-testid={`dashboard-agent-open-changes-${workspace.id}`}
+        onClick={openChanges}
+        aria-label="Open changes"
+        title="Open changes"
+        className="absolute bottom-1.5 right-1.5 rounded p-1 text-muted-foreground opacity-0 transition-opacity duration-100 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <GitCompare className="h-3.5 w-3.5" />
       </button>
     </li>
   );

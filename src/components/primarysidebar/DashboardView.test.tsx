@@ -135,6 +135,20 @@ describe("DashboardView", () => {
     expect(screen.queryByTestId("dashboard-agent-stats-w1")).not.toBeInTheDocument();
   });
 
+  it("opens the workspace's changes (focus + source control) from the card", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" })],
+      activeWorkspaceId: null,
+    });
+    renderWithProviders(<DashboardView />);
+    await userEvent.click(screen.getByTestId("dashboard-agent-open-changes-w1"));
+    const s = useWorkbench.getState();
+    expect(s.activeWorkspaceId).toBe("w1");
+    expect(s.layout.auxiliaryView).toBe("scm");
+    expect(s.layout.auxiliaryBarVisible).toBe(true);
+  });
+
   it("marks the active workspace's card", () => {
     useWorkbench.setState({
       ...initial,
