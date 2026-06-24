@@ -5,6 +5,7 @@ import { ProcessManager } from "./process-manager";
 import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
 import { generateWorkspaceName, slugify, titleize } from "./name-generator";
 import { CommitMessageGenerator } from "./commit-message";
+import { BranchNameGenerator } from "./branch-name-generator";
 import { SQLiteStore } from "./sqlite-store";
 import { ConfigLoader } from "./config-loader";
 import { SkillsEngine } from "./skills-engine";
@@ -249,6 +250,7 @@ const Schemas = {
     remote: nullishOptional(z.string()),
   }),
   aiCommitMessage: z.object({ worktreePath: z.string() }),
+  aiBranchName: z.object({ prompt: z.string(), cwd: nullishOptional(z.string()) }),
 };
 
 export interface RpcHandlersOptions {
@@ -278,6 +280,7 @@ export interface RpcHandlersOptions {
   caffeinate?: Caffeinate;
   instructions?: InstructionsResolver;
   commitMessage?: CommitMessageGenerator;
+  branchName?: BranchNameGenerator;
   notifier?: Notifier;
 }
 
@@ -332,6 +335,7 @@ export class RpcHandlers {
   readonly caffeinate: Caffeinate;
   readonly instructions: InstructionsResolver;
   readonly commitMessage: CommitMessageGenerator;
+  readonly branchName: BranchNameGenerator;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -379,6 +383,7 @@ export class RpcHandlers {
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
     this.commitMessage = opts.commitMessage ?? new CommitMessageGenerator();
+    this.branchName = opts.branchName ?? new BranchNameGenerator();
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -713,6 +718,10 @@ export class RpcHandlers {
       case "ai.commit_message": {
         const p = Schemas.aiCommitMessage.parse(params);
         return this.commitMessage.generate(p);
+      }
+      case "ai.branch_name": {
+        const p = Schemas.aiBranchName.parse(params);
+        return this.branchName.generate({ prompt: p.prompt, cwd: p.cwd ?? undefined });
       }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);

@@ -383,6 +383,7 @@ export type SettingsKey =
   | "general.restoreSession"
   | "general.env"
   | "general.startupCommand"
+  | "general.aiBranchNames"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"

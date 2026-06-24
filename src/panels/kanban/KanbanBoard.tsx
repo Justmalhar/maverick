@@ -11,6 +11,7 @@ import {
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
 import { applyNamingScheme } from "@/lib/branch-name";
+import { resolveFeatureName } from "@/lib/feature-name";
 import { getNamingScheme } from "@/lib/stores/settings";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
@@ -133,11 +134,13 @@ export default function KanbanBoard() {
         useWorkbench.getState().backends.find((b) => b.active)?.id ||
         useWorkbench.getState().backends[0]?.id ||
         "claude-code";
-      const branch = applyNamingScheme(getNamingScheme(), { featureName: task.title, backend });
-      const ws = await create(task.projectId, branch, backend, baseBranch);
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
+      const projectPath = useWorkbench.getState().projects.find((p) => p.id === task.projectId)?.path;
+      const featureName = await resolveFeatureName(task.title, prompt, projectPath);
+      const branch = applyNamingScheme(getNamingScheme(), { featureName, backend });
+      const ws = await create(task.projectId, branch, backend, baseBranch);
       const { command, args } = resolveStartupLaunch(backend);
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
       await kanbanUpsert({
@@ -168,10 +171,19 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      // Name the branch from the configured scheme (e.g. feature/{feature-name})
-      // using the task title as the feature name, instead of a random callsign.
+      // Name the branch from the configured scheme (e.g. feature/{feature-name}),
+      // with the feature name AI-generated from the task (or the title slug as a
+      // fallback), instead of a random callsign.
+      const projectPath = useWorkbench
+        .getState()
+        .projects.find((p) => p.id === payload.projectId)?.path;
+      const featureName = await resolveFeatureName(
+        payload.prompt.split("\n")[0],
+        payload.prompt,
+        projectPath,
+      );
       const branch = applyNamingScheme(getNamingScheme(), {
-        featureName: payload.prompt.split("\n")[0],
+        featureName,
         backend: payload.agentBackend,
       });
       const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);

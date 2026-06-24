@@ -135,6 +135,12 @@ export function getNamingScheme(): string {
   return typeof v === "string" && v.trim() ? v : "maverick/{feature-name}";
 }
 
+/** Whether to use the agent CLI to name task branches. Defaults to true. */
+export function getAiBranchNames(): boolean {
+  const v = useSettingsStore.getState().values["general.aiBranchNames"];
+  return typeof v === "boolean" ? v : true;
+}
+
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);

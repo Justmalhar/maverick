@@ -492,6 +492,13 @@ export async function aiCommitMessage(
   return invoke("ai_commit_message", { worktreePath });
 }
 
+export async function aiBranchName(
+  prompt: string,
+  cwd?: string
+): Promise<{ name: string }> {
+  return invoke("ai_branch_name", { prompt, cwd });
+}
+
 // Embedded Browser (native child webview) controls.
 export interface BrowserBounds {
   x: number;

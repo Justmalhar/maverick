@@ -332,3 +332,20 @@ pub async fn ai_commit_message(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn ai_branch_name(
+    state: State<'_, AppState>,
+    prompt: String,
+    cwd: Option<String>,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request_with_timeout(
+            "ai.branch_name",
+            json!({ "prompt": prompt, "cwd": cwd }),
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}

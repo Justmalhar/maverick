@@ -29,6 +29,7 @@ export default function GeneralSettings() {
   const [defaultBranch, setDefaultBranch] = useSettings("general.defaultBranch", "origin/main");
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");
   const [startupCommand, setStartupCommand] = useSettings("general.startupCommand", "");
+  const [aiBranchNames, setAiBranchNames] = useSettings("general.aiBranchNames", true);
   const [restore, setRestore] = useSettings("general.restoreSession", true);
   const [defaultShell, setDefaultShell] = useSettings("terminal.defaultShell", DEFAULT_SHELL_KIND);
   const shells = availableShells();
@@ -108,6 +109,18 @@ export default function GeneralSettings() {
               onChange={(e) => setStartupCommand(e.target.value)}
               placeholder="claude --dangerously-skip-permissions"
               className="w-72 font-mono"
+            />
+          }
+        />
+        <SettingsRow
+          title="AI-generated branch names"
+          description="Use the agent CLI to name task branches (the {feature-name} in the scheme) from the task. Falls back to a title slug if it's slow or unavailable."
+          control={
+            <SettingsToggle
+              label="AI branch names"
+              checked={aiBranchNames}
+              onCheckedChange={setAiBranchNames}
+              data-testid="general-ai-branch-names"
             />
           }
         />

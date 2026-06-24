@@ -277,6 +277,7 @@ pub fn run() {
             file_read_at_ref,
             git_discard_file,
             ai_commit_message,
+            ai_branch_name,
             file_tree,
             file_read,
             file_write,

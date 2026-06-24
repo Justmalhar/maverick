@@ -16,6 +16,9 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   // Command auto-run in each new workspace terminal (e.g. "claude
   // --dangerously-skip-permissions"). Blank → use the default backend's command.
   "general.startupCommand": "",
+  // Use the agent CLI to name task branches (feature-name in the scheme) instead
+  // of a title slug. Falls back to the slug if the CLI is slow/unavailable.
+  "general.aiBranchNames": true,
 
   // Appearance
   "appearance.theme": "",
