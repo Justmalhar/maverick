@@ -12,6 +12,7 @@ import { SkillsEngine } from "./skills-engine";
 import { SkillsStore } from "./skills-store";
 import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
+import { GitCredentials } from "./git-credentials";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
 import { AutomationRunner } from "./automation-runner";
@@ -34,6 +35,7 @@ import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
+const CredentialProviderSchema = z.enum(["github", "bitbucket", "gitlab"]);
 const StringParam = z.object({}).passthrough();
 
 // Rust forwards omitted optional command args as JSON `null` (serde serializes
@@ -251,6 +253,16 @@ const Schemas = {
   }),
   aiCommitMessage: z.object({ worktreePath: z.string() }),
   aiBranchName: z.object({ prompt: z.string(), cwd: nullishOptional(z.string()) }),
+  credentialProvider: z.object({ provider: CredentialProviderSchema }),
+  credentialConnect: z.object({
+    provider: CredentialProviderSchema,
+    username: z.string(),
+    password: z.string(),
+  }),
+  credentialDisconnect: z.object({
+    provider: CredentialProviderSchema,
+    username: nullishOptional(z.string()),
+  }),
 };
 
 export interface RpcHandlersOptions {
@@ -281,6 +293,7 @@ export interface RpcHandlersOptions {
   instructions?: InstructionsResolver;
   commitMessage?: CommitMessageGenerator;
   branchName?: BranchNameGenerator;
+  credentials?: GitCredentials;
   notifier?: Notifier;
 }
 
@@ -336,6 +349,7 @@ export class RpcHandlers {
   readonly instructions: InstructionsResolver;
   readonly commitMessage: CommitMessageGenerator;
   readonly branchName: BranchNameGenerator;
+  readonly credentials: GitCredentials;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -384,6 +398,7 @@ export class RpcHandlers {
     this.instructions = opts.instructions ?? new InstructionsResolver();
     this.commitMessage = opts.commitMessage ?? new CommitMessageGenerator();
     this.branchName = opts.branchName ?? new BranchNameGenerator();
+    this.credentials = opts.credentials ?? new GitCredentials();
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -722,6 +737,18 @@ export class RpcHandlers {
       case "ai.branch_name": {
         const p = Schemas.aiBranchName.parse(params);
         return this.branchName.generate({ prompt: p.prompt, cwd: p.cwd ?? undefined });
+      }
+      case "git.credential_status": {
+        const p = Schemas.credentialProvider.parse(params);
+        return this.credentials.status(p.provider);
+      }
+      case "git.credential_connect": {
+        const p = Schemas.credentialConnect.parse(params);
+        return this.credentials.connect(p);
+      }
+      case "git.credential_disconnect": {
+        const p = Schemas.credentialDisconnect.parse(params);
+        return this.credentials.disconnect({ provider: p.provider, username: p.username ?? undefined });
       }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);

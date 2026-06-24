@@ -44,7 +44,8 @@ pub use file_tree::{
 };
 pub use git::{
     ai_branch_name, ai_commit_message, file_read_at_ref, git_blame, git_branch_list, git_branches, git_checkout,
-    git_cherry_pick, git_commit, git_conflicts, git_diff_stat, git_discard_file, git_fetch,
+    git_cherry_pick, git_commit, git_conflicts, git_credential_connect, git_credential_disconnect,
+    git_credential_status, git_diff_stat, git_discard_file, git_fetch,
     git_log, git_pull, git_push, git_remote_info, git_resolve_conflict, git_stash_apply,
     git_stash_drop, git_stash_list, git_stash_pop,
 };

@@ -25,6 +25,8 @@ import type {
   Message,
   Notification,
   NotificationPermission,
+  CredentialProvider,
+  CredentialStatus,
   PairedDevice,
   PairingTicket,
   Project,
@@ -497,6 +499,27 @@ export async function aiBranchName(
   cwd?: string
 ): Promise<{ name: string }> {
   return invoke("ai_branch_name", { prompt, cwd });
+}
+
+export async function gitCredentialStatus(
+  provider: CredentialProvider
+): Promise<CredentialStatus> {
+  return invoke("git_credential_status", { provider });
+}
+
+export async function gitCredentialConnect(
+  provider: CredentialProvider,
+  username: string,
+  password: string
+): Promise<{ username: string }> {
+  return invoke("git_credential_connect", { provider, username, password });
+}
+
+export async function gitCredentialDisconnect(
+  provider: CredentialProvider,
+  username?: string
+): Promise<{ ok: true }> {
+  return invoke("git_credential_disconnect", { provider, username });
 }
 
 // Embedded Browser (native child webview) controls.

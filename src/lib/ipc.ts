@@ -307,6 +307,16 @@ export interface RemoteInfo {
   remoteUrl: string;
 }
 
+// Git hosts Maverick can authenticate against (a subset of GitProvider — the
+// "unknown" remote has no credential flow).
+export type CredentialProvider = "github" | "bitbucket" | "gitlab";
+
+export interface CredentialStatus {
+  provider: CredentialProvider;
+  connected: boolean;
+  username?: string;
+}
+
 // ---------- Companion (remote) server — Rust-owned types ----------
 
 export interface RemoteStatus {
