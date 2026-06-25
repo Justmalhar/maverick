@@ -55,12 +55,18 @@ export const useAgentOutput = create<AgentOutputState>((set) => ({
       runs: { ...s.runs, [workspaceId]: { ...runFor(s.runs, workspaceId), sessionId } },
     })),
   finish: (workspaceId, opts) =>
-    set((s) => ({
-      runs: {
-        ...s.runs,
-        [workspaceId]: { ...runFor(s.runs, workspaceId), running: false, costUsd: opts?.costUsd },
-      },
-    })),
+    set((s) => {
+      const prev = runFor(s.runs, workspaceId);
+      return {
+        runs: {
+          ...s.runs,
+          // Preserve a cost already captured from the `result` event: `agent.exit`
+          // always fires afterwards and calls finish() with no opts, which would
+          // otherwise wipe it (`?? prev` keeps 0 — a valid cost — untouched).
+          [workspaceId]: { ...prev, running: false, costUsd: opts?.costUsd ?? prev.costUsd },
+        },
+      };
+    }),
   clearForWorkspace: (workspaceId) =>
     set((s) => {
       const next = { ...s.runs };

@@ -17,11 +17,12 @@ interface Props {
   task?: Partial<KanbanTask>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (task: Partial<KanbanTask>) => void;
+  onDelete?: (id: string) => void;
 }
 
 const STATUSES: KanbanTask["status"][] = ["todo", "in_progress", "review", "done"];
 
-export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }: Props) {
+export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit, onDelete }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<KanbanTask["status"]>("todo");
@@ -70,6 +71,9 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
       ...(dueDate ? { dueDate: Math.floor(new Date(dueDate).getTime() / 1000) } : {}),
       ...(task?.projectId ? { projectId: task.projectId } : {}),
       ...(task?.columnOrder !== undefined ? { columnOrder: task.columnOrder } : {}),
+      // Editing an in-progress task must not detach it from its workspace — the
+      // dialog has no workspace field, so carry the existing link through.
+      ...(task?.workspaceId ? { workspaceId: task.workspaceId } : {}),
     };
     onSubmit(payload);
   };
@@ -173,6 +177,17 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit }:
         </div>
 
         <div className="flex justify-end gap-2">
+          {task?.id && onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mr-auto text-destructive hover:text-destructive"
+              data-testid="kanban-delete"
+              onClick={() => onDelete(task.id!)}
+            >
+              Delete
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

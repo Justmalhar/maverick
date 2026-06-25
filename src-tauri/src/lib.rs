@@ -301,6 +301,7 @@ pub fn run() {
             fs_watch_stop,
             kanban_list,
             kanban_upsert,
+            kanban_delete,
             preset_list,
             preset_launch,
             preset_save_current,

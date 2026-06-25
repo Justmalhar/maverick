@@ -43,6 +43,23 @@ describe("useAgentOutput", () => {
     expect(run.costUsd).toBe(0.05);
   });
 
+  it("finish without opts preserves a cost already captured from the result event", () => {
+    const s = useAgentOutput.getState();
+    s.start("w1");
+    s.finish("w1", { costUsd: 0.12 }); // result event
+    s.finish("w1"); // agent.exit — no opts
+    const run = selectAgentRun("w1")(useAgentOutput.getState());
+    expect(run.running).toBe(false);
+    expect(run.costUsd).toBe(0.12);
+  });
+
+  it("finish preserves a captured cost of exactly 0 (?? keeps it)", () => {
+    const s = useAgentOutput.getState();
+    s.finish("w1", { costUsd: 0 });
+    s.finish("w1");
+    expect(selectAgentRun("w1")(useAgentOutput.getState()).costUsd).toBe(0);
+  });
+
   it("clearForWorkspace removes a workspace's run", () => {
     const s = useAgentOutput.getState();
     s.appendLine("w1", { kind: "text", text: "a" });

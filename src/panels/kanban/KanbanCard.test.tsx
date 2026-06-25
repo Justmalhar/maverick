@@ -144,6 +144,77 @@ describe("KanbanCard", () => {
     expect(screen.getByTestId("kanban-create-pr")).toBeInTheDocument();
   });
 
+  it("Create PR pushes the branch and opens the returned url", async () => {
+    const { open } = await import("@tauri-apps/plugin-shell");
+    vi.mocked(open).mockClear();
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "ws-rev", worktreePath: "/wt/rev" })],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({ url: "https://example.com/pr/1" } as never);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "review", title: "My change", workspaceId: "ws-rev" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-create-pr"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pr_create",
+        expect.objectContaining({ worktreePath: "/wt/rev", title: "My change" })
+      )
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith("https://example.com/pr/1"));
+    confirmSpy.mockRestore();
+  });
+
+  it("Create PR is disabled when the task has no linked workspace", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ status: "review", workspaceId: undefined })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.getByTestId("kanban-create-pr")).toBeDisabled();
+  });
+
+  it("Create PR surfaces an error when prCreate fails", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "ws-rev", worktreePath: "/wt/rev" })],
+    });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("push rejected"));
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "review", workspaceId: "ws-rev" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-create-pr"));
+    await waitFor(() => expect(screen.getByTestId("kanban-start-error").textContent).toContain("push rejected"));
+    confirmSpy.mockRestore();
+  });
+
+  it("Create PR does nothing when the confirm prompt is dismissed", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "ws-rev", worktreePath: "/wt/rev" })],
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "review", workspaceId: "ws-rev" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-create-pr"));
+    expect(invoke).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
   it("shows no action button for done status", () => {
     renderWithProviders(
       <KanbanCard task={makeKanbanTask({ status: "done" })} index={0} onEdit={vi.fn()} />

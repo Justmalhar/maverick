@@ -293,6 +293,10 @@ export async function kanbanUpsert(task: Partial<KanbanTask>): Promise<KanbanTas
   return invoke("kanban_upsert", { task });
 }
 
+export async function kanbanDelete(id: string): Promise<{ ok: true }> {
+  return invoke("kanban_delete", { id });
+}
+
 export async function presetList(projectPath?: string): Promise<WorkspacePreset[]> {
   return invoke("preset_list", { projectPath });
 }

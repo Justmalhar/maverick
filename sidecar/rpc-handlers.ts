@@ -178,6 +178,7 @@ const Schemas = {
       )
     ),
   }),
+  kanbanDelete: z.object({ id: z.string().min(1) }),
   presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
@@ -864,6 +865,10 @@ export class RpcHandlers {
       case "kanban.upsert": {
         const task = Schemas.kanbanUpsert.parse(params.task ?? params);
         return this.kanban.upsert(task);
+      }
+      case "kanban.delete": {
+        const p = Schemas.kanbanDelete.parse(params);
+        return this.kanban.delete(p.id);
       }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);

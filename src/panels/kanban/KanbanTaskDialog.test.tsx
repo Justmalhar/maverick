@@ -79,4 +79,40 @@ describe("KanbanTaskDialog", () => {
     await userEvent.type(branch, "feature/test");
     expect(branch.value).toBe("feature/test");
   });
+
+  it("carries the existing workspaceId through an edit (does not detach the workspace)", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <KanbanTaskDialog
+        open
+        onOpenChange={() => {}}
+        task={makeKanbanTask({ id: "x", title: "ed", workspaceId: "ws-7" })}
+        onSubmit={onSubmit}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-submit"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "ws-7" }));
+  });
+
+  it("shows a Delete button for an existing task and calls onDelete", async () => {
+    const onDelete = vi.fn();
+    renderWithProviders(
+      <KanbanTaskDialog
+        open
+        onOpenChange={() => {}}
+        task={makeKanbanTask({ id: "del-1", title: "ed" })}
+        onSubmit={() => {}}
+        onDelete={onDelete}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-delete"));
+    expect(onDelete).toHaveBeenCalledWith("del-1");
+  });
+
+  it("hides the Delete button when creating a new task", () => {
+    renderWithProviders(
+      <KanbanTaskDialog open onOpenChange={() => {}} task={{ labels: [] }} onSubmit={() => {}} onDelete={() => {}} />
+    );
+    expect(screen.queryByTestId("kanban-delete")).not.toBeInTheDocument();
+  });
 });

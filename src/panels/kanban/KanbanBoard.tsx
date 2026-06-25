@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useWorkbench } from "@/state/store";
 import {
   gitDiffStat,
+  kanbanDelete,
   kanbanList,
   kanbanUpsert,
   projectSettingsGet,
@@ -99,26 +100,34 @@ export default function KanbanBoard() {
       const moved = tasks.find((t) => t.id === result.draggableId);
       if (!moved) return;
 
-      const newOrder = [...tasks];
-      const srcCol = newOrder.filter((t) => t.status === fromCol && t.id !== moved.id);
-      const destCol = newOrder.filter((t) => t.status === toCol && t.id !== moved.id);
-      destCol.splice(result.destination.index, 0, { ...moved, status: toCol });
+      // No-op drop (dropped back where it started) — nothing to persist.
+      if (fromCol === toCol && result.source.index === result.destination.index) return;
 
       const recompute = (list: KanbanTask[]) =>
         list.map((t, i) => ({ ...t, columnOrder: i }));
-      const updatedSrc = recompute(srcCol);
-      const updatedDest = recompute(destCol);
 
-      const updated = newOrder.map((t) => {
-        if (t.id === moved.id) return updatedDest.find((d) => d.id === moved.id)!;
-        if (t.status === fromCol) return updatedSrc.find((s) => s.id === t.id) ?? t;
-        if (t.status === toCol) return updatedDest.find((s) => s.id === t.id) ?? t;
-        return t;
-      });
+      // `changed` holds every card whose order/status moved, each exactly once.
+      let changed: KanbanTask[];
+      if (fromCol === toCol) {
+        // Reorder within one column: pull the card out, reinsert at the target
+        // index, then reindex the whole column once. Reindexing both a "src" and
+        // a "dest" view of the same column (the old code) gave the moved card and
+        // its neighbours colliding column_order values.
+        const col = tasks.filter((t) => t.status === fromCol && t.id !== moved.id);
+        col.splice(result.destination.index, 0, { ...moved, status: toCol });
+        changed = recompute(col);
+      } else {
+        const updatedSrc = recompute(tasks.filter((t) => t.status === fromCol && t.id !== moved.id));
+        const destCol = tasks.filter((t) => t.status === toCol && t.id !== moved.id);
+        destCol.splice(result.destination.index, 0, { ...moved, status: toCol });
+        changed = [...updatedSrc, ...recompute(destCol)];
+      }
 
-      setTasks(updated);
+      const changedById = new Map(changed.map((t) => [t.id, t]));
+      setTasks(tasks.map((t) => changedById.get(t.id) ?? t));
       try {
-        await Promise.all([...updatedSrc, ...updatedDest].map((t) => kanbanUpsert(t)));
+        // Dedup by id so each task is written exactly once (no ordering race).
+        await Promise.all(changed.map((t) => kanbanUpsert(t)));
       } catch (e) {
         setError(String(e));
         await refresh();
@@ -131,6 +140,19 @@ export default function KanbanBoard() {
     async (task: Partial<KanbanTask>) => {
       try {
         await kanbanUpsert(task);
+        setDialogTask(null);
+        await refresh();
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [refresh]
+  );
+
+  const remove = useCallback(
+    async (id: string) => {
+      try {
+        await kanbanDelete(id);
         setDialogTask(null);
         await refresh();
       } catch (e) {
@@ -171,9 +193,12 @@ export default function KanbanBoard() {
       const ws = await create(task.projectId, branch, backend, baseBranch);
       const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
       stageLaunch(ws.id, backend, launchPrompt, ws.worktreePath);
+      // Link the task to the workspace it just spawned — without this the card's
+      // View button (and the diff-stat lookup) can't find the workspace.
       await kanbanUpsert({
         ...task,
         status: "in_progress",
+        workspaceId: ws.id,
       });
       await refresh();
     },
@@ -223,15 +248,11 @@ export default function KanbanBoard() {
       const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
       stageLaunch(ws.id, payload.agentBackend, prompt, ws.worktreePath);
 
+      // Spread the persisted task so the description (and every other field) is
+      // carried through — listing the fields by hand dropped `description`,
+      // which the full-row upsert then nulled out.
       await kanbanUpsert({
-        id: task.id,
-        projectId: task.projectId,
-        title: task.title,
-        labels: task.labels,
-        columnOrder: task.columnOrder,
-        attachments: task.attachments,
-        agentBackend: task.agentBackend,
-        branch: task.branch,
+        ...task,
         status: "in_progress",
         workspaceId: ws.id,
       });
@@ -279,6 +300,7 @@ export default function KanbanBoard() {
         task={dialogTask ?? undefined}
         onOpenChange={(o) => !o && setDialogTask(null)}
         onSubmit={upsert}
+        onDelete={remove}
       />
     </motion.div>
   );

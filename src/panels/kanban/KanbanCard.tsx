@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { prCreate } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 
@@ -32,6 +33,23 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
   const { create } = useWorkspace();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [creatingPr, setCreatingPr] = useState(false);
+
+  const createPr = async () => {
+    const ws = workspaces.find((w) => w.id === task.workspaceId);
+    if (!ws || creatingPr) return;
+    if (!window.confirm("Push this branch and open a pull request?")) return;
+    setStartError(null);
+    setCreatingPr(true);
+    try {
+      const { url } = await prCreate(ws.worktreePath, task.title);
+      void import("@tauri-apps/plugin-shell").then((m) => m.open(url));
+    } catch (e) {
+      setStartError(String(e));
+    } finally {
+      setCreatingPr(false);
+    }
+  };
 
   const startInMaverick = async () => {
     if (starting) return;
@@ -101,11 +119,17 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
           <Button
             size="sm"
             variant="outline"
+            onClick={createPr}
+            disabled={creatingPr || !task.workspaceId}
             data-testid="kanban-create-pr"
             className="h-6 gap-1 px-2 text-[11px] border-border/60 text-muted-foreground hover:text-foreground"
           >
-            <GitPullRequest className="h-2.5 w-2.5" />
-            Create PR
+            {creatingPr ? (
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            ) : (
+              <GitPullRequest className="h-2.5 w-2.5" />
+            )}
+            {creatingPr ? "Opening…" : "Create PR"}
           </Button>
         );
       default:

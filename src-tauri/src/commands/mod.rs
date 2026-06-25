@@ -55,7 +55,7 @@ pub use git::{
     git_stash_drop, git_stash_list, git_stash_pop,
 };
 pub use instructions::instructions_resolve;
-pub use kanban::{kanban_list, kanban_upsert};
+pub use kanban::{kanban_delete, kanban_list, kanban_upsert};
 pub use mcp::{mcp_add, mcp_list, mcp_logs, mcp_start, mcp_stop};
 pub use messages::{message_append, messages_list};
 pub use notify::{
