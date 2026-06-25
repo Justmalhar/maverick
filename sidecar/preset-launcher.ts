@@ -15,6 +15,8 @@ interface LaunchParams {
   preset: WorkspacePreset;
   projectPath: string;
   baseBranch?: string;
+  // Resolved by the RPC handler from projectPath; needed to persist the workspace.
+  projectId?: string;
 }
 
 interface SaveParams {
@@ -29,6 +31,8 @@ interface SaveParams {
 export interface LaunchResult {
   workspaceId: string;
   worktreePath: string;
+  /** The actual branch the worktree was created on (`<preset>-<ts>`). */
+  branch: string;
   ptyIds: string[];
   /** Browser panes the layout declares — the UI opens a browser pane per entry. */
   browserPanes: Array<{ url?: string }>;
@@ -72,19 +76,40 @@ export class PresetLauncher {
   }
 
   async launch(params: LaunchParams): Promise<LaunchResult> {
-    const branch = params.preset.baseBranch ?? params.baseBranch ?? "main";
     const presetBranch = `${params.preset.name}-${Date.now()}`;
+    // Resolve a real base ref (ends in HEAD) instead of hardcoding "main", which
+    // hard-fails on master-only / origin-only repos.
+    const baseBranch = await this.worktree.resolveBaseBranch(params.projectPath, [
+      params.preset.baseBranch,
+      params.baseBranch,
+      "origin/main",
+      "main",
+      "master",
+    ]);
     const { workspaceId, worktreePath } = await this.worktree.create({
       projectPath: params.projectPath,
       branch: presetBranch,
-      baseBranch: branch,
+      baseBranch,
       base: defaultWorktreeRoot(basename(params.projectPath)),
       dirName: slugify(presetBranch),
     });
+    // Persist the workspace row so it survives a restart and workspace.destroy can
+    // clean up its worktree + PTYs — previously it lived only in the frontend's
+    // in-memory store, leaking the on-disk worktree forever on close.
+    if (this.store && params.projectId) {
+      this.store.workspaceCreate({
+        id: workspaceId,
+        projectId: params.projectId,
+        branch: presetBranch,
+        agentBackend: "preset",
+        worktreePath,
+        title: params.preset.name,
+      });
+    }
     const ptyIds: string[] = [];
     const browserPanes: Array<{ url?: string }> = [];
     this.traverse(params.preset.layout, workspaceId, worktreePath, ptyIds, browserPanes);
-    return { workspaceId, worktreePath, ptyIds, browserPanes };
+    return { workspaceId, worktreePath, branch: presetBranch, ptyIds, browserPanes };
   }
 
   /** Persist the layout as a named preset. Returns the stored preset. */

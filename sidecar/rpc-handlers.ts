@@ -574,8 +574,10 @@ export class RpcHandlers {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
         if (!ws) return { ok: true };
-        // A headless agent for this workspace must not outlive it.
+        // Neither a headless agent nor a preset's spawned terminals may outlive
+        // the workspace — reap both before tearing down the worktree.
         this.agentRunner.killWorkspace(p.workspaceId);
+        this.process.killWorkspace(p.workspaceId);
         const project = this.store.projectGet(ws.projectId);
         if (project) {
           const settings = this.projectSettings.read(project.path);
@@ -885,10 +887,12 @@ export class RpcHandlers {
       }
       case "preset.launch": {
         const p = Schemas.presetLaunch.parse(params);
+        const projectId = this.store.projectByPath(p.projectPath)?.id;
         return this.presets.launch({
           preset: p.preset as never,
           projectPath: p.projectPath,
           baseBranch: p.branch,
+          projectId,
         });
       }
       case "preset.save_current": {

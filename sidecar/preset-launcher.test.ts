@@ -109,6 +109,44 @@ describe("PresetLauncher", () => {
     expect(r.ptyIds).toHaveLength(1);
   });
 
+  test("launch persists the workspace row and returns the created branch (#2, #4)", async () => {
+    const store = makeStore();
+    const project = store.projectAdd({ path: "/r" });
+    const launcher = makeLauncher({ store });
+    const r = await launcher.launch({
+      preset: { name: "feat", layout: TERMINAL_LAYOUT },
+      projectPath: "/r",
+      projectId: project.id,
+    });
+    // Persisted with the REAL worktree path + branch (no more in-memory-only row
+    // with worktreePath:"" that leaked the worktree on close).
+    const ws = store.workspaceGet(r.workspaceId);
+    expect(ws).not.toBeNull();
+    expect(ws?.worktreePath).toBe(r.worktreePath);
+    expect(ws?.branch).toBe(r.branch);
+    expect(r.branch).toContain("feat-");
+  });
+
+  test("launch resolves the base branch via the worktree manager (#5)", async () => {
+    const candidates: Array<string | undefined>[] = [];
+    const worktree = {
+      resolveBaseBranch: async (_p: string, c: Array<string | undefined>) => {
+        candidates.push(c);
+        return "master";
+      },
+      create: async () => ({ workspaceId: "ws_r", worktreePath: "/wt/r" }),
+    };
+    const launcher = new PresetLauncher({
+      loader: new ConfigLoader({ read: () => "{}", exists: () => true }),
+      worktree: worktree as never,
+      process: new ProcessManager({ spawn: () => fakeProc(), notifier: { write: () => {} } }),
+    });
+    await launcher.launch({ preset: { name: "p", layout: { type: "browser" } }, projectPath: "/r", baseBranch: "dev" });
+    // The preset/explicit base lead the candidate list, ending in main/master fallbacks.
+    expect(candidates[0]).toContain("dev");
+    expect(candidates[0]).toContain("master");
+  });
+
   test("launch with top/bottom split spawns two ptys", async () => {
     const launcher = makeLauncher();
     const r = await launcher.launch({

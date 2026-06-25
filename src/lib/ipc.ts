@@ -206,6 +206,16 @@ export type PresetNode =
   | { type: "split"; direction: "h" | "v"; ratio: number; top: PresetNode; bottom: PresetNode }
   | { type: "split"; direction: "h" | "v"; ratio: number; left: PresetNode; right: PresetNode };
 
+export interface PresetLaunchResult {
+  workspaceId: string;
+  /** Real on-disk worktree path — the frontend must use this, not "". */
+  worktreePath: string;
+  /** Actual branch the worktree was created on (`<preset>-<ts>`). */
+  branch: string;
+  ptyIds: string[];
+  browserPanes: Array<{ url?: string }>;
+}
+
 export interface DiffResult {
   files: DiffFile[];
 }

@@ -1356,6 +1356,7 @@ describe("RpcHandlers", () => {
     const fakeProcess = {
       async spawnOnce() { return { code: 0 }; },
       spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({
@@ -1406,6 +1407,7 @@ describe("RpcHandlers", () => {
     const fakeProcess = {
       async spawnOnce() { return { code: 0 }; },
       spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({
@@ -1450,6 +1452,7 @@ describe("RpcHandlers", () => {
       spawnOnceHandle() {
         return { proc: { kill() {} }, exited: Promise.reject(new Error("archive boom")) };
       },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({

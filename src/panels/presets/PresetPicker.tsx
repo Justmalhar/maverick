@@ -56,9 +56,12 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
       addWorkspace({
         id: result.workspaceId,
         projectId,
-        branch: preset.baseBranch ?? "main",
+        // Use the real worktree path + branch the sidecar created — an empty
+        // worktreePath broke every worktree-keyed feature (file tabs, terminals,
+        // diff, automations).
+        branch: result.branch,
         agentBackend: "preset",
-        worktreePath: "",
+        worktreePath: result.worktreePath,
         status: "active",
         sessionId: result.workspaceId,
         title: preset.name,

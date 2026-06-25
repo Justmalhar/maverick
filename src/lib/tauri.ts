@@ -46,6 +46,7 @@ import type {
   UsageSummary,
   Workspace,
   WorkspacePreset,
+  PresetLaunchResult,
   PresetNode,
 } from "./ipc";
 
@@ -322,7 +323,7 @@ export async function presetLaunch(
   preset: WorkspacePreset,
   projectPath: string,
   branch?: string
-): Promise<{ workspaceId: string }> {
+): Promise<PresetLaunchResult> {
   return invoke("preset_launch", { preset, projectPath, branch });
 }
 

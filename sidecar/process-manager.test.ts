@@ -165,4 +165,25 @@ describe("ProcessManager", () => {
     expect(proc.killed).toBe(true);
     expect(handle.exited).toBe(proc.exited);
   });
+
+  test("killWorkspace kills and evicts only that workspace's PTYs", () => {
+    const procs = [fakeProc(), fakeProc(), fakeProc()];
+    let idx = 0;
+    let n = 0;
+    const mgr = new ProcessManager({
+      spawn: () => procs[idx++],
+      notifier: { write() {} },
+      ids: { uuid: (p) => `${p}_${++n}`, now: () => 1 },
+    });
+    mgr.spawn({ workspaceId: "ws-A", command: "a", args: [] });
+    mgr.spawn({ workspaceId: "ws-A", command: "b", args: [] });
+    mgr.spawn({ workspaceId: "ws-B", command: "c", args: [] });
+    expect(mgr.size()).toBe(3);
+
+    mgr.killWorkspace("ws-A");
+    expect(procs[0].killed).toBe(true);
+    expect(procs[1].killed).toBe(true);
+    expect(procs[2].killed).toBe(false); // ws-B left alone
+    expect(mgr.size()).toBe(1);
+  });
 });

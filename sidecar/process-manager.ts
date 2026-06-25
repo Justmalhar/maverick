@@ -89,6 +89,21 @@ export class ProcessManager {
     return { ok: true };
   }
 
+  /** Kill and evict every PTY spawned for a workspace (e.g. preset terminals),
+   *  so closing the workspace can't leave its child processes running. */
+  killWorkspace(workspaceId: string): { ok: true } {
+    for (const [ptyId, entry] of this.ptys) {
+      if (entry.workspaceId !== workspaceId) continue;
+      try {
+        entry.proc.kill();
+      } catch {
+        // already exited
+      }
+      this.ptys.delete(ptyId);
+    }
+    return { ok: true };
+  }
+
   async spawnOnce(opts: { cwd: string; command: string; args: string[]; env?: Record<string, string> }): Promise<{ code: number }> {
     const { exited } = this.spawnOnceHandle(opts);
     const code = await exited;
