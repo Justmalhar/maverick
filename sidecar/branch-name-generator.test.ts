@@ -38,4 +38,75 @@ describe("BranchNameGenerator", () => {
     const { shell } = fakeShell({ stdout: "   " });
     await expect(new BranchNameGenerator({ shell }).generate({ prompt: "x" })).rejects.toThrow();
   });
+
+  test("passes branchRename instructions to the model and keeps slash prefixes", async () => {
+    const { shell, stdins } = fakeShell({ stdout: "feature/login-page\n" });
+    const r = await new BranchNameGenerator({ shell }).generate({
+      prompt: "Fix the login page",
+      instructions: "always use feature/feature-name convention",
+    });
+    expect(r.name).toBe("feature/login-page");
+    expect(stdins[0]).toContain("always use feature/feature-name convention");
+  });
+
+  test("sanitizes messy model output into a git-safe ref", async () => {
+    const { shell } = fakeShell({ stdout: "`Feature/Login Page!`\n" });
+    const r = await new BranchNameGenerator({ shell }).generate({
+      prompt: "x",
+      instructions: "feature/<name>",
+    });
+    expect(r.name).toBe("feature/login-page");
+  });
+
+  test("collapses duplicate slashes and trims stray separators", async () => {
+    const { shell } = fakeShell({ stdout: "branch: feature//login--page/\n" });
+    const r = await new BranchNameGenerator({ shell }).generate({ prompt: "x", instructions: "y" });
+    expect(r.name).toBe("feature/login-page");
+  });
+
+  test("throws when the model returns a prose sentence (rejected → caller falls back)", async () => {
+    // Real failure mode: claude -p returned a whole explanatory sentence, which
+    // sanitized to a 100-char garbage slug. sanitizeBranchName must reject it.
+    const sentence =
+      "This is just a branch name suggestion request, not a task to execute, no skill needed: feature/dashboard-daily-tasks";
+    const { shell } = fakeShell({ stdout: sentence });
+    await expect(new BranchNameGenerator({ shell }).generate({ prompt: "x" })).rejects.toThrow();
+  });
+});
+
+describe("BranchNameGenerator.sanitizeBranchName — caps", () => {
+  test("rejects prose with too many words", () => {
+    expect(
+      BranchNameGenerator.sanitizeBranchName(
+        "this is just a branch name suggestion not a task to execute"
+      )
+    ).toBe("");
+  });
+  test("rejects an over-long single token", () => {
+    expect(
+      BranchNameGenerator.sanitizeBranchName("addanewuserprofilepagewithavataruploadandaccountsettings")
+    ).toBe("");
+  });
+  test("keeps a normal feature/ name", () => {
+    expect(BranchNameGenerator.sanitizeBranchName("feature/dashboard-daily-tasks")).toBe(
+      "feature/dashboard-daily-tasks"
+    );
+  });
+  test("keeps a 4-word kebab name", () => {
+    expect(BranchNameGenerator.sanitizeBranchName("fix-login-redirect-bug")).toBe(
+      "fix-login-redirect-bug"
+    );
+  });
+});
+
+describe("BranchNameGenerator.sanitizeBranchName", () => {
+  test("lowercases, hyphenates spaces, drops illegal chars", () => {
+    expect(BranchNameGenerator.sanitizeBranchName("Add Login Flow!")).toBe("add-login-flow");
+  });
+  test("keeps a single slash prefix", () => {
+    expect(BranchNameGenerator.sanitizeBranchName("fix/auth-bug")).toBe("fix/auth-bug");
+  });
+  test("returns empty string for separator-only input", () => {
+    expect(BranchNameGenerator.sanitizeBranchName("  ///--- ")).toBe("");
+  });
 });

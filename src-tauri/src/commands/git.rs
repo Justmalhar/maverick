@@ -338,12 +338,13 @@ pub async fn ai_branch_name(
     state: State<'_, AppState>,
     prompt: String,
     cwd: Option<String>,
+    instructions: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.branch_name",
-            json!({ "prompt": prompt, "cwd": cwd }),
+            json!({ "prompt": prompt, "cwd": cwd, "instructions": instructions }),
             std::time::Duration::from_secs(60),
         )
         .await

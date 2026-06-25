@@ -1,8 +1,10 @@
+pub mod agent;
 pub mod attachment;
 pub mod automation;
 pub mod bootstrap;
 pub mod browser;
 pub mod caffeinate;
+pub mod checks;
 pub mod config;
 pub mod context;
 pub mod diff;
@@ -24,6 +26,7 @@ pub mod skills;
 pub mod usage;
 pub mod workspace;
 
+pub use agent::{agent_kill, agent_run};
 pub use attachment::attachment_create;
 pub use automation::{automation_activate_triggers, automation_deactivate_triggers, automation_run};
 pub use bootstrap::{
@@ -35,6 +38,7 @@ pub use browser::{
     browser_set_bounds, browser_show,
 };
 pub use caffeinate::{caffeinate_start, caffeinate_status, caffeinate_stop};
+pub use checks::checks_get;
 pub use config::{config_load, config_save};
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};

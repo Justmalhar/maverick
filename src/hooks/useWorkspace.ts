@@ -85,7 +85,11 @@ export function useWorkspace() {
       .map((d) => ({
         id: d.name,
         name: brandFor(d.name)?.label ?? d.name,
-        command: d.path ?? d.command,
+        // Prefer the bare command (e.g. "claude") over the resolved executable
+        // path: the launch is typed into a real shell with the user's full PATH,
+        // and a bare name runs cleanly in PowerShell/cmd/posix — whereas a quoted
+        // .cmd path is a no-op string expression in PowerShell.
+        command: d.command,
         args: [],
         env: {},
         active: d.name === defaultName,

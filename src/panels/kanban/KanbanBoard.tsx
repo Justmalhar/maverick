@@ -10,9 +10,7 @@ import {
 } from "@/lib/tauri";
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
-import { applyNamingScheme } from "@/lib/branch-name";
-import { resolveFeatureName } from "@/lib/feature-name";
-import { getNamingScheme } from "@/lib/stores/settings";
+import { resolveTaskBranch } from "@/lib/feature-name";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -138,11 +136,26 @@ export default function KanbanBoard() {
         ? `${task.title}\n\n${task.description}`
         : task.title;
       const projectPath = useWorkbench.getState().projects.find((p) => p.id === task.projectId)?.path;
-      const featureName = await resolveFeatureName(task.title, prompt, projectPath);
-      const branch = applyNamingScheme(getNamingScheme(), { featureName, backend });
+      // Fetch settings once: the branchRename preference drives the branch name
+      // and the rest of the preferences are prepended to the launch prompt.
+      // Best-effort — a settings failure must not block starting the task.
+      let settings: Awaited<ReturnType<typeof projectSettingsGet>> | null = null;
+      try {
+        settings = await projectSettingsGet(task.projectId);
+      } catch (e) {
+        console.warn("projectSettingsGet failed; naming and launching without preferences", e);
+      }
+      const branch = await resolveTaskBranch({
+        title: task.title,
+        prompt,
+        cwd: projectPath,
+        backend,
+        instructions: settings?.preferences?.branchRename,
+      });
       const ws = await create(task.projectId, branch, backend, baseBranch);
       const { command, args } = resolveStartupLaunch(backend);
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
+      const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt: launchPrompt });
       await kanbanUpsert({
         ...task,
         status: "in_progress",
@@ -171,32 +184,29 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      // Name the branch from the configured scheme (e.g. feature/{feature-name}),
-      // with the feature name AI-generated from the task (or the title slug as a
-      // fallback), instead of a random callsign.
+      // Fetch settings once: the branchRename preference drives the branch name
+      // (AI-generated from the task, honoring the project's convention — never a
+      // random callsign), and the full preference set is prepended to the launch
+      // prompt. Best-effort: a settings failure must not block starting the task.
       const projectPath = useWorkbench
         .getState()
         .projects.find((p) => p.id === payload.projectId)?.path;
-      const featureName = await resolveFeatureName(
-        payload.prompt.split("\n")[0],
-        payload.prompt,
-        projectPath,
-      );
-      const branch = applyNamingScheme(getNamingScheme(), {
-        featureName,
+      let settings: Awaited<ReturnType<typeof projectSettingsGet>> | null = null;
+      try {
+        settings = await projectSettingsGet(payload.projectId);
+      } catch (e) {
+        console.warn("projectSettingsGet failed; naming and launching without preferences", e);
+      }
+      const branch = await resolveTaskBranch({
+        title: payload.prompt.split("\n")[0],
+        prompt: payload.prompt,
+        cwd: projectPath,
         backend: payload.agentBackend,
+        instructions: settings?.preferences?.branchRename,
       });
       const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
       const { command, args } = resolveStartupLaunch(payload.agentBackend);
-      // Prepend the project's AI preferences so the launched agent honors them.
-      // Best-effort: a settings fetch failure must not block starting the task.
-      let prompt = payload.prompt;
-      try {
-        const settings = await projectSettingsGet(payload.projectId);
-        prompt = buildLaunchPrompt(settings.preferences, payload.prompt);
-      } catch (e) {
-        console.warn("projectSettingsGet failed; launching without preferences", e);
-      }
+      const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
 
       await kanbanUpsert({

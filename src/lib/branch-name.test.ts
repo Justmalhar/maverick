@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { slugify, applyNamingScheme } from "./branch-name";
+import { slugify, applyNamingScheme, composeTypedBranch } from "./branch-name";
+
+describe("composeTypedBranch", () => {
+  it("composes type/slug", () => {
+    expect(composeTypedBranch("feature", "Login Page")).toBe("feature/login-page");
+  });
+  it("defaults a blank/invalid type to feature", () => {
+    expect(composeTypedBranch("  ", "fix oauth")).toBe("feature/fix-oauth");
+  });
+  it("returns empty string for a blank name (caller falls back to AI/temp)", () => {
+    expect(composeTypedBranch("fix", "   ")).toBe("");
+  });
+  it("sanitizes the type", () => {
+    expect(composeTypedBranch("Hot Fix!", "prod down")).toBe("hotfix/prod-down");
+  });
+});
 
 describe("slugify", () => {
   it("lowercases and hyphenates", () => {

@@ -13,7 +13,12 @@ export const DEFAULT_IDLE_MS = 400;
 // spinner forever) so the prompt is never silently dropped.
 export const DEFAULT_CAP_MS = 10_000;
 
-/** True when a shell word needs single-quoting to survive the shell verbatim. */
+// The shell a workspace's primary leaf is running, which decides how the launch
+// command line must be quoted and invoked. "wsl" runs a POSIX shell inside, so
+// it maps to "posix" here.
+export type LaunchShell = "powershell" | "cmd" | "posix";
+
+/** True when a shell word needs quoting to survive the shell verbatim. */
 function needsQuote(word: string): boolean {
   return word === "" || /[^A-Za-z0-9_./:=@%+-]/.test(word);
 }
@@ -24,12 +29,38 @@ export function shellQuote(word: string): string {
   return `'${word.replace(/'/g, `'\\''`)}'`;
 }
 
+/** PowerShell single-quoted literal (embedded single quotes are doubled). */
+function powershellQuote(word: string): string {
+  return `'${word.replace(/'/g, "''")}'`;
+}
+
+/** cmd.exe double-quoted token (cmd has no real inner-quote escaping). */
+function cmdQuote(word: string): string {
+  return `"${word}"`;
+}
+
 /**
  * The exact bytes to write into the shell to launch the CLI: the command and
- * its args, shell-quoted and space-joined, terminated with a carriage return.
+ * its args, quoted for `shell` and space-joined, terminated with a carriage
+ * return.
+ *
+ * The shell matters: in PowerShell a quoted command (e.g. an absolute
+ * `claude.cmd` path) is a string *expression* and is echoed, not executed —
+ * it must be invoked with the call operator `& '...'`. cmd.exe runs a quoted
+ * path directly and uses double quotes. POSIX shells single-quote. A bare,
+ * unquoted command (`claude`) runs verbatim in all three.
  */
-export function buildLaunchCommandLine(spec: LaunchSpec): string {
-  const parts = [spec.command, ...spec.args].filter((p) => p !== undefined);
+export function buildLaunchCommandLine(spec: LaunchSpec, shell: LaunchShell = "posix"): string {
+  const parts = [spec.command, ...spec.args].filter((p): p is string => p !== undefined);
+  if (shell === "powershell") {
+    const [command, ...args] = parts;
+    const head = needsQuote(command) ? `& ${powershellQuote(command)}` : command;
+    const tail = args.map((a) => (needsQuote(a) ? powershellQuote(a) : a));
+    return [head, ...tail].join(" ") + CR;
+  }
+  if (shell === "cmd") {
+    return parts.map((p) => (needsQuote(p) ? cmdQuote(p) : p)).join(" ") + CR;
+  }
   return parts.map(shellQuote).join(" ") + CR;
 }
 

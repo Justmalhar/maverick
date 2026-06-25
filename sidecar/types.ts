@@ -223,6 +223,36 @@ export interface DiffStat {
   removed: number;
 }
 
+export type CheckStatus = "pass" | "fail" | "pending" | "neutral";
+
+export interface CheckItem {
+  name: string;
+  status: CheckStatus;
+  detail?: string;
+}
+
+export interface PrInfo {
+  number: number;
+  url: string;
+  state: string;
+  title: string;
+  mergeable: string;
+}
+
+export interface ChecksReport {
+  git: {
+    branch: string;
+    ahead: number;
+    behind: number;
+    changedFiles: number;
+    conflicts: number;
+  };
+  pr: PrInfo | null;
+  ghAvailable: boolean;
+  checks: CheckItem[];
+  merge: { ready: boolean; blockers: string[] };
+}
+
 export interface KanbanTask {
   id: string;
   projectId: string;

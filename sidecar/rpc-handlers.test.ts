@@ -21,7 +21,8 @@ import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
-import type { KanbanTask, Shell } from "./types";
+import type { ChecksModule } from "./checks-module";
+import type { ChecksReport, KanbanTask, Shell } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
 function fakeShell(steps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []): {
@@ -143,6 +144,49 @@ describe("RpcHandlers", () => {
     const added = (await h.dispatch("project.add", { path: "/tmp/a" })) as { id: string };
     const list = (await h.dispatch("project.list", {})) as Array<{ id: string }>;
     expect(list.find((p) => p.id === added.id)).toBeDefined();
+  });
+
+  test("checks.get forwards worktreePath to the checks module", async () => {
+    const calls: Array<{ worktreePath: string }> = [];
+    const report: ChecksReport = {
+      git: { branch: "feat", ahead: 0, behind: 0, changedFiles: 0, conflicts: 0 },
+      pr: null,
+      ghAvailable: false,
+      checks: [],
+      merge: { ready: false, blockers: ["no pull request open"] },
+    };
+    const checks = {
+      async get(p: { worktreePath: string }) {
+        calls.push(p);
+        return report;
+      },
+    } as unknown as ChecksModule;
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, checks });
+    const got = (await handlers.dispatch("checks.get", { worktreePath: "/wt" })) as ChecksReport;
+    expect(calls).toEqual([{ worktreePath: "/wt" }]);
+    expect(got).toBe(report);
+  });
+
+  test("agent.run / agent.kill dispatch to the AgentRunner", async () => {
+    const runCalls: unknown[] = [];
+    const killCalls: unknown[] = [];
+    const agentRunner = {
+      run(p: unknown) { runCalls.push(p); return { agentId: "agent_x" }; },
+      kill(p: unknown) { killCalls.push(p); return { ok: true as const }; },
+      killWorkspace() {},
+    } as unknown as import("./agent-runner").AgentRunner;
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, agentRunner });
+    const run = (await handlers.dispatch("agent.run", {
+      workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt",
+    })) as { agentId: string };
+    expect(run.agentId).toBe("agent_x");
+    expect(runCalls).toEqual([
+      { workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt", resumeSessionId: undefined, permissionMode: undefined, env: undefined },
+    ]);
+    await handlers.dispatch("agent.kill", { agentId: "agent_x" });
+    expect(killCalls).toEqual([{ agentId: "agent_x" }]);
   });
 
   test("workspace.create + list + destroy", async () => {

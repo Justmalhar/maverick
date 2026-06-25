@@ -14,6 +14,17 @@ export function slugify(input: string): string {
   return slug || "workspace";
 }
 
+// Compose a typed branch name for the "+" naming dialog: a branch_type prefix
+// (feature/fix/bug/chore/hotfix) + a slugged branch_name, e.g.
+// composeTypedBranch("feature", "Login Page") → "feature/login-page".
+// Returns "" when the name is blank, signalling the caller to fall back to
+// AI/temp naming instead of producing a bare "feature/workspace".
+export function composeTypedBranch(type: string, name: string): string {
+  if (!name.trim()) return "";
+  const prefix = type.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "feature";
+  return `${prefix}/${slugify(name)}`;
+}
+
 export interface BranchVars {
   featureName: string;
   backend?: string;

@@ -3,7 +3,7 @@ import { watch } from "fs";
 import { basename, join } from "path";
 import { ProcessManager } from "./process-manager";
 import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
-import { generateWorkspaceName, slugify, titleize } from "./name-generator";
+import { generateWorkspaceName, titleize, branchToDirSlug } from "./name-generator";
 import { CommitMessageGenerator } from "./commit-message";
 import { BranchNameGenerator } from "./branch-name-generator";
 import { SQLiteStore } from "./sqlite-store";
@@ -13,6 +13,8 @@ import { SkillsStore } from "./skills-store";
 import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
 import { GitCredentials } from "./git-credentials";
+import { ChecksModule } from "./checks-module";
+import { AgentRunner } from "./agent-runner";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
 import { AutomationRunner } from "./automation-runner";
@@ -247,12 +249,27 @@ const Schemas = {
     base: nullishOptional(z.string()),
     remote: nullishOptional(z.string()),
   }),
+  checksGet: z.object({ worktreePath: z.string() }),
+  agentRun: z.object({
+    workspaceId: z.string(),
+    backend: z.string(),
+    prompt: z.string(),
+    cwd: nullishOptional(z.string()),
+    resumeSessionId: nullishOptional(z.string()),
+    permissionMode: nullishOptional(z.string()),
+    env: nullishOptional(z.record(z.string(), z.string())),
+  }),
+  agentKill: z.object({ agentId: z.string() }),
   gitRemoteInfo: z.object({
     worktreePath: z.string(),
     remote: nullishOptional(z.string()),
   }),
   aiCommitMessage: z.object({ worktreePath: z.string() }),
-  aiBranchName: z.object({ prompt: z.string(), cwd: nullishOptional(z.string()) }),
+  aiBranchName: z.object({
+    prompt: z.string(),
+    cwd: nullishOptional(z.string()),
+    instructions: nullishOptional(z.string()),
+  }),
   credentialProvider: z.object({ provider: CredentialProviderSchema }),
   credentialConnect: z.object({
     provider: CredentialProviderSchema,
@@ -274,6 +291,8 @@ export interface RpcHandlersOptions {
   skillsStore?: SkillsStore;
   diff?: DiffReader;
   git?: GitModule;
+  checks?: ChecksModule;
+  agentRunner?: AgentRunner;
   presets?: PresetLauncher;
   kanban?: KanbanStore;
   automations?: AutomationRunner;
@@ -330,6 +349,8 @@ export class RpcHandlers {
   readonly skillsStore: SkillsStore;
   readonly diff: DiffReader;
   readonly git: GitModule;
+  readonly checks: ChecksModule;
+  readonly agentRunner: AgentRunner;
   readonly presets: PresetLauncher;
   readonly kanban: KanbanStore;
   readonly automations: AutomationRunner;
@@ -363,6 +384,8 @@ export class RpcHandlers {
     this.skillsStore = opts.skillsStore ?? new SkillsStore();
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
+    this.checks = opts.checks ?? new ChecksModule();
+    this.agentRunner = opts.agentRunner ?? new AgentRunner();
     this.presets =
       opts.presets ??
       new PresetLauncher({
@@ -524,7 +547,9 @@ export class RpcHandlers {
           baseBranch,
           filesToCopy: settings?.workspaces.filesToCopy,
           base: settings?.workspaces.basePath ?? defaultWorktreeRoot(projectName),
-          dirName: slugify(branch),
+          // branchToDirSlug, not slugify: slugify deletes "/" and would flatten
+          // "feature/login" → "featurelogin"; we want "feature-login".
+          dirName: branchToDirSlug(branch),
         });
         // scripts.setup is intentionally NOT run here: the frontend streams it
         // through the Setup tab PTY so creation returns immediately and the
@@ -542,6 +567,8 @@ export class RpcHandlers {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
         if (!ws) return { ok: true };
+        // A headless agent for this workspace must not outlive it.
+        this.agentRunner.killWorkspace(p.workspaceId);
         const project = this.store.projectGet(ws.projectId);
         if (project) {
           const settings = this.projectSettings.read(project.path);
@@ -726,6 +753,26 @@ export class RpcHandlers {
         const p = Schemas.prCreate.parse(params);
         return this.git.prCreate(p);
       }
+      case "checks.get": {
+        const p = Schemas.checksGet.parse(params);
+        return this.checks.get(p);
+      }
+      case "agent.run": {
+        const p = Schemas.agentRun.parse(params);
+        return this.agentRunner.run({
+          workspaceId: p.workspaceId,
+          backend: p.backend,
+          prompt: p.prompt,
+          cwd: p.cwd ?? undefined,
+          resumeSessionId: p.resumeSessionId ?? undefined,
+          permissionMode: p.permissionMode ?? undefined,
+          env: p.env ?? undefined,
+        });
+      }
+      case "agent.kill": {
+        const p = Schemas.agentKill.parse(params);
+        return this.agentRunner.kill(p);
+      }
       case "git.remote_info": {
         const p = Schemas.gitRemoteInfo.parse(params);
         return this.git.remoteInfo(p);
@@ -736,7 +783,11 @@ export class RpcHandlers {
       }
       case "ai.branch_name": {
         const p = Schemas.aiBranchName.parse(params);
-        return this.branchName.generate({ prompt: p.prompt, cwd: p.cwd ?? undefined });
+        return this.branchName.generate({
+          prompt: p.prompt,
+          cwd: p.cwd ?? undefined,
+          instructions: p.instructions ?? undefined,
+        });
       }
       case "git.credential_status": {
         const p = Schemas.credentialProvider.parse(params);

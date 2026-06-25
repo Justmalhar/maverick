@@ -294,7 +294,66 @@ export interface MaverickConfig {
   project?: ProjectSettings;
 }
 
-export type AuxiliaryView = "files" | "diff" | "scm" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "checks" | "agent" | "none";
+
+export interface AgentRunSpec {
+  workspaceId: string;
+  backend: string;
+  prompt: string;
+  cwd?: string;
+  resumeSessionId?: string;
+  permissionMode?: string;
+  env?: Record<string, string>;
+}
+
+export interface AgentStreamEvent {
+  agentId: string;
+  workspaceId: string;
+  stream: "stdout" | "stderr";
+  data: string;
+}
+
+export interface AgentExitEvent {
+  agentId: string;
+  workspaceId: string;
+  code: number;
+}
+
+export interface AgentErrorEvent {
+  agentId: string;
+  workspaceId: string;
+  message: string;
+}
+
+export type CheckStatus = "pass" | "fail" | "pending" | "neutral";
+
+export interface CheckItem {
+  name: string;
+  status: CheckStatus;
+  detail?: string;
+}
+
+export interface PrInfo {
+  number: number;
+  url: string;
+  state: string;
+  title: string;
+  mergeable: string;
+}
+
+export interface ChecksReport {
+  git: {
+    branch: string;
+    ahead: number;
+    behind: number;
+    changedFiles: number;
+    conflicts: number;
+  };
+  pr: PrInfo | null;
+  ghAvailable: boolean;
+  checks: CheckItem[];
+  merge: { ready: boolean; blockers: string[] };
+}
 
 export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
 

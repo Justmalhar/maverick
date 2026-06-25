@@ -28,6 +28,23 @@ export function slugify(input: string): string {
   return slug || "workspace";
 }
 
+// Worktree directory name for a branch ref. Unlike slugify (which DELETES "/"
+// and would flatten "feature/login" → "featurelogin"), this PRESERVES branch
+// structure by mapping "/" → "-", so "feature/login-page" → "feature-login-page".
+// Length-capped so a pathological branch can't produce an unusable path.
+const MAX_DIR_SLUG_LEN = 60;
+export function branchToDirSlug(branch: string): string {
+  const slug = branch
+    .toLowerCase()
+    .replace(/[\s/]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, MAX_DIR_SLUG_LEN)
+    .replace(/-+$/g, "");
+  return slug || "workspace";
+}
+
 export function titleize(slug: string): string {
   return slug
     .split("-")
