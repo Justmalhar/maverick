@@ -55,13 +55,25 @@ describe("prWebUrl", () => {
   const bb = parseRemoteUrl("git@bitbucket.org:o/r.git")!;
   const gl = parseRemoteUrl("https://gitlab.com/o/r.git")!;
 
-  test("github compare URL with default base", () => {
-    expect(prWebUrl(gh, "feat")).toBe("https://github.com/o/r/compare/main...feat?expand=1");
+  test("github compare URL with no base uses the single-ref form (default branch auto-resolved)", () => {
+    // No literal 'main' — that 404s on master/develop/trunk repos.
+    expect(prWebUrl(gh, "feat")).toBe("https://github.com/o/r/compare/feat?expand=1");
   });
 
   test("github compare URL with explicit base", () => {
     expect(prWebUrl(gh, "feat", "develop")).toBe(
       "https://github.com/o/r/compare/develop...feat?expand=1"
+    );
+  });
+
+  test("github compare URL preserves slashes in slash-prefixed branch names", () => {
+    // The slash is a path segment separator GitHub routes by — it must NOT be
+    // percent-encoded to %2F (which yields a 404 'no such ref').
+    expect(prWebUrl(gh, "feature/login-page")).toBe(
+      "https://github.com/o/r/compare/feature/login-page?expand=1"
+    );
+    expect(prWebUrl(gh, "feature/login-page", "release/1.0")).toBe(
+      "https://github.com/o/r/compare/release/1.0...feature/login-page?expand=1"
     );
   });
 

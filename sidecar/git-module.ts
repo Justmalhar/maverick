@@ -1,5 +1,5 @@
 import { isAbsolute, join } from "path";
-import { unlink } from "fs/promises";
+import { unlink, writeFile as fsWriteFile } from "fs/promises";
 import { defaultShell } from "./deps";
 import { parseRemoteUrl, prWebUrl } from "./git-provider";
 import type {
@@ -87,22 +87,30 @@ export class GitError extends Error {
 /** Reads a file's raw bytes in-process. Rejects if the path is unreadable. */
 export type FileReader = (path: string) => Promise<ArrayBuffer>;
 
+/** Writes UTF-8 text to a path in-process (used for per-hunk conflict resolution). */
+export type FileWriter = (path: string, content: string) => Promise<void>;
+
 const defaultFileReader: FileReader = (path) => Bun.file(path).arrayBuffer();
+
+const defaultFileWriter: FileWriter = (path, content) => fsWriteFile(path, content, "utf8");
 
 export interface GitModuleOptions {
   shell?: Shell;
   readFile?: FileReader;
+  writeFile?: FileWriter;
   removeFile?: (path: string) => Promise<void>;
 }
 
 export class GitModule {
   private shell: Shell;
   private readFile: FileReader;
+  private writeFile: FileWriter;
   private removeFile: (path: string) => Promise<void>;
 
   constructor(opts: GitModuleOptions = {}) {
     this.shell = opts.shell ?? defaultShell;
     this.readFile = opts.readFile ?? defaultFileReader;
+    this.writeFile = opts.writeFile ?? defaultFileWriter;
     this.removeFile = opts.removeFile ?? ((p) => unlink(p));
   }
 
@@ -132,13 +140,16 @@ export class GitModule {
   }
 
   async commit(params: CommitParams): Promise<{ sha: string }> {
+    const commitCmd = ["git", "-C", params.worktreePath, "commit", "-m", params.message];
     if (params.files && params.files.length > 0) {
       await this.shell.run(["git", "-C", params.worktreePath, "add", "--", ...params.files], undefined);
+      // Scope the commit to exactly these paths (`commit -- <paths>` acts like
+      // --only) so anything else already in the index — a hunk staged via
+      // diff_stage_hunk, or files an agent ran `git add` on — is NOT swept in
+      // alongside the user's per-file selection, and stays staged afterwards.
+      commitCmd.push("--", ...params.files);
     }
-    const { exitCode, stderr } = await this.shell.run(
-      ["git", "-C", params.worktreePath, "commit", "-m", params.message],
-      undefined
-    );
+    const { exitCode, stderr } = await this.shell.run(commitCmd, undefined);
     if (exitCode !== 0) throw new Error(stderr || "git commit failed");
     const sha = (await this.shell.text(["git", "-C", params.worktreePath, "rev-parse", "HEAD"], undefined)).trim();
     return { sha };
@@ -262,14 +273,39 @@ export class GitModule {
 
   /**
    * Frontend `git_checkout` sends `{ branch }`; this is the canonical shape.
-   * For a remote-tracking ref (e.g. `origin/feat`) we strip the remote and let
-   * git auto-create the local tracking branch via `--`-free checkout of the short name.
+   * For a remote-tracking ref (e.g. `origin/feat`) we strip the remote so git's
+   * DWIM creates/switches to a local tracking branch instead of detaching HEAD.
    */
   async checkoutBranch(params: BranchCheckoutParams): Promise<{ ok: true }> {
-    const ref = params.branch.startsWith("remotes/")
-      ? params.branch.slice("remotes/".length)
-      : params.branch;
+    const ref = await this.resolveCheckoutRef(params.worktreePath, params.branch);
     return this.checkout({ worktreePath: params.worktreePath, ref });
+  }
+
+  /**
+   * `branchList` reports remote branches as `<remote>/<branch>` (the `refs/remotes/`
+   * prefix already stripped), and `git checkout origin/feat` checks out the
+   * remote-tracking ref directly → DETACHED HEAD. Strip the leading remote
+   * segment so `git checkout <branch>` DWIMs into a local tracking branch — but
+   * ONLY when that segment names a real configured remote and no local branch of
+   * the full name exists, so a genuine local branch like `feature/login` (or even
+   * one literally named `origin/x`) is left untouched.
+   */
+  private async resolveCheckoutRef(worktreePath: string, branch: string): Promise<string> {
+    const ref = branch.startsWith("remotes/") ? branch.slice("remotes/".length) : branch;
+    const slash = ref.indexOf("/");
+    if (slash <= 0) return ref;
+    const candidateRemote = ref.slice(0, slash);
+    const remotes = (await this.shell.text(["git", "-C", worktreePath, "remote"], undefined))
+      .split("\n")
+      .map((r) => r.trim())
+      .filter(Boolean);
+    if (!remotes.includes(candidateRemote)) return ref;
+    const local = await this.shell.run(
+      ["git", "-C", worktreePath, "rev-parse", "--verify", "--quiet", `refs/heads/${ref}`],
+      undefined
+    );
+    if (local.exitCode === 0) return ref;
+    return ref.slice(slash + 1);
   }
 
   async cherryPick(params: CherryPickParams): Promise<{ ok: true }> {
@@ -397,24 +433,107 @@ export class GitModule {
   }
 
   async resolveConflict(params: ResolveConflictParams): Promise<{ ok: true }> {
-    // "both" keeps the user's hand-edited working tree (which still carries the
-    // conflict markers they resolve in-editor) and simply stages it. There is no
-    // `git checkout --merge <file>` flag, so we only check out for whole-file
-    // ours/theirs resolutions; every path ends by staging the file.
-    if (params.resolution !== "both") {
-      const arg = params.resolution === "ours" ? "--ours" : "--theirs";
-      const checkout = await this.shell.run(
-        ["git", "-C", params.worktreePath, "checkout", arg, "--", params.filePath],
-        undefined
-      );
-      if (checkout.exitCode !== 0) throw new Error(checkout.stderr || "git checkout (resolve) failed");
+    const content = await this.readConflictWorkingTree(params.worktreePath, params.filePath);
+    // Binary or unreadable: there are no per-hunk regions to rewrite, so fall
+    // back to a whole-file ours/theirs checkout (the only sensible choice), then
+    // stage it. "both" on a binary file is meaningless — keep the working copy.
+    if (content === null) {
+      if (params.resolution !== "both") {
+        const arg = params.resolution === "ours" ? "--ours" : "--theirs";
+        const checkout = await this.shell.run(
+          ["git", "-C", params.worktreePath, "checkout", arg, "--", params.filePath],
+          undefined
+        );
+        if (checkout.exitCode !== 0) throw new Error(checkout.stderr || "git checkout (resolve) failed");
+      }
+      await this.stageResolved(params.worktreePath, params.filePath);
+      return { ok: true };
     }
-    const add = await this.shell.run(
-      ["git", "-C", params.worktreePath, "add", "--", params.filePath],
-      undefined
-    );
-    if (add.exitCode !== 0) throw new Error(add.stderr || "git add (resolve) failed");
+
+    // Rewrite ONLY the targeted hunk, leaving every other hunk's markers intact,
+    // then write the file back. A whole-file `git checkout --ours/--theirs` would
+    // silently resolve every hunk and discard the user's other choices.
+    const rewritten = GitModule.applyConflictResolution(content, params.hunkIndex, params.resolution);
+    await this.writeFile(join(params.worktreePath, params.filePath), rewritten);
+
+    // Stage the file only once it is fully resolved (no markers remain); while
+    // other hunks are still open, leave it unstaged so it stays in the list.
+    if (!GitModule.hasConflictMarkers(rewritten)) {
+      await this.stageResolved(params.worktreePath, params.filePath);
+    }
     return { ok: true };
+  }
+
+  private async stageResolved(worktreePath: string, filePath: string): Promise<void> {
+    const add = await this.shell.run(["git", "-C", worktreePath, "add", "--", filePath], undefined);
+    if (add.exitCode !== 0) throw new Error(add.stderr || "git add (resolve) failed");
+  }
+
+  static hasConflictMarkers(content: string): boolean {
+    return content.split("\n").some((l) => l.startsWith("<<<<<<<") || l.startsWith(">>>>>>>"));
+  }
+
+  /**
+   * Replace the `hunkIndex`-th conflict region (counting `<<<<<<<` markers, same
+   * order as {@link parseConflictMarkers}) with the chosen side and DROP its
+   * markers; every other region is reproduced verbatim. `both` keeps ours then
+   * theirs. Handles diff3 (`|||||||` base block) by discarding the base section.
+   */
+  static applyConflictResolution(
+    content: string,
+    hunkIndex: number,
+    resolution: ConflictResolution
+  ): string {
+    const lines = content.split("\n");
+    const out: string[] = [];
+    let region = -1;
+    let i = 0;
+    while (i < lines.length) {
+      if (!lines[i].startsWith("<<<<<<<")) {
+        out.push(lines[i]);
+        i++;
+        continue;
+      }
+      region++;
+      const raw: string[] = [lines[i]];
+      const ours: string[] = [];
+      const theirs: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("|||||||") && !lines[i].startsWith("=======")) {
+        ours.push(lines[i]);
+        raw.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length && lines[i].startsWith("|||||||")) {
+        raw.push(lines[i]);
+        i++;
+        while (i < lines.length && !lines[i].startsWith("=======")) {
+          raw.push(lines[i]);
+          i++;
+        }
+      }
+      if (i < lines.length && lines[i].startsWith("=======")) {
+        raw.push(lines[i]);
+        i++;
+      }
+      while (i < lines.length && !lines[i].startsWith(">>>>>>>")) {
+        theirs.push(lines[i]);
+        raw.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length && lines[i].startsWith(">>>>>>>")) {
+        raw.push(lines[i]);
+        i++;
+      }
+      if (region === hunkIndex) {
+        if (resolution === "ours") out.push(...ours);
+        else if (resolution === "theirs") out.push(...theirs);
+        else out.push(...ours, ...theirs);
+      } else {
+        out.push(...raw);
+      }
+    }
+    return out.join("\n");
   }
 
   // Every local and remote branch short name; used for unique workspace-name
