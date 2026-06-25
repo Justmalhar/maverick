@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import { join } from "node:path";
 import { GitModule, GitError } from "./git-module";
 import type { Shell } from "./types";
 
@@ -537,7 +538,7 @@ describe("GitModule methods", () => {
       { stdout: "base line" }, // git show :1:file.ts
     ]);
     const readFile = async (path: string) => {
-      expect(path).toBe("/w/file.ts");
+      expect(path).toBe(join("/w", "file.ts"));
       return bytes(conflicted);
     };
     const hunks = await new GitModule({ shell, readFile }).conflicts({ worktreePath: "/w" });
@@ -1127,7 +1128,7 @@ describe("discardFile", () => {
     const res = await git.discardFile({ worktreePath: "/wt", filePath: "new.txt" });
     expect(res).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
-    expect(removed).toEqual(["/wt/new.txt"]);
+    expect(removed).toEqual([join("/wt", "new.txt")]);
   });
 
   test("absolute filePath rejects with /relative/ and records zero shell calls", async () => {

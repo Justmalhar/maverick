@@ -101,7 +101,13 @@ describe("repairToolPath", () => {
       process.env.PATH = "/usr/bin:/bin";
       repairToolPath();
       const first = process.env.PATH;
-      expect(first!.split(":")).toContain("/opt/homebrew/bin");
+      if (process.platform === "win32") {
+        // win32 is a no-op by design: the Unix tool dirs don't exist there, so
+        // toolAugmentedPath returns PATH unchanged.
+        expect(first).toBe("/usr/bin:/bin");
+      } else {
+        expect(first!.split(":")).toContain("/opt/homebrew/bin");
+      }
       repairToolPath();
       // Re-running does not grow the PATH with duplicates.
       expect(process.env.PATH).toBe(first);

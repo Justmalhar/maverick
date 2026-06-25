@@ -1,9 +1,16 @@
 import { describe, test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
 import type { Shell } from "./types";
+
+// worktreePath is normalized to forward slashes by the manager so it matches
+// git's `--porcelain` '/'-form and the React store's string comparison. Build
+// expected paths through the same resolve+normalize the producer uses so the
+// fixtures hold on Windows (drive-anchored, '\') and POSIX alike.
+const toPosix = (p: string) => p.replace(/\\/g, "/");
+const expectedWorktree = (...segments: string[]) => toPosix(resolve(...segments));
 
 function fakeShellThatCreatesWorktreeDir(): { shell: Shell; calls: string[][] } {
   const calls: string[][] = [];
@@ -55,17 +62,11 @@ describe("WorktreeManager", () => {
     });
     const r = await mgr.create({ projectPath: "/repo", branch: "feat", baseBranch: "main" });
     expect(r.workspaceId).toBe("ws_42");
-    // Path is anchored at projectPath so it is absolute and cwd-independent.
-    expect(r.worktreePath).toBe("/repo/.mv/worktrees/ws_42");
-    expect(calls[0]).toEqual([
-      "git",
-      "worktree",
-      "add",
-      "-b",
-      "feat",
-      "/repo/.mv/worktrees/ws_42",
-      "main",
-    ]);
+    // Path is anchored at projectPath so it is absolute and cwd-independent, and
+    // normalized to forward slashes (drive-anchored on Windows: C:/repo/...).
+    const expected = expectedWorktree("/repo", ".mv/worktrees", "ws_42");
+    expect(r.worktreePath).toBe(expected);
+    expect(calls[0]).toEqual(["git", "worktree", "add", "-b", "feat", expected, "main"]);
   });
 
   test("create defaults baseBranch to branch", async () => {
@@ -296,7 +297,7 @@ describe("WorktreeManager", () => {
       base: dir,
       dirName: "viper",
     });
-    expect(r.worktreePath).toBe(join(dir, "viper-abcdef"));
+    expect(r.worktreePath).toBe(toPosix(join(dir, "viper-abcdef")));
   });
 
   test("resolveBaseBranch returns the first candidate git can verify", async () => {
@@ -334,7 +335,10 @@ describe("WorktreeManager", () => {
 
   test("defaultWorktreeRoot lives under ~/.maverick/<slug>/worktrees", () => {
     const root = defaultWorktreeRoot("My Project");
-    expect(root.endsWith(join(".maverick", "my-project", "worktrees"))).toBe(true);
-    expect(root.startsWith("/")).toBe(true);
+    // Normalized to forward slashes for cross-layer consistency, so assert in
+    // '/'-form rather than the native separator.
+    expect(root.endsWith(".maverick/my-project/worktrees")).toBe(true);
+    // Absolute path: a leading '/' on POSIX, a drive root (C:/...) on Windows.
+    expect(/^([A-Za-z]:)?\//.test(root)).toBe(true);
   });
 });

@@ -17,10 +17,21 @@ interface CreateParams {
   dirName?: string;
 }
 
+// worktreePath flows to git (`git worktree list --porcelain` reports forward
+// slashes even on Windows) and is string-matched by the React store
+// (selectContextWorkspace compares Workspace.worktreePath === FileTab.worktreePath)
+// and used as a PTY cwd. Node's join/resolve emit native '\' on Windows, which
+// would never equal git's '/'-form for the same worktree. Normalize to forward
+// slashes at every boundary that leaves this module so producer and consumers
+// agree on one separator. No-op on POSIX.
+function toPosixPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 // Worktrees live outside the repo so they never pollute the user's checkout:
 // ~/.maverick/<project-slug>/worktrees/<workspace>.
 export function defaultWorktreeRoot(projectName: string): string {
-  return join(homedir(), ".maverick", slugify(projectName), "worktrees");
+  return toPosixPath(join(homedir(), ".maverick", slugify(projectName), "worktrees"));
 }
 
 interface DestroyParams {
@@ -109,7 +120,9 @@ export class WorktreeManager {
     if (!isWithin(root, wt)) {
       throw new Error(`worktree path escapes workspaces root: ${wt}`);
     }
-    return wt;
+    // Normalize after the (native-separator) isWithin check so the path handed
+    // to `git worktree add` and returned to callers matches git's '/'-form.
+    return toPosixPath(wt);
   }
 
   // First candidate that resolves to a real ref wins; HEAD always resolves so

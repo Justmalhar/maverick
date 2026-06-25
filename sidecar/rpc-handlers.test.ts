@@ -4,6 +4,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { RpcHandlers } from "./rpc-handlers";
 import { SQLiteStore, defaultMigrationsDir } from "./sqlite-store";
+
+// Handlers compute config/instructions paths via path.join → native '\' on
+// Windows; the fake fs maps are keyed by forward-slash POSIX paths. Normalize at
+// the fake-fs boundary so the seeded keys match either way (no-op on POSIX).
+const norm = (p: string) => p.split(/[\\/]/).join("/");
 import { ProcessManager } from "./process-manager";
 import { WorktreeManager } from "./worktree-manager";
 import { ConfigLoader } from "./config-loader";
@@ -799,7 +804,7 @@ describe("RpcHandlers", () => {
     const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
     const instructions = new InstructionsResolver({
       home: "/home/test",
-      exists: (p: string) => p === "/wt/MAVERICK.md",
+      exists: (p: string) => norm(p) === "/wt/MAVERICK.md",
       readFile: () => "project rules",
     });
     const handlers = new RpcHandlers({ store, instructions });
@@ -854,10 +859,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -880,10 +885,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: existing, command: c, args: [] }\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -907,10 +912,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: fs, command: old, args: [] }\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -940,15 +945,15 @@ describe("RpcHandlers", () => {
   test("mcp.add resolves projectPath from workspaceId", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mvk-mcpadd-"));
     const files: Record<string, string> = {
-      [join(dir, "maverick.yaml")]:
+      [norm(join(dir, "maverick.yaml"))]:
         "version: 1\nbackends:\n  default: claude\n  available: []\n",
     };
     const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const fakeWorktree = {
@@ -1095,9 +1100,15 @@ describe("RpcHandlers", () => {
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
 
+    // PowerShell `>` redirection writes UTF-16LE + BOM, so the read would be
+    // garbled; WriteAllText writes exact UTF-8. Use a platform-native command.
+    const archive =
+      process.platform === "win32"
+        ? `[System.IO.File]::WriteAllText('${markerPath}', 'archived')`
+        : `printf archived > ${markerPath}`;
     await h.dispatch("project.settings.update", {
       projectId,
-      patch: { scripts: { setup: "", run: "", archive: `echo archived > ${markerPath}` } },
+      patch: { scripts: { setup: "", run: "", archive } },
     });
     const ws = (await h.dispatch("workspace.create", {
       projectId, projectPath: dir, branch: "feat/archive", backend: "claude",
@@ -1106,7 +1117,8 @@ describe("RpcHandlers", () => {
     await h.dispatch("workspace.destroy", { workspaceId: ws.id });
 
     expect(existsSync(markerPath)).toBe(true);
-    expect(readFileSync(markerPath, "utf8").trim()).toBe("archived");
+    // Tolerate a leading BOM in case a shell wrote one (escape, not a literal).
+    expect(readFileSync(markerPath, "utf8").replace(/^﻿/, "").trim()).toBe("archived");
   });
 
   it("workspace.destroy skips archive when scripts.archive is empty", async () => {
