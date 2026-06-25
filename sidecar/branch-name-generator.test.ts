@@ -74,6 +74,39 @@ describe("BranchNameGenerator", () => {
   });
 });
 
+describe("BranchNameGenerator.generateFromDiff", () => {
+  test("names from last commit subject + diff stat, honoring instructions", async () => {
+    const texts = ["add login page", " src/login.ts | 10 +++"];
+    let ti = 0;
+    let stdin: string | undefined;
+    const shell: Shell = {
+      text: async () => texts[ti++] ?? "",
+      run: async (_cmd, _cwd, input) => {
+        stdin = input;
+        return { stdout: "feature/login-page\n", stderr: "", exitCode: 0 };
+      },
+    };
+    const r = await new BranchNameGenerator({ shell }).generateFromDiff({ cwd: "/w", instructions: "use feature/<name>" });
+    expect(r.name).toBe("feature/login-page");
+    expect(stdin).toContain("add login page");
+    expect(stdin).toContain("use feature/<name>");
+  });
+
+  test("falls back to a generic summary when git is quiet", async () => {
+    let stdin: string | undefined;
+    const shell: Shell = {
+      text: async () => "",
+      run: async (_cmd, _cwd, input) => {
+        stdin = input;
+        return { stdout: "tidy-up\n", stderr: "", exitCode: 0 };
+      },
+    };
+    const r = await new BranchNameGenerator({ shell }).generateFromDiff({ cwd: "/w" });
+    expect(r.name).toBe("tidy-up");
+    expect(stdin).toContain("recent code changes");
+  });
+});
+
 describe("BranchNameGenerator.sanitizeBranchName — caps", () => {
   test("rejects prose with too many words", () => {
     expect(

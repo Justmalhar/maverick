@@ -511,6 +511,20 @@ export async function aiBranchName(
   return invoke("ai_branch_name", { prompt, cwd, instructions });
 }
 
+export async function aiBranchNameFromDiff(
+  cwd: string,
+  instructions?: string
+): Promise<{ name: string }> {
+  return invoke("ai_branch_name_from_diff", { cwd, instructions });
+}
+
+export async function gitRenameBranch(
+  worktreePath: string,
+  newBranch: string
+): Promise<{ ok: true; branch: string }> {
+  return invoke("git_rename_branch", { worktreePath, newBranch });
+}
+
 export async function gitCredentialStatus(
   provider: CredentialProvider
 ): Promise<CredentialStatus> {

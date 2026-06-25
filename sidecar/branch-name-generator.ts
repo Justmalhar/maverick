@@ -56,6 +56,27 @@ export class BranchNameGenerator {
   }
 
   /**
+   * Name a branch from the work already done in it (last commit subject + changed
+   * files), for the "let AI name it later" flow. Reuses generate()'s prompt +
+   * sanitize + instructions path. Falls back to a generic summary if git is quiet.
+   */
+  async generateFromDiff(params: { cwd: string; instructions?: string }): Promise<{ name: string }> {
+    const summary = await this.diffSummary(params.cwd);
+    return this.generate({ prompt: summary, cwd: params.cwd, instructions: params.instructions });
+  }
+
+  private async diffSummary(cwd: string): Promise<string> {
+    const subject = (
+      await this.shell.text(["git", "-C", cwd, "log", "-1", "--format=%s"], undefined).catch(() => "")
+    ).trim();
+    const stat = (
+      await this.shell.text(["git", "-C", cwd, "diff", "--stat", "HEAD~1..HEAD"], undefined).catch(() => "")
+    ).trim();
+    const summary = [subject, stat].filter(Boolean).join("\n").slice(0, MAX_TASK_CHARS);
+    return summary || "recent code changes";
+  }
+
+  /**
    * Coerce arbitrary model output into a git-safe branch ref. Lowercases,
    * turns whitespace into hyphens, drops characters git refs disallow, and keeps
    * slash-delimited prefixes (so "feature/login-page" survives) while collapsing

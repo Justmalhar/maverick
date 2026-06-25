@@ -236,6 +236,21 @@ export class GitModule {
     return { ok: true };
   }
 
+  /**
+   * Rename the worktree's CURRENT branch (`git branch -m <new>`). Used by the
+   * "AI rename" flow once an agent has done enough work to name the branch from
+   * its diff. The worktree directory name is intentionally left unchanged (it is
+   * cosmetic and decoupled from the ref via dirName at create time).
+   */
+  async renameBranch(params: { worktreePath: string; newBranch: string }): Promise<{ ok: true; branch: string }> {
+    const { exitCode, stderr } = await this.shell.run(
+      ["git", "-C", params.worktreePath, "branch", "-m", params.newBranch],
+      undefined
+    );
+    if (exitCode !== 0) throw new Error(stderr || "git branch -m failed");
+    return { ok: true, branch: params.newBranch };
+  }
+
   async checkout(params: CheckoutParams): Promise<{ ok: true }> {
     const { exitCode, stderr } = await this.shell.run(
       ["git", "-C", params.worktreePath, "checkout", params.ref],

@@ -270,6 +270,11 @@ const Schemas = {
     cwd: nullishOptional(z.string()),
     instructions: nullishOptional(z.string()),
   }),
+  aiBranchNameFromDiff: z.object({
+    cwd: z.string(),
+    instructions: nullishOptional(z.string()),
+  }),
+  gitRenameBranch: z.object({ worktreePath: z.string(), newBranch: z.string() }),
   credentialProvider: z.object({ provider: CredentialProviderSchema }),
   credentialConnect: z.object({
     provider: CredentialProviderSchema,
@@ -788,6 +793,14 @@ export class RpcHandlers {
           cwd: p.cwd ?? undefined,
           instructions: p.instructions ?? undefined,
         });
+      }
+      case "ai.branch_name_from_diff": {
+        const p = Schemas.aiBranchNameFromDiff.parse(params);
+        return this.branchName.generateFromDiff({ cwd: p.cwd, instructions: p.instructions ?? undefined });
+      }
+      case "git.rename_branch": {
+        const p = Schemas.gitRenameBranch.parse(params);
+        return this.git.renameBranch(p);
       }
       case "git.credential_status": {
         const p = Schemas.credentialProvider.parse(params);

@@ -278,6 +278,8 @@ pub fn run() {
             git_discard_file,
             ai_commit_message,
             ai_branch_name,
+            ai_branch_name_from_diff,
+            git_rename_branch,
             git_credential_status,
             git_credential_connect,
             git_credential_disconnect,

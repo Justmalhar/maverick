@@ -1008,3 +1008,19 @@ describe("discardFile", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("GitModule.renameBranch", () => {
+  test("runs git branch -m and returns the new name", async () => {
+    const { shell, calls } = transcript([{}]);
+    const r = await new GitModule({ shell }).renameBranch({ worktreePath: "/w", newBranch: "feature/login" });
+    expect(r).toEqual({ ok: true, branch: "feature/login" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "branch", "-m", "feature/login"]);
+  });
+
+  test("throws when git branch -m fails", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "branch exists" }]);
+    await expect(
+      new GitModule({ shell }).renameBranch({ worktreePath: "/w", newBranch: "x" })
+    ).rejects.toThrow();
+  });
+});
