@@ -48,10 +48,19 @@ describe("Caffeinate", () => {
     expect(c.start()).toEqual({ started: false });
   });
 
-  test("start on win32 returns started:false", () => {
-    const c = new Caffeinate({ spawn: () => fakeProc(), platform: "win32" });
-    expect(c.start()).toEqual({ started: false });
-    expect(c.active()).toBe(false);
+  test("start on win32 holds the execution state via a long-lived PowerShell process (#35)", () => {
+    const calls: string[][] = [];
+    const c = new Caffeinate({
+      spawn: (cmd) => {
+        calls.push(cmd);
+        return fakeProc();
+      },
+      platform: "win32",
+    });
+    expect(c.start()).toEqual({ started: true });
+    expect(c.active()).toBe(true);
+    expect(calls[0][0]).toBe("powershell");
+    expect(calls[0].join(" ")).toContain("SetThreadExecutionState");
   });
 
   test("stop kills and clears proc", () => {

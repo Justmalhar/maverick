@@ -22,6 +22,7 @@ import type {
   FileReadResult,
   FileWriteResult,
   FsChangedPayload,
+  TextEncoding,
   KanbanTask,
   SearchResult,
   MaverickConfig,
@@ -232,9 +233,10 @@ export async function fileRead(filePath: string): Promise<FileReadResult> {
 export async function fileWrite(
   filePath: string,
   content: string,
-  expectedMtime?: number
+  expectedMtime?: number,
+  encoding?: TextEncoding
 ): Promise<FileWriteResult> {
-  return invoke("file_write", { filePath, content, expectedMtime });
+  return invoke("file_write", { filePath, content, expectedMtime, encoding });
 }
 
 export async function fileReadAtRef(

@@ -8,7 +8,7 @@ describe("FileReader", () => {
       readFile: () => Buffer.from("hello"),
     });
     const res = fr.read({ filePath: "/a.txt" });
-    expect(res).toEqual({ content: "hello", size: 5, binary: false, unreadable: false, mtime: 1000 });
+    expect(res).toEqual({ content: "hello", size: 5, binary: false, unreadable: false, mtime: 1000, encoding: "utf8" });
   });
 
   test("flags binary content (NUL byte) and omits it", () => {
@@ -21,6 +21,33 @@ describe("FileReader", () => {
     expect(res.content).toBe("");
     expect(res.unreadable).toBe(false);
     expect(res.mtime).toBe(2000);
+  });
+
+  test("decodes a UTF-16LE (BOM) file as text, not binary (#27)", () => {
+    // "Hi" as UTF-16LE: FF FE 48 00 69 00 — contains NUL bytes but is valid text.
+    const buf = Buffer.from([0xff, 0xfe, 0x48, 0x00, 0x69, 0x00]);
+    const fr = new FileReader({ stat: () => ({ size: buf.length, mtimeMs: 1 }), readFile: () => buf });
+    const res = fr.read({ filePath: "/u16le.txt" });
+    expect(res.binary).toBe(false);
+    expect(res.content).toBe("Hi");
+    expect(res.encoding).toBe("utf16le");
+  });
+
+  test("decodes a UTF-16BE (BOM) file as text (#27)", () => {
+    // "Hi" as UTF-16BE: FE FF 00 48 00 69.
+    const buf = Buffer.from([0xfe, 0xff, 0x00, 0x48, 0x00, 0x69]);
+    const fr = new FileReader({ stat: () => ({ size: buf.length, mtimeMs: 1 }), readFile: () => buf });
+    const res = fr.read({ filePath: "/u16be.txt" });
+    expect(res.content).toBe("Hi");
+    expect(res.encoding).toBe("utf16be");
+  });
+
+  test("strips a UTF-8 BOM and records the encoding (#27)", () => {
+    const buf = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("hi", "utf8")]);
+    const fr = new FileReader({ stat: () => ({ size: buf.length, mtimeMs: 1 }), readFile: () => buf });
+    const res = fr.read({ filePath: "/u8bom.txt" });
+    expect(res.content).toBe("hi"); // leading U+FEFF stripped
+    expect(res.encoding).toBe("utf8-bom");
   });
 
   test("refuses oversized files without reading them", () => {
@@ -48,7 +75,7 @@ describe("FileReader", () => {
       readFile: () => Buffer.from(""),
     });
     const res = fr.read({ filePath: "/missing" });
-    expect(res).toEqual({ content: "", size: 0, binary: false, unreadable: true, mtime: 0 });
+    expect(res).toEqual({ content: "", size: 0, binary: false, unreadable: true, mtime: 0, encoding: "utf8" });
   });
 
   test("returns unreadable when readFile throws", () => {

@@ -30,12 +30,18 @@ pub async fn file_write(
     file_path: String,
     content: String,
     expected_mtime: Option<f64>,
+    encoding: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request(
             "file.write",
-            json!({ "filePath": file_path, "content": content, "expectedMtime": expected_mtime }),
+            json!({
+                "filePath": file_path,
+                "content": content,
+                "expectedMtime": expected_mtime,
+                "encoding": encoding,
+            }),
         )
         .await
         .map_err(|e| e.to_string())

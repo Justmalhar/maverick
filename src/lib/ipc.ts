@@ -406,6 +406,8 @@ export interface PairedDevice {
   paired_at: number;
 }
 
+export type TextEncoding = "utf8" | "utf8-bom" | "utf16le" | "utf16be";
+
 export interface FileReadResult {
   content: string;
   size: number;
@@ -413,6 +415,8 @@ export interface FileReadResult {
   unreadable: boolean;
   /** mtimeMs at read time; echo back to file_write as expectedMtime. */
   mtime: number;
+  /** Source encoding (from a BOM); echo back to file_write to preserve it. */
+  encoding: TextEncoding;
 }
 
 export interface FileWriteResult {

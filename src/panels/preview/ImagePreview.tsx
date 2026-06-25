@@ -1,5 +1,6 @@
 // Inline image preview: scroll-zoom, drag-pan, fit-to-window.
-import { useCallback, useRef, useState, type MouseEvent, type WheelEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type MouseEvent, type WheelEvent } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -8,6 +9,10 @@ interface Props {
 }
 
 export default function ImagePreview({ filePath }: Props) {
+  // A raw OS path (esp. `C:\…` on Windows) is not a loadable WebView URL — it
+  // resolves against the page origin, not the filesystem. convertFileSrc maps it
+  // to the asset protocol (gated by tauri.conf.json security.assetProtocol).
+  const src = useMemo(() => convertFileSrc(filePath), [filePath]);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragging = useRef<{ x: number; y: number } | null>(null);
@@ -59,7 +64,7 @@ export default function ImagePreview({ filePath }: Props) {
         onMouseLeave={stopDrag}
       >
         <img
-          src={filePath}
+          src={src}
           alt=""
           draggable={false}
           data-testid="image-preview-img"

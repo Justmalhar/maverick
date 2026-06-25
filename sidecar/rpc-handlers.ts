@@ -140,6 +140,7 @@ const Schemas = {
     filePath: z.string(),
     content: z.string(),
     expectedMtime: nullishOptional(z.number()),
+    encoding: nullishOptional(z.enum(["utf8", "utf8-bom", "utf16le", "utf16be"])),
   }),
   fileReadAtRef: z.object({ worktreePath: z.string(), filePath: z.string(), ref: z.string() }),
   gitDiscardFile: z.object({ worktreePath: z.string(), filePath: z.string() }),
@@ -825,7 +826,12 @@ export class RpcHandlers {
       }
       case "file.write": {
         const p = Schemas.fileWrite.parse(params);
-        return this.fileWriter.write({ filePath: p.filePath, content: p.content, expectedMtime: p.expectedMtime });
+        return this.fileWriter.write({
+          filePath: p.filePath,
+          content: p.content,
+          expectedMtime: p.expectedMtime,
+          encoding: p.encoding ?? undefined,
+        });
       }
       case "file.readAtRef": {
         const p = Schemas.fileReadAtRef.parse(params);
