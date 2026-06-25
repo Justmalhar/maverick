@@ -4,6 +4,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { gitConflicts, gitResolveConflict } from "@/lib/tauri";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
+import { buildResolveConflictPrompt, sendAgentPrompt } from "@/lib/ai-actions";
+import { Sparkles } from "lucide-react";
 import type { ConflictHunk, ConflictResolution as Resolution } from "@/lib/ipc";
 
 interface Props {
@@ -14,6 +19,23 @@ export default function ConflictResolver({ worktreePath }: Props) {
   const [hunks, setHunks] = useState<ConflictHunk[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const active = useWorkbench(selectContextWorkspace);
+  const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const resolveConflictsPref = useProjectSettingsStore((s) => s.data?.preferences?.resolveConflicts);
+
+  const resolveWithAI = useCallback(async () => {
+    if (!active) return;
+    const files = [...new Set(hunks.map((h) => h.filePath))];
+    try {
+      await sendAgentPrompt({
+        agentPtyId: primaryAgentPtyId(active.id),
+        prompt: buildResolveConflictPrompt(files, resolveConflictsPref),
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [active, hunks, resolveConflictsPref, setActiveWorkspace]);
 
   const refresh = useCallback(async () => {
     if (!worktreePath) return;
@@ -54,9 +76,24 @@ export default function ConflictResolver({ worktreePath }: Props) {
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
           Conflicts
         </span>
-        <Badge variant={hunks.length > 0 ? "destructive" : "outline"}>
-          {hunks.length}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {hunks.length > 0 && active && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resolveWithAI}
+              data-testid="conflict-resolve-ai"
+              title="Ask the agent to resolve these conflicts following your Resolve conflicts preference"
+              className="h-6 gap-1 px-2 text-[11px]"
+            >
+              <Sparkles className="h-3 w-3" />
+              Resolve with AI
+            </Button>
+          )}
+          <Badge variant={hunks.length > 0 ? "destructive" : "outline"}>
+            {hunks.length}
+          </Badge>
+        </div>
       </div>
       {loading && (
         <div className="px-3 py-1.5 text-[11px] text-muted-foreground">Loading…</div>

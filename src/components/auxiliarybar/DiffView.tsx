@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2, MessagesSquare } from "lucide-react";
+import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2, MessagesSquare, Wrench } from "lucide-react";
 import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
@@ -8,6 +8,7 @@ import { ReviewComments } from "./ReviewComments";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview, sendReviewComments } from "@/lib/ai-review";
+import { buildCreatePrPrompt, buildFixErrorsPrompt, sendAgentPrompt } from "@/lib/ai-actions";
 import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,6 +52,8 @@ export function DiffView() {
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);
+  const createPrPref = useProjectSettingsStore((s) => s.data?.preferences?.createPr);
+  const fixErrorsPref = useProjectSettingsStore((s) => s.data?.preferences?.fixErrors);
   const allComments = useReviewComments((s) => s.comments);
   const clearComments = useReviewComments((s) => s.clearForWorkspace);
   const agentStatus = useAgentStatus(active?.id ?? "");
@@ -100,6 +103,32 @@ export function DiffView() {
       });
     } catch (e) {
       console.error("AI review failed", e);
+    }
+  }
+
+  async function onDraftPr() {
+    if (!active || !diff) return;
+    try {
+      await sendAgentPrompt({
+        agentPtyId: primaryAgentPtyId(active.id),
+        prompt: buildCreatePrPrompt(diff, createPrPref),
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+    } catch (e) {
+      console.error("Draft PR failed", e);
+    }
+  }
+
+  async function onFixErrors() {
+    if (!active) return;
+    try {
+      await sendAgentPrompt({
+        agentPtyId: primaryAgentPtyId(active.id),
+        prompt: buildFixErrorsPrompt(fixErrorsPref),
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+    } catch (e) {
+      console.error("Fix errors failed", e);
     }
   }
 
@@ -178,6 +207,32 @@ export function DiffView() {
               <GitPullRequest className="h-3.5 w-3.5" />
             )}
             Create PR
+          </button>
+        </div>
+        {/* Agent actions driven by project preferences (createPr / fixErrors).
+            Disabled while the agent is mid-task so we don't interleave prompts. */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onDraftPr}
+            disabled={agentStatus === "working"}
+            data-testid="diff-draft-pr"
+            title="Ask the agent to open a PR following your Create PR preference"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
+          >
+            <GitPullRequest className="h-3.5 w-3.5" />
+            Draft PR
+          </button>
+          <button
+            type="button"
+            onClick={onFixErrors}
+            disabled={agentStatus === "working"}
+            data-testid="diff-fix-errors"
+            title="Ask the agent to run checks and fix errors following your Fix errors preference"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            Fix errors
           </button>
         </div>
         {comments.length > 0 && (

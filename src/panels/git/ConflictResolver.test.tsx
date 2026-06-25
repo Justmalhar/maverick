@@ -4,9 +4,16 @@ import { cleanup } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import ConflictResolver from "./ConflictResolver";
+import { useWorkbench } from "@/state/store";
+import { makeWorkspace } from "@/test/fixtures";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/leaf-registry";
+
+const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  terminalLeafTesting.leafPtyCache.clear();
+  useWorkbench.setState({ ...initial, workspaces: [], activeWorkspaceId: null });
 });
 
 describe("ConflictResolver", () => {
@@ -39,6 +46,27 @@ describe("ConflictResolver", () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("listX"));
     renderWithProviders(<ConflictResolver worktreePath="/wt" />);
     await waitFor(() => expect(screen.getByText(/listX/)).toBeInTheDocument());
+  });
+
+  it("'Resolve with AI' sends a resolve-conflicts prompt to the agent PTY", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+    });
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_conflicts") return [{ filePath: "a.ts", hunkIndex: 0, ours: ["o"], theirs: ["t"] }];
+      return undefined;
+    }) as unknown as typeof invoke);
+    renderWithProviders(<ConflictResolver worktreePath="/wt" />);
+    await userEvent.click(await screen.findByTestId("conflict-resolve-ai"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        expect.objectContaining({ ptyId: "pty-w1-1", data: expect.stringContaining("merge conflicts") })
+      )
+    );
   });
 
   it("captures errors from resolve", async () => {

@@ -98,6 +98,40 @@ describe("DiffView", () => {
     await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));
   });
 
+  it("Draft PR sends a create-PR prompt to the agent PTY", async () => {
+    activeWorkspaceWithDiff();
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
+      .mockResolvedValueOnce(undefined as never); // pty_write
+    renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("diff-draft-pr"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        expect.objectContaining({ ptyId: "pty-w1-1", data: expect.stringContaining("pull request") })
+      )
+    );
+  });
+
+  it("Fix errors sends a fix-errors prompt to the agent PTY", async () => {
+    activeWorkspaceWithDiff();
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
+      .mockResolvedValueOnce(undefined as never); // pty_write
+    renderWithProviders(<DiffView />);
+    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("diff-fix-errors"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_write",
+        expect.objectContaining({ ptyId: "pty-w1-1", data: expect.stringContaining("fix any errors") })
+      )
+    );
+  });
+
   it("AI Code Review logs an error when the review call fails", async () => {
     activeWorkspaceWithDiff();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
