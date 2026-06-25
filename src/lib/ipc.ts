@@ -91,7 +91,19 @@ export interface Skill {
 
 export type KeybindingMap = Record<string, string>;
 
-export type SplitLeaf = { type: "terminal"; id: string; backend: string; ptyId: string };
+export type SplitLeaf = {
+  type: "terminal";
+  id: string;
+  backend: string;
+  ptyId: string;
+  // Optional per-node launch (set by a preset layout): spawn this command in
+  // this cwd via Rust ConPTY and type `startup` into it once. Absent = the
+  // default login shell scoped to the workspace worktree (normal tabs).
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  startup?: string;
+};
 
 export type SplitNode =
   | SplitLeaf
@@ -212,8 +224,8 @@ export interface PresetLaunchResult {
   worktreePath: string;
   /** Actual branch the worktree was created on (`<preset>-<ts>`). */
   branch: string;
-  ptyIds: string[];
-  browserPanes: Array<{ url?: string }>;
+  /** Preset layout with cwds resolved; the frontend builds its SplitGrid + PTYs from it. */
+  layout: PresetNode;
 }
 
 export interface DiffResult {

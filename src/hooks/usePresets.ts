@@ -1,10 +1,49 @@
 import { useCallback, useEffect, useState } from "react";
 import { presetList, presetLaunch, presetSaveCurrent } from "@/lib/tauri";
+import { resolveLaunch } from "@/lib/launch";
 import { useWorkbench } from "@/state/store";
 import type { EditorMode, PresetNode, SplitNode, WorkspacePreset } from "@/lib/ipc";
 
 // Worktree-relative cwd placeholder the sidecar expands per launch.
 const WORKSPACE_ROOT = "{{workspace_root}}";
+
+/**
+ * Convert a preset layout (returned by preset.launch, with cwd already resolved
+ * to the worktree) into a live SplitNode tree the SplitGrid renders. Each
+ * terminal node becomes a leaf that spawns its agent command via Rust ConPTY
+ * (the single PTY authority); leaf ids are `${workspaceId}-N` (1-based, primary
+ * first) so killWorkspaceLeaves / primaryAgentPtyId keep matching. Browser nodes
+ * have no place in the (terminal-only) SplitGrid yet, so a split with a browser
+ * child collapses to its terminal sibling.
+ */
+export function presetNodeToSplitTree(layout: PresetNode, workspaceId: string): SplitNode {
+  let n = 0;
+  const conv = (node: PresetNode): SplitNode | null => {
+    if (node.type === "terminal") {
+      const isShell = !node.agent || node.agent === "shell";
+      const resolved = isShell ? undefined : resolveLaunch(node.agent);
+      return {
+        type: "terminal",
+        id: `${workspaceId}-${++n}`,
+        backend: node.agent || "shell",
+        ptyId: "",
+        ...(resolved ? { command: resolved.command, args: resolved.args } : {}),
+        ...(node.cwd && node.cwd !== WORKSPACE_ROOT ? { cwd: node.cwd } : {}),
+        ...(node.startup ? { startup: node.startup } : {}),
+      };
+    }
+    if (node.type === "browser") return null;
+    const a = "top" in node ? node.top : node.left;
+    const b = "top" in node ? node.bottom : node.right;
+    const left = conv(a);
+    const right = conv(b);
+    if (left && right) {
+      return { type: "split", direction: node.direction, ratio: node.ratio, left, right };
+    }
+    return left ?? right; // collapse a split whose other side was a browser node
+  };
+  return conv(layout) ?? { type: "terminal", id: `${workspaceId}-1`, backend: "shell", ptyId: "" };
+}
 
 /** Convert a live SplitNode tree into a serialisable PresetNode layout. */
 export function splitTreeToPresetNode(node: SplitNode, mode: EditorMode): PresetNode {

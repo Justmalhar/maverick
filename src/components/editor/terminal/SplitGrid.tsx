@@ -32,6 +32,10 @@ export function SplitGrid({
           isFocused={focusedPaneId === tree.id}
           onFocus={onFocus}
           visible={visible}
+          command={tree.command}
+          args={tree.args}
+          cwd={tree.cwd}
+          startup={tree.startup}
         />
       </div>
     );

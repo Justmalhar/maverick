@@ -2,7 +2,6 @@ import { basename } from "path";
 import { ConfigLoader } from "./config-loader";
 import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
 import { slugify } from "./name-generator";
-import { ProcessManager } from "./process-manager";
 import type { SQLiteStore } from "./sqlite-store";
 import type { PresetNode, WorkspacePreset } from "./types";
 
@@ -33,28 +32,28 @@ export interface LaunchResult {
   worktreePath: string;
   /** The actual branch the worktree was created on (`<preset>-<ts>`). */
   branch: string;
-  ptyIds: string[];
-  /** Browser panes the layout declares — the UI opens a browser pane per entry. */
-  browserPanes: Array<{ url?: string }>;
+  /**
+   * The preset layout with each terminal's cwd resolved to the worktree. The
+   * frontend builds its SplitGrid from this and spawns each terminal via the
+   * Rust ConPTY path — the sidecar no longer pre-spawns PTYs.
+   */
+  layout: PresetNode;
 }
 
 export interface PresetLauncherOptions {
   loader?: ConfigLoader;
   worktree?: WorktreeManager;
-  process?: ProcessManager;
   store?: SQLiteStore;
 }
 
 export class PresetLauncher {
   private loader: ConfigLoader;
   private worktree: WorktreeManager;
-  private process: ProcessManager;
   private store?: SQLiteStore;
 
   constructor(opts: PresetLauncherOptions = {}) {
     this.loader = opts.loader ?? new ConfigLoader();
     this.worktree = opts.worktree ?? new WorktreeManager();
-    this.process = opts.process ?? new ProcessManager();
     this.store = opts.store;
   }
 
@@ -106,10 +105,11 @@ export class PresetLauncher {
         title: params.preset.name,
       });
     }
-    const ptyIds: string[] = [];
-    const browserPanes: Array<{ url?: string }> = [];
-    this.traverse(params.preset.layout, workspaceId, worktreePath, ptyIds, browserPanes);
-    return { workspaceId, worktreePath, branch: presetBranch, ptyIds, browserPanes };
+    // Return the layout with cwds resolved — the frontend spawns the terminals
+    // via Rust ConPTY. No sidecar pre-spawning (which produced undriveable,
+    // headless pipe-PTYs the frontend could never display or kill).
+    const layout = this.resolveLayout(params.preset.layout, worktreePath);
+    return { workspaceId, worktreePath, branch: presetBranch, layout };
   }
 
   /** Persist the layout as a named preset. Returns the stored preset. */
@@ -133,37 +133,27 @@ export class PresetLauncher {
     };
   }
 
-  private traverse(
-    node: PresetNode,
-    workspaceId: string,
-    worktreePath: string,
-    ptyIds: string[],
-    browserPanes: Array<{ url?: string }>
-  ): void {
+  /** Pure pre-order map: expand each terminal's `{{workspace_root}}` cwd to the
+   *  worktree path, leaving the tree shape (splits, browser nodes) intact. */
+  private resolveLayout(node: PresetNode, worktreePath: string): PresetNode {
     if (node.type === "terminal") {
-      const { ptyId } = this.process.spawn({
-        workspaceId,
-        command: node.agent,
-        args: [],
-        cwd: this.resolveCwd(node.cwd, worktreePath),
-      });
-      ptyIds.push(ptyId);
-      if (node.startup) {
-        void this.process.write({ ptyId, data: node.startup + "\n" });
-      }
-      return;
+      return { ...node, cwd: this.resolveCwd(node.cwd, worktreePath) };
     }
     if (node.type === "browser") {
-      browserPanes.push({ url: node.url });
-      return;
+      return node;
     }
     if ("top" in node) {
-      this.traverse(node.top, workspaceId, worktreePath, ptyIds, browserPanes);
-      this.traverse(node.bottom, workspaceId, worktreePath, ptyIds, browserPanes);
-    } else {
-      this.traverse(node.left, workspaceId, worktreePath, ptyIds, browserPanes);
-      this.traverse(node.right, workspaceId, worktreePath, ptyIds, browserPanes);
+      return {
+        ...node,
+        top: this.resolveLayout(node.top, worktreePath),
+        bottom: this.resolveLayout(node.bottom, worktreePath),
+      };
     }
+    return {
+      ...node,
+      left: this.resolveLayout(node.left, worktreePath),
+      right: this.resolveLayout(node.right, worktreePath),
+    };
   }
 
   private resolveCwd(cwd: string, worktreePath: string): string {

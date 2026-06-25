@@ -42,16 +42,27 @@ describe("PresetPicker", () => {
     await userEvent.type(screen.getByTestId("preset-picker-input"), "alp");
   });
 
-  it("launch invokes presetLaunch and adds workspace", async () => {
+  it("launch invokes presetLaunch, seeds the split tree, and adds workspace", async () => {
     useWorkbench.setState({ ...initial, projects: [makeProject({ id: "p1" })] });
     mockChain({
       preset_list: () => [makePreset({ name: "alpha" })],
-      preset_launch: () => ({ workspaceId: "w-new" }),
+      preset_launch: () => ({
+        workspaceId: "w-new",
+        worktreePath: "/wt",
+        branch: "alpha-1",
+        layout: { type: "terminal", agent: "shell", cwd: "/wt", mode: "terminal" },
+      }),
     });
     const onOpen = vi.fn();
     renderWithProviders(<PresetPicker open onOpenChange={onOpen} />);
     await userEvent.click(await screen.findByTestId("preset-picker-item"));
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith(false));
+    // The preset layout is seeded as the workspace's split tree (primary leaf id).
+    const tree = useWorkbench.getState().splitTrees["w-new"];
+    expect(tree).toBeDefined();
+    expect(tree.type === "terminal" && tree.id).toBe("w-new-1");
+    // And the workspace uses the real worktree path, not "".
+    expect(useWorkbench.getState().workspaces.find((w) => w.id === "w-new")?.worktreePath).toBe("/wt");
   });
 
   it("logs an error on launch failure", async () => {

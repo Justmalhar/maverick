@@ -48,94 +48,12 @@ function fakeProc(stdoutChunks: string[] = [], exitCode = 0, throwOnRead = false
   return p;
 }
 
-function makeManager(proc: ManagedProc, lines: string[] = []) {
-  const ids = { uuid: (p: string) => `${p}_fixed`, now: () => 1 };
+function makeManager(proc: ManagedProc) {
   const spawner: Spawner = () => proc;
-  const notifier = { write: (l: string) => lines.push(l) };
-  return new ProcessManager({ spawn: spawner, notifier, ids });
+  return new ProcessManager({ spawn: spawner });
 }
 
 describe("ProcessManager", () => {
-  test("spawn registers pty and returns id", async () => {
-    const proc = fakeProc(["hello"]);
-    const lines: string[] = [];
-    const mgr = makeManager(proc, lines);
-    const { ptyId } = mgr.spawn({ workspaceId: "ws", command: "echo", args: ["hi"] });
-    expect(ptyId).toBe("pty_fixed");
-    expect(mgr.has(ptyId)).toBe(true);
-    await proc.exited;
-    await Bun.sleep(10);
-    expect(lines.some((l) => l.includes("pty.data"))).toBe(true);
-    expect(lines.some((l) => l.includes("pty.exit"))).toBe(true);
-    expect(mgr.size()).toBe(0);
-  });
-
-  test("write forwards data to stdin", async () => {
-    const proc = fakeProc([]);
-    const mgr = makeManager(proc);
-    const { ptyId } = mgr.spawn({ workspaceId: "ws", command: "cat", args: [] });
-    await mgr.write({ ptyId, data: "ping" });
-    expect(proc.writes).toContain("ping");
-  });
-
-  test("write throws when pty not found", async () => {
-    const mgr = makeManager(fakeProc([]));
-    await expect(mgr.write({ ptyId: "missing", data: "x" })).rejects.toThrow(/PTY not found/);
-  });
-
-  test("write throws when stdin missing", async () => {
-    const proc = fakeProc([]);
-    proc.stdin = undefined;
-    const mgr = makeManager(proc);
-    const { ptyId } = mgr.spawn({ workspaceId: "ws", command: "nostdin", args: [] });
-    await expect(mgr.write({ ptyId, data: "x" })).rejects.toThrow(/stdin not writable/);
-  });
-
-  test("resize updates dimensions", () => {
-    const proc = fakeProc([]);
-    const mgr = makeManager(proc);
-    const { ptyId } = mgr.spawn({ workspaceId: "ws", command: "x", args: [] });
-    expect(mgr.resize({ ptyId, cols: 120, rows: 40 })).toEqual({ ok: true });
-  });
-
-  test("resize throws when pty not found", () => {
-    const mgr = makeManager(fakeProc([]));
-    expect(() => mgr.resize({ ptyId: "x", cols: 80, rows: 24 })).toThrow();
-  });
-
-  test("kill terminates and removes pty", () => {
-    const proc = fakeProc([]);
-    const mgr = makeManager(proc);
-    const { ptyId } = mgr.spawn({ workspaceId: "ws", command: "x", args: [] });
-    expect(mgr.kill({ ptyId })).toEqual({ ok: true });
-    expect(proc.killed).toBe(true);
-    expect(mgr.has(ptyId)).toBe(false);
-  });
-
-  test("kill is no-op on unknown pty", () => {
-    const mgr = makeManager(fakeProc([]));
-    expect(mgr.kill({ ptyId: "ghost" })).toEqual({ ok: true });
-  });
-
-  test("pumpStdout emits pty.error on read failure", async () => {
-    const proc = fakeProc([], 0, true);
-    const lines: string[] = [];
-    const mgr = makeManager(proc, lines);
-    mgr.spawn({ workspaceId: "ws", command: "x", args: [] });
-    await Bun.sleep(20);
-    expect(lines.some((l) => l.includes("pty.error"))).toBe(true);
-  });
-
-  test("spawn handles missing stdout stream", async () => {
-    const proc = fakeProc([]);
-    proc.stdout = undefined;
-    const lines: string[] = [];
-    const mgr = makeManager(proc, lines);
-    mgr.spawn({ workspaceId: "ws", command: "x", args: [] });
-    await Bun.sleep(10);
-    expect(lines.some((l) => l.includes("pty.exit"))).toBe(true);
-  });
-
   test("defaultSpawner spawns a real subprocess", async () => {
     const proc = defaultSpawner(["echo", "hi"], {});
     const out = await new Response(proc.stdout!).text();
@@ -164,26 +82,5 @@ describe("ProcessManager", () => {
     handle.proc.kill();
     expect(proc.killed).toBe(true);
     expect(handle.exited).toBe(proc.exited);
-  });
-
-  test("killWorkspace kills and evicts only that workspace's PTYs", () => {
-    const procs = [fakeProc(), fakeProc(), fakeProc()];
-    let idx = 0;
-    let n = 0;
-    const mgr = new ProcessManager({
-      spawn: () => procs[idx++],
-      notifier: { write() {} },
-      ids: { uuid: (p) => `${p}_${++n}`, now: () => 1 },
-    });
-    mgr.spawn({ workspaceId: "ws-A", command: "a", args: [] });
-    mgr.spawn({ workspaceId: "ws-A", command: "b", args: [] });
-    mgr.spawn({ workspaceId: "ws-B", command: "c", args: [] });
-    expect(mgr.size()).toBe(3);
-
-    mgr.killWorkspace("ws-A");
-    expect(procs[0].killed).toBe(true);
-    expect(procs[1].killed).toBe(true);
-    expect(procs[2].killed).toBe(false); // ws-B left alone
-    expect(mgr.size()).toBe(1);
   });
 });

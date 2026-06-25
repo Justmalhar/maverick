@@ -70,8 +70,6 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
   const proc = new ProcessManager({
     spawn: (() => fakeProc()) as Spawner,
-    notifier: { write: () => {} },
-    ids,
   });
   const worktree = new WorktreeManager({ shell, ids });
   const config = new ConfigLoader({
@@ -241,59 +239,6 @@ describe("RpcHandlers", () => {
       toolCallsJson: null,
     })) as { id: string };
     expect(r.id).toBeDefined();
-  });
-
-  test("pty.spawn/write/resize/kill", async () => {
-    const { ptyId } = (await h.dispatch("pty.spawn", {
-      workspaceId: "ws",
-      command: "echo",
-      args: ["hi"],
-    })) as { ptyId: string };
-    await h.dispatch("pty.write", { ptyId, data: "x" });
-    await h.dispatch("pty.resize", { ptyId, cols: 80, rows: 24 });
-    await h.dispatch("pty.kill", { ptyId });
-    expect(h.process.has(ptyId)).toBe(false);
-  });
-
-  test("pty.spawn defaults cwd to the workspace worktree path", async () => {
-    const spawnCalls: Array<{ cmd: string[]; cwd?: string }> = [];
-    const ids = (() => {
-      let n = 0;
-      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
-    })();
-    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
-    const proc = new ProcessManager({
-      spawn: ((cmd, opts) => {
-        spawnCalls.push({ cmd, cwd: opts.cwd });
-        return fakeProc();
-      }) as Spawner,
-      notifier: { write: () => {} },
-      ids,
-    });
-    const handlers = new RpcHandlers({ store, process: proc });
-    const proj = (await handlers.dispatch("project.add", { path: "/tmp/wt-cwd" })) as { id: string };
-    store.workspaceCreate({
-      id: "ws-cwd",
-      projectId: proj.id,
-      branch: "main",
-      agentBackend: "claude",
-      worktreePath: "/tmp/wt-cwd/.maverick/worktrees/ws-cwd",
-    });
-
-    await handlers.dispatch("pty.spawn", {
-      workspaceId: "ws-cwd",
-      command: "/bin/zsh",
-      args: ["-l"],
-    });
-    expect(spawnCalls[0].cwd).toBe("/tmp/wt-cwd/.maverick/worktrees/ws-cwd");
-
-    await handlers.dispatch("pty.spawn", {
-      workspaceId: "ws-cwd",
-      command: "/bin/zsh",
-      args: ["-l"],
-      cwd: "/explicit/cwd",
-    });
-    expect(spawnCalls[1].cwd).toBe("/explicit/cwd");
   });
 
   test("config.load and skills.list/run", async () => {

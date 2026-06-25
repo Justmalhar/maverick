@@ -64,16 +64,6 @@ const Schemas = {
   }),
   workspaceDestroy: z.object({ workspaceId: z.string() }),
   workspaceList: z.object({ projectId: nullishOptional(z.string()) }),
-  ptySpawn: z.object({
-    workspaceId: z.string(),
-    command: z.string(),
-    args: z.array(z.string()).default([]),
-    cwd: nullishOptional(z.string()),
-    env: nullishOptional(z.record(z.string(), z.string())),
-  }),
-  ptyWrite: z.object({ ptyId: z.string(), data: z.string() }),
-  ptyResize: z.object({ ptyId: z.string(), cols: z.number(), rows: z.number() }),
-  ptyKill: z.object({ ptyId: z.string() }),
   configLoad: z.object({ projectPath: z.string() }),
   messagesList: z.object({
     sessionId: z.string(),
@@ -574,10 +564,10 @@ export class RpcHandlers {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
         if (!ws) return { ok: true };
-        // Neither a headless agent nor a preset's spawned terminals may outlive
-        // the workspace — reap both before tearing down the worktree.
+        // A headless agent must not outlive its workspace. (Preset/terminal PTYs
+        // are Rust-owned and reaped by the frontend's killWorkspaceLeaves on
+        // removeWorkspace — the sidecar no longer spawns any.)
         this.agentRunner.killWorkspace(p.workspaceId);
-        this.process.killWorkspace(p.workspaceId);
         const project = this.store.projectGet(ws.projectId);
         if (project) {
           const settings = this.projectSettings.read(project.path);
@@ -625,26 +615,6 @@ export class RpcHandlers {
       case "workspace.list": {
         const p = Schemas.workspaceList.parse(params);
         return this.store.workspaceList(p.projectId);
-      }
-      case "pty.spawn": {
-        const p = Schemas.ptySpawn.parse(params);
-        if (!p.cwd) {
-          const ws = this.store.workspaceGet(p.workspaceId);
-          if (ws) p.cwd = ws.worktreePath;
-        }
-        return this.process.spawn(p);
-      }
-      case "pty.write": {
-        const p = Schemas.ptyWrite.parse(params);
-        return this.process.write(p);
-      }
-      case "pty.resize": {
-        const p = Schemas.ptyResize.parse(params);
-        return this.process.resize(p);
-      }
-      case "pty.kill": {
-        const p = Schemas.ptyKill.parse(params);
-        return this.process.kill(p);
       }
       case "config.load": {
         const p = Schemas.configLoad.parse(params);
