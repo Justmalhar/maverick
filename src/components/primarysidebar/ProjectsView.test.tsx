@@ -73,6 +73,8 @@ describe("ProjectsView", () => {
     }));
     // Creation queues the setup script to stream in the Panel's Setup tab.
     expect(useWorkbench.getState().pendingSetupIds).toContain("w-new");
+    // "AI name later" marks the workspace for an AI rename after its first commit.
+    await waitFor(() => expect(useWorkbench.getState().pendingAiRename).toContain("w-new"));
   });
 
   it("New workspace → typed name creates the composed feature/<slug> branch", async () => {

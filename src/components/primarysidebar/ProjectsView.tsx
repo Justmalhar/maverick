@@ -35,12 +35,14 @@ export function ProjectsView() {
   // (e.g. "feature/login-page") is used verbatim.
   async function onAddWorkspace(
     projectId: string,
-    opts: { baseBranch?: string; branch?: string } = {}
+    opts: { baseBranch?: string; branch?: string; aiLater?: boolean } = {}
   ) {
     try {
       const ws = await create(projectId, opts.branch, DEFAULT_BACKEND, opts.baseBranch);
       const { command, args } = resolveStartupLaunch(DEFAULT_BACKEND);
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
+      // "Let AI name it later": mark for an AI rename from the diff after first commit.
+      if (opts.aiLater) useWorkbench.getState().markPendingAiRename(ws.id);
     } catch (e) {
       console.error("addWorkspace failed", e);
     }
@@ -118,7 +120,7 @@ export function ProjectsView() {
           if (nameWorkspaceProjectId) void onAddWorkspace(nameWorkspaceProjectId, { branch });
         }}
         onAiLater={() => {
-          if (nameWorkspaceProjectId) void onAddWorkspace(nameWorkspaceProjectId, {});
+          if (nameWorkspaceProjectId) void onAddWorkspace(nameWorkspaceProjectId, { aiLater: true });
         }}
       />
     </div>

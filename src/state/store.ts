@@ -125,6 +125,11 @@ interface WorkbenchState {
   addWorkspace: (workspace: Workspace) => void;
   removeWorkspace: (id: string) => void;
   updateWorkspace: (id: string, patch: Partial<Workspace>) => void;
+  // Workspaces created via "let AI name it later" — renamed from their diff after
+  // the first commit. workspaceId list; cleared once renamed (or on destroy).
+  pendingAiRename: string[];
+  markPendingAiRename: (id: string) => void;
+  clearPendingAiRename: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
   /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
@@ -207,6 +212,7 @@ export const useWorkbench = create<WorkbenchState>()(
     splitTrees: {},
     launchSpecs: {},
     agentLaunchSpecs: {},
+    pendingAiRename: [],
 
     layout: {
       activitybarCollapsed: false,
@@ -258,6 +264,7 @@ export const useWorkbench = create<WorkbenchState>()(
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
           launchSpecs,
           agentLaunchSpecs,
+          pendingAiRename: s.pendingAiRename.filter((wid) => wid !== id),
         };
       });
     },
@@ -265,6 +272,14 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
       })),
+    markPendingAiRename: (id) =>
+      set((s) => ({
+        pendingAiRename: s.pendingAiRename.includes(id)
+          ? s.pendingAiRename
+          : [...s.pendingAiRename, id],
+      })),
+    clearPendingAiRename: (id) =>
+      set((s) => ({ pendingAiRename: s.pendingAiRename.filter((w) => w !== id) })),
     setActiveWorkspace: (id) =>
       set((s) => ({
         activeWorkspaceId: id,

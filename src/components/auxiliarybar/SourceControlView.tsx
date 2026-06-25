@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
+import { renameWorkspaceBranchWithAI } from "@/lib/ai-rename";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useSourceControl } from "@/hooks/useSourceControl";
 import { useOSPlatform } from "@/hooks/useOSPlatform";
 import { formatKeybinding } from "@/shortcuts/format";
@@ -100,6 +102,7 @@ export function SourceControlView() {
   const platform = useOSPlatform();
   const active = useWorkbench(selectContextWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
+  const branchRenamePref = useProjectSettingsStore((s) => s.data?.preferences?.branchRename);
   const scm = useSourceControl(active?.worktreePath ?? null);
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -210,6 +213,22 @@ export function SourceControlView() {
       setMessage("");
       await refreshFiles();
       await scm.refresh();
+      // "Let AI name it later": once there's a commit to name from, rename the
+      // branch from its diff and drop the pending flag. Best-effort — a failed
+      // rename never undoes the commit.
+      const wb = useWorkbench.getState();
+      if (wb.pendingAiRename.includes(active.id)) {
+        const newBranch = await renameWorkspaceBranchWithAI({
+          worktreePath: active.worktreePath,
+          instructions: branchRenamePref,
+        });
+        wb.clearPendingAiRename(active.id);
+        if (newBranch) {
+          wb.updateWorkspace(active.id, { branch: newBranch });
+          await scm.refresh({ remote: "never" });
+          return { tone: "info", text: `Committed ${sha.slice(0, 7)} · branch → ${newBranch}` };
+        }
+      }
       return { tone: "info", text: `Committed ${sha.slice(0, 7)}` };
     });
 
