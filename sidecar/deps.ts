@@ -104,7 +104,7 @@ export const defaultShell: Shell = {
     }
     return out;
   },
-  async run(cmd, cwd, stdin) {
+  async run(cmd, cwd, stdin, opts) {
     const proc = Bun.spawn(cmd, {
       cwd,
       stdout: "pipe",
@@ -117,9 +117,37 @@ export const defaultShell: Shell = {
       writer.write(stdin);
       writer.end();
     }
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
-    await proc.exited;
-    return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+    // Drain stdout and stderr concurrently: reading them sequentially can
+    // deadlock a child that fills the ~64KB stderr pipe before stdout closes.
+    const collect = (async () => {
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      await proc.exited;
+      return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+    })();
+
+    if (!opts?.timeoutMs || opts.timeoutMs <= 0) return collect;
+
+    // Race the read against the budget and RETURN on expiry rather than waiting
+    // for the kill to close the pipes (which it doesn't always do promptly on
+    // Windows). kill() is best-effort reaping so the child can't outlive us.
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+      timer = setTimeout(() => {
+        try {
+          proc.kill();
+        } catch {
+          // already exited
+        }
+        resolve({ stdout: "", stderr: `timed out after ${opts.timeoutMs}ms`, exitCode: 124 });
+      }, opts.timeoutMs);
+    });
+    try {
+      return await Promise.race([collect, timeout]);
+    } finally {
+      clearTimeout(timer!);
+    }
   },
 };

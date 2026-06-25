@@ -328,7 +328,10 @@ export interface Shell {
   run(
     cmd: string[],
     cwd?: string,
-    stdin?: string
+    stdin?: string,
+    // `timeoutMs` kills the child once the budget elapses (exitCode 124), so a
+    // hung CLI (`claude -p`, `gh`) can't orphan a subprocess or stall the sidecar.
+    opts?: { timeoutMs?: number }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 

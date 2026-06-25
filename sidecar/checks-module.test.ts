@@ -43,6 +43,32 @@ function steps(over: Partial<Record<0 | 1 | 2 | 3, Step>>): Step[] {
   ];
 }
 
+describe("ChecksModule gh timeout", () => {
+  test("passes a kill budget to the gh subprocess", async () => {
+    const optsSeen: Array<{ timeoutMs?: number } | undefined> = [];
+    const shell: Shell = {
+      text: async () => "*\trefs/heads/feat\torigin/feat\t",
+      run: async (_cmd, _cwd, _stdin, opts) => {
+        optsSeen.push(opts);
+        return { stdout: "", stderr: "no pull requests found for branch", exitCode: 1 };
+      },
+    };
+    await new ChecksModule({ shell }).get({ worktreePath: "/wt" });
+    expect(optsSeen).toHaveLength(1);
+    expect(optsSeen[0]?.timeoutMs).toBe(30_000);
+  });
+
+  test("treats a killed gh (exit 124) as unavailable rather than throwing", async () => {
+    const shell: Shell = {
+      text: async () => "*\trefs/heads/feat\torigin/feat\t",
+      run: async () => ({ stdout: "", stderr: "timed out after 30000ms", exitCode: 124 }),
+    };
+    const report = await new ChecksModule({ shell }).get({ worktreePath: "/wt" });
+    expect(report.ghAvailable).toBe(false);
+    expect(report.pr).toBeNull();
+  });
+});
+
 describe("ChecksModule.parseRollup", () => {
   test("CheckRun conclusions map to status", () => {
     const rollup = [

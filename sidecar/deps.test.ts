@@ -141,6 +141,27 @@ describe("defaultShell", () => {
     expect(r.stdout.trim()).toBe("no-stdin");
   });
 
+  test("run kills a child that exceeds its timeout budget (exit 124, no orphan)", async () => {
+    const start = Date.now();
+    const r = await defaultShell.run(
+      ["bun", "-e", "await Bun.sleep(10000)"],
+      undefined,
+      undefined,
+      { timeoutMs: 200 }
+    );
+    const elapsed = Date.now() - start;
+    expect(r.exitCode).toBe(124);
+    expect(r.stderr).toContain("timed out");
+    // Reaped near the 200ms budget — nowhere near the 10s the child would sleep.
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  test("run leaves a fast command untouched when a generous timeout is set", async () => {
+    const r = await defaultShell.run(["echo", "quick"], undefined, undefined, { timeoutMs: 30_000 });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.trim()).toBe("quick");
+  });
+
   test("hardened env disables interactive git prompts and pins the locale", async () => {
     expect(HARDENED_ENV.GIT_TERMINAL_PROMPT).toBe("0");
     expect(HARDENED_ENV.LC_ALL).toBe("C");

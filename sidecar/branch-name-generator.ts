@@ -15,6 +15,10 @@ const DEFAULT_RULES = "Use 2-4 words, lowercase, kebab-case, no slashes or prefi
 
 const MAX_TASK_CHARS = 2_000;
 
+// Reap a hung `claude -p` before the Rust transport's 60s budget for
+// ai.branch_name expires, so the child never outlives the request.
+const CLAUDE_TIMEOUT_MS = 45_000;
+
 // Deterministic guards so a model that ignores the prompt and returns prose
 // (observed: a full explanatory sentence) is rejected and the caller falls back
 // to a clean title slug rather than creating a 100-char garbage branch.
@@ -45,7 +49,8 @@ export class BranchNameGenerator {
     const { stdout, stderr, exitCode } = await this.shell.run(
       ["claude", "-p", "--output-format", "text"],
       params.cwd,
-      input
+      input,
+      { timeoutMs: CLAUDE_TIMEOUT_MS }
     );
     if (exitCode !== 0) {
       throw new Error(stderr.trim() || "claude CLI failed — is it installed and logged in?");

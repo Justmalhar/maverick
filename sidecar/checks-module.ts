@@ -74,9 +74,11 @@ export class ChecksModule {
     const cmd = ["gh", "pr", "view", "--json", GH_FIELDS];
     let result: { stdout: string; stderr: string; exitCode: number };
     try {
-      result = await this.withTimeout(this.shell.run(cmd, worktreePath));
+      // timeoutMs kills a stalled `gh` instead of leaking it (the old race
+      // abandoned the live child); a kill surfaces as exitCode 124 below.
+      result = await this.shell.run(cmd, worktreePath, undefined, { timeoutMs: GH_TIMEOUT_MS });
     } catch {
-      // ENOENT (gh not installed) or our own timeout: treat as unavailable.
+      // ENOENT (gh not installed): treat as unavailable.
       return { ghAvailable: false, pr: null, checks: [] };
     }
 
@@ -102,14 +104,6 @@ export class ChecksModule {
     } catch {
       return { ghAvailable: true, pr: null, checks: [] };
     }
-  }
-
-  private withTimeout<T>(p: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("gh timed out")), GH_TIMEOUT_MS);
-    });
-    return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
   }
 
   /** Normalize `gh`'s heterogeneous statusCheckRollup into typed CheckItems. */
