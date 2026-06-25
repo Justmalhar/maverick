@@ -92,18 +92,26 @@ fn resolve_bun(
     ("bun".to_string(), Vec::new())
 }
 
-fn release_sidecar_command(handle: &AppHandle) -> (String, Vec<String>, Option<PathBuf>) {
-    // Tauri's externalBin resolver puts the sidecar next to the main binary
-    // with the same name as configured in tauri.conf.json `externalBin`.
-    // On macOS that's Contents/MacOS/<name>; on Linux/Windows it's beside the binary.
-    let exe_dir = handle
-        .path()
-        .resource_dir()
+/// Join the bundled sidecar binary onto the directory that holds the main
+/// executable. Tauri's `externalBin` resolver copies the sidecar next to the
+/// main binary (stripping the target triple), so it lives in the *exe* dir on
+/// every platform — Windows/Linux install root, macOS `Contents/MacOS`.
+fn sidecar_binary_path(exe_dir: &Path) -> PathBuf {
+    let ext = if cfg!(windows) { ".exe" } else { "" };
+    exe_dir.join(format!("maverick-sidecar{ext}"))
+}
+
+fn release_sidecar_command() -> (String, Vec<String>, Option<PathBuf>) {
+    // Anchor on `current_exe().parent()`, NOT `resource_dir()`: on Windows/Linux
+    // `resource_dir()` IS the exe dir (so `.parent()` would walk one level above
+    // the install root to a path that doesn't exist), and on macOS it points at
+    // `Contents/Resources` while the sidecar sits in `Contents/MacOS`. The exe
+    // dir is the correct externalBin anchor on all three.
+    let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."));
-    let ext = if cfg!(windows) { ".exe" } else { "" };
-    let binary = exe_dir.join(format!("maverick-sidecar{ext}"));
+    let binary = sidecar_binary_path(&exe_dir);
     (binary.to_string_lossy().into_owned(), vec![], None)
 }
 
@@ -178,7 +186,7 @@ pub fn run() {
             let (cmd, args, cwd) = if cfg!(debug_assertions) {
                 dev_sidecar_command()
             } else {
-                release_sidecar_command(&handle)
+                release_sidecar_command()
             };
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
@@ -371,9 +379,28 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_bun;
+    use super::{resolve_bun, sidecar_binary_path};
     use std::collections::HashSet;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn sidecar_resolves_inside_the_exe_dir_not_above_it() {
+        let exe_dir = if cfg!(windows) {
+            PathBuf::from(r"C:\Program Files\Maverick")
+        } else {
+            PathBuf::from("/opt/maverick")
+        };
+        let resolved = sidecar_binary_path(&exe_dir);
+        // Regression for the `.parent()` bug: the sidecar must live IN the exe
+        // dir, never one level above it (which is where every install failed).
+        assert_eq!(resolved.parent(), Some(exe_dir.as_path()));
+        let name = if cfg!(windows) {
+            "maverick-sidecar.exe"
+        } else {
+            "maverick-sidecar"
+        };
+        assert_eq!(resolved.file_name().unwrap().to_str().unwrap(), name);
+    }
 
     fn exists_in(present: &[&str]) -> impl Fn(&Path) -> bool {
         let set: HashSet<PathBuf> = present.iter().map(PathBuf::from).collect();
