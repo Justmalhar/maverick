@@ -4,8 +4,10 @@ import {
   buildCreatePrPrompt,
   buildFixErrorsPrompt,
   buildResolveConflictPrompt,
+  canDispatchAgentAction,
   sendAgentPrompt,
 } from "./ai-actions";
+import { __testing__ } from "@/components/editor/terminal/leaf-registry";
 import { makeDiff, makeDiffFile } from "@/test/fixtures";
 
 describe("buildCreatePrPrompt", () => {
@@ -54,19 +56,53 @@ describe("buildResolveConflictPrompt", () => {
 describe("sendAgentPrompt", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset().mockResolvedValue(undefined as never);
+    __testing__.leafPtyCache.clear();
   });
 
-  it("writes the prompt (with newline) to the agent PTY and focuses it", async () => {
+  it("writes the prompt to the live agent PTY when one exists and focuses it", async () => {
+    __testing__.leafPtyCache.set("ws1-1", "pty-1"); // primaryAgentPtyId(ws1)
     const onAgentFocus = vi.fn();
-    const r = await sendAgentPrompt({ agentPtyId: "pty-1", prompt: "do it", onAgentFocus });
+    const r = await sendAgentPrompt({
+      target: { workspaceId: "ws1", backend: "claude-code", cwd: "/wt" },
+      prompt: "do it",
+      onAgentFocus,
+    });
     expect(r).toEqual({ ran: true });
     expect(onAgentFocus).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "do it\n" });
   });
 
-  it("no-ops without an agent PTY or with an empty prompt", async () => {
-    expect(await sendAgentPrompt({ agentPtyId: undefined, prompt: "x" })).toEqual({ ran: false });
-    expect(await sendAgentPrompt({ agentPtyId: "pty-1", prompt: "  " })).toEqual({ ran: false });
+  it("dispatches a headless agent run when there is no PTY (the default mode) (#31)", async () => {
+    vi.mocked(invoke).mockResolvedValue({ agentId: "a1" } as never);
+    const r = await sendAgentPrompt({
+      target: { workspaceId: "ws2", backend: "claude-code", cwd: "/wt2" },
+      prompt: "review it",
+    });
+    expect(r).toEqual({ ran: true });
+    expect(invoke).toHaveBeenCalledWith(
+      "agent_run",
+      expect.objectContaining({ workspaceId: "ws2", backend: "claude-code", prompt: "review it", cwd: "/wt2" })
+    );
+  });
+
+  it("no-ops on an empty prompt or an unreachable backend (no PTY, no headless)", async () => {
+    expect(
+      await sendAgentPrompt({ target: { workspaceId: "ws3", backend: "claude-code", cwd: "/w" }, prompt: "  " })
+    ).toEqual({ ran: false });
+    expect(
+      await sendAgentPrompt({ target: { workspaceId: "ws4", backend: "aider", cwd: "/w" }, prompt: "x" })
+    ).toEqual({ ran: false });
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("canDispatchAgentAction", () => {
+  beforeEach(() => __testing__.leafPtyCache.clear());
+
+  it("is true with a live PTY, true for a headless backend, false otherwise", () => {
+    __testing__.leafPtyCache.set("p-1", "pty");
+    expect(canDispatchAgentAction({ workspaceId: "p", backend: "aider", cwd: "/w" })).toBe(true); // PTY
+    expect(canDispatchAgentAction({ workspaceId: "h", backend: "claude-code", cwd: "/w" })).toBe(true); // headless
+    expect(canDispatchAgentAction({ workspaceId: "n", backend: "aider", cwd: "/w" })).toBe(false);
   });
 });

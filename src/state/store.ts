@@ -2,6 +2,8 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { disposeWorkspaceRunners } from "@/lib/script-runner";
+import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type {
   Project,
   Workspace,
@@ -252,18 +254,23 @@ export const useWorkbench = create<WorkbenchState>()(
         ],
       })),
     removeWorkspace: (id) => {
-      // Kill any Run/Setup process and drop its keep-alive registry entries so a
-      // closed workspace can't leave an orphaned dev server holding a port.
+      // Canonical teardown for BOTH close paths (tab X / ⌘W go through here, not
+      // just the Archive action): kill the Run/Setup processes AND every per-leaf
+      // shell PTY, so closing a tab can't orphan a dev server or a login shell.
       disposeWorkspaceRunners(id);
+      killWorkspaceLeaves(id);
+      useAgentStatusStore.getState().clearStatus(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
         const { [id]: _aspec, ...agentLaunchSpecs } = s.agentLaunchSpecs;
+        const { [id]: _tree, ...splitTrees } = s.splitTrees;
         return {
           workspaces: s.workspaces.filter((w) => w.id !== id),
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
           launchSpecs,
           agentLaunchSpecs,
+          splitTrees,
           pendingAiRename: s.pendingAiRename.filter((wid) => wid !== id),
         };
       });

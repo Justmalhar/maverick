@@ -6,6 +6,7 @@ import {
   getSourceControlRemoteIndicator,
   __resetAutoFetchForTests,
 } from "./useSourceControl";
+import { useSettingsStore } from "@/lib/stores/settings";
 import type { Branch } from "@/lib/ipc";
 
 function branch(overrides: Partial<Branch> = {}): Branch {
@@ -38,6 +39,7 @@ function mockGit(handlers: {
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   __resetAutoFetchForTests();
+  useSettingsStore.setState({ values: {} }); // defaults (autoFetchMinutes = 5)
 });
 
 afterEach(() => {
@@ -201,6 +203,25 @@ describe("useSourceControl", () => {
     const { result } = renderHook(() => useSourceControl("/wt"));
     await waitFor(() => expect(result.current.hasRepo).toBe(true));
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-fetch when git.autoFetchMinutes is 0 (disabled) (#33)", async () => {
+    useSettingsStore.setState({ values: { "git.autoFetchMinutes": 0 } });
+    const fetch = vi.fn(() => ({ ok: true }));
+    mockGit({ branchList: () => [branch({ isCurrent: true, upstream: "origin/main" })], fetch });
+    const { result } = renderHook(() => useSourceControl("/wt"));
+    await waitFor(() => expect(result.current.hasRepo).toBe(true));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("auto-fetch uses the configured git.remote (#33)", async () => {
+    useSettingsStore.setState({ values: { "git.remote": "upstream" } });
+    const fetch = vi.fn(() => ({ ok: true }));
+    mockGit({ branchList: () => [branch({ isCurrent: true, upstream: "origin/main" })], fetch });
+    renderHook(() => useSourceControl("/wt"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_fetch", { worktreePath: "/wt", remote: "upstream" })
+    );
   });
 
   it("auto-fetch error sets lastRemoteError but keeps branch", async () => {

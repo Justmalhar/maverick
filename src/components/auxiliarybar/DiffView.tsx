@@ -8,8 +8,7 @@ import { ReviewComments } from "./ReviewComments";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
 import { runAiReview, sendReviewComments } from "@/lib/ai-review";
-import { buildCreatePrPrompt, buildFixErrorsPrompt, sendAgentPrompt } from "@/lib/ai-actions";
-import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
+import { buildCreatePrPrompt, buildFixErrorsPrompt, canDispatchAgentAction, sendAgentPrompt, type AgentTarget } from "@/lib/ai-actions";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -92,11 +91,15 @@ export function DiffView() {
     };
   }, [active?.worktreePath]);
 
+  const agentTarget: AgentTarget | null = active
+    ? { workspaceId: active.id, backend: active.agentBackend, cwd: active.worktreePath }
+    : null;
+
   async function onReview() {
-    if (!active) return;
+    if (!active || !agentTarget) return;
     try {
       await runAiReview({
-        agentPtyId: primaryAgentPtyId(active.id),
+        target: agentTarget,
         worktreePath: active.worktreePath,
         reviewPref,
         onAgentFocus: () => setActiveWorkspace(active.id),
@@ -107,10 +110,10 @@ export function DiffView() {
   }
 
   async function onDraftPr() {
-    if (!active || !diff) return;
+    if (!active || !agentTarget || !diff) return;
     try {
       await sendAgentPrompt({
-        agentPtyId: primaryAgentPtyId(active.id),
+        target: agentTarget,
         prompt: buildCreatePrPrompt(diff, createPrPref),
         onAgentFocus: () => setActiveWorkspace(active.id),
       });
@@ -120,10 +123,10 @@ export function DiffView() {
   }
 
   async function onFixErrors() {
-    if (!active) return;
+    if (!active || !agentTarget) return;
     try {
       await sendAgentPrompt({
-        agentPtyId: primaryAgentPtyId(active.id),
+        target: agentTarget,
         prompt: buildFixErrorsPrompt(fixErrorsPref),
         onAgentFocus: () => setActiveWorkspace(active.id),
       });
@@ -133,10 +136,10 @@ export function DiffView() {
   }
 
   async function onSendComments() {
-    if (!active || comments.length === 0) return;
+    if (!active || !agentTarget || comments.length === 0) return;
     try {
       const res = await sendReviewComments({
-        agentPtyId: primaryAgentPtyId(active.id),
+        target: agentTarget,
         comments,
         onAgentFocus: () => setActiveWorkspace(active.id),
       });
@@ -168,6 +171,14 @@ export function DiffView() {
     );
   }
 
+  // Whether the agent is reachable at all (live PTY or headless backend) — gate
+  // the AI actions so they don't present as enabled-but-inert.
+  const canAct = canDispatchAgentAction({
+    workspaceId: active.id,
+    backend: active.agentBackend,
+    cwd: active.worktreePath,
+  });
+
   const files = diff?.files ?? [];
   if (files.length === 0) {
     return (
@@ -188,8 +199,10 @@ export function DiffView() {
           <button
             type="button"
             onClick={onReview}
+            disabled={!canAct}
             data-testid="diff-ai-review"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted"
+            title={canAct ? "Run an AI review of the diff" : "No agent available for this workspace"}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
           >
             <Bot className="h-3.5 w-3.5" />
             AI Code Review
@@ -215,7 +228,7 @@ export function DiffView() {
           <button
             type="button"
             onClick={onDraftPr}
-            disabled={agentStatus === "working"}
+            disabled={agentStatus === "working" || !canAct}
             data-testid="diff-draft-pr"
             title="Ask the agent to open a PR following your Create PR preference"
             className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
@@ -226,7 +239,7 @@ export function DiffView() {
           <button
             type="button"
             onClick={onFixErrors}
-            disabled={agentStatus === "working"}
+            disabled={agentStatus === "working" || !canAct}
             data-testid="diff-fix-errors"
             title="Ask the agent to run checks and fix errors following your Fix errors preference"
             className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
@@ -239,7 +252,7 @@ export function DiffView() {
           <button
             type="button"
             onClick={onSendComments}
-            disabled={agentStatus === "working"}
+            disabled={agentStatus === "working" || !canAct}
             data-testid="diff-send-comments"
             title={
               agentStatus === "working"

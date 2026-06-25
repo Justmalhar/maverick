@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { gitConflicts, gitResolveConflict } from "@/lib/tauri";
 import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
-import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
 import { buildResolveConflictPrompt, sendAgentPrompt } from "@/lib/ai-actions";
 import { Sparkles } from "lucide-react";
 import type { ConflictHunk, ConflictResolution as Resolution } from "@/lib/ipc";
@@ -28,7 +27,7 @@ export default function ConflictResolver({ worktreePath }: Props) {
     const files = [...new Set(hunks.map((h) => h.filePath))];
     try {
       await sendAgentPrompt({
-        agentPtyId: primaryAgentPtyId(active.id),
+        target: { workspaceId: active.id, backend: active.agentBackend, cwd: active.worktreePath },
         prompt: buildResolveConflictPrompt(files, resolveConflictsPref),
         onAgentFocus: () => setActiveWorkspace(active.id),
       });

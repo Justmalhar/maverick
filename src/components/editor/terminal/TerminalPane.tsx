@@ -7,6 +7,7 @@ import {
   type PtyBridge,
 } from "@/lib/terminal-provider";
 import { useThemeContext } from "@/themes/theme-context";
+import { useSettings } from "@/lib/stores/settings";
 import { usePty } from "@/hooks/usePty";
 import { setLeafFocused } from "@/lib/providers/terminal-session";
 import { registerFileDropTarget, shellEscapePaths } from "@/lib/file-drop";
@@ -58,6 +59,10 @@ export function TerminalPane({
   const handleRef = useRef<TerminalHandle | null>(null);
   const pooledRef = useRef<PooledTerminalHandle | null>(null);
   const [dropActive, setDropActive] = useState(false);
+  // Appearance settings (applied when a terminal slot is acquired) — previously
+  // these were hardcoded, so the Settings controls were inert.
+  const [terminalFontSize] = useSettings("appearance.terminalFontSize", 13);
+  const [ligatures] = useSettings("appearance.ligatures", true);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
   const onOutputRef = useRef(onOutput);
@@ -83,10 +88,10 @@ export function TerminalPane({
     const provider = TerminalRegistry.get();
     const options = {
       theme: theme.terminal,
-      fontSize: 13,
+      fontSize: terminalFontSize,
       fontFamily: MONO_FONT_STACK,
       lineHeight: 1.2,
-      ligatures: false,
+      ligatures,
       scrollback: 5000,
     };
 

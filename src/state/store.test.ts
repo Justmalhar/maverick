@@ -101,6 +101,29 @@ describe("workbench store", () => {
     spy.mockRestore();
   });
 
+  it("removeWorkspace kills the workspace's leaf shell PTYs (#17)", async () => {
+    const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockClear();
+    // Seed two live leaf PTYs for the workspace (ids are `${workspaceId}-…`).
+    __testing__.leafPtyCache.set("w-pty-1", "pty-aaa");
+    __testing__.leafPtyCache.set("w-pty-2", "pty-bbb");
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w-pty" })]);
+    useWorkbench.getState().removeWorkspace("w-pty");
+    // Both leaves evicted and killed — closing a tab must not orphan a shell.
+    expect(__testing__.leafPtyCache.has("w-pty-1")).toBe(false);
+    expect(__testing__.leafPtyCache.has("w-pty-2")).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-aaa" });
+    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-bbb" });
+  });
+
+  it("removeWorkspace prunes the workspace's split tree (#40m)", () => {
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w-tree" })]);
+    useWorkbench.getState().setSplitTree("w-tree", { type: "terminal", id: "w-tree-1", backend: "shell", ptyId: "" });
+    useWorkbench.getState().removeWorkspace("w-tree");
+    expect(useWorkbench.getState().splitTrees["w-tree"]).toBeUndefined();
+  });
+
   it("tracks workspace access order (MRU first) across add/activate/remove", () => {
     const wsA = makeWorkspace({ id: "a" });
     const wsB = makeWorkspace({ id: "b" });

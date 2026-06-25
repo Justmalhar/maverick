@@ -85,6 +85,23 @@ describe("TerminalPane", () => {
     expect(mountedHandle.dispose).toHaveBeenCalled();
   });
 
+  it("applies the appearance terminalFontSize and ligatures settings, not hardcoded values (#34)", async () => {
+    const { useSettingsStore } = await import("@/lib/stores/settings");
+    useSettingsStore.setState({ values: { "appearance.terminalFontSize": 18, "appearance.ligatures": false } });
+    const handle = makeProvider().mountedHandle;
+    let mountOpts: { fontSize?: number; ligatures?: boolean } | undefined;
+    TerminalRegistry.register({
+      mount: (_c, opts) => {
+        mountOpts = opts as { fontSize?: number; ligatures?: boolean };
+        return handle;
+      },
+    });
+    renderWithProviders(<TerminalPane ptyId="pf" paneId="pane-f" isFocused={false} onFocus={() => {}} />);
+    expect(mountOpts?.fontSize).toBe(18);
+    expect(mountOpts?.ligatures).toBe(false);
+    useSettingsStore.setState({ values: {} });
+  });
+
   it("pipes user keystrokes back to the PTY via pty_write and taps onData", async () => {
     const { provider, mountedHandle } = makeProvider();
     TerminalRegistry.register(provider);

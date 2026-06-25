@@ -104,7 +104,7 @@ describe("StatusBar", () => {
     renderWithProviders(<StatusBar />);
     await waitFor(() => expect(screen.getByTestId("statusbar-sync")).toHaveTextContent("↑2"));
     await userEvent.click(screen.getByTestId("statusbar-sync"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_push", { worktreePath: "/tmp/demo/.maverick/worktrees/ws-1", remote: undefined, branch: undefined }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_push", { worktreePath: "/tmp/demo/.maverick/worktrees/ws-1", remote: "origin", branch: undefined }));
   });
 
   it("shows diverged indicator that is not clickable", async () => {

@@ -1,4 +1,5 @@
-import { diffGet, ptyWrite } from "@/lib/tauri";
+import { diffGet } from "@/lib/tauri";
+import { dispatchAgentPrompt, type AgentTarget } from "@/lib/ai-actions";
 import type { DiffResult } from "@/lib/ipc";
 import type { ReviewComment } from "@/lib/stores/review-comments";
 
@@ -31,49 +32,39 @@ export function buildReviewPrompt(diff: DiffResult, reviewPref?: string): string
 }
 
 export interface SendReviewCommentsOptions {
-  agentPtyId: string | undefined;
+  target: AgentTarget;
   comments: ReviewComment[];
-  /** Called before writing so callers can surface the agent view. */
+  /** Called before dispatching so callers can surface the agent view. */
   onAgentFocus?: () => void;
 }
 
 /**
- * Write a batched `Re:`-prompt of inline review comments to the agent PTY.
- * Returns `{ ran: false }` with no side effects when there are no comments or
- * the agent PTY hasn't spawned. Idle-gating is the caller's responsibility (the
- * button is disabled while the agent is working).
+ * Send a batched `Re:`-prompt of inline review comments to the workspace's agent
+ * (terminal or headless). Returns `{ ran: false }` when there are no comments or
+ * the agent is unreachable.
  */
 export async function sendReviewComments(
   opts: SendReviewCommentsOptions
 ): Promise<{ ran: boolean }> {
   if (opts.comments.length === 0) return { ran: false };
-  if (!opts.agentPtyId) return { ran: false };
-  opts.onAgentFocus?.();
-  await ptyWrite(opts.agentPtyId, `${buildReviewCommentsPrompt(opts.comments)}\n`);
-  return { ran: true };
+  return dispatchAgentPrompt(opts.target, buildReviewCommentsPrompt(opts.comments), opts.onAgentFocus);
 }
 
 export interface RunAiReviewOptions {
-  /** The agent leaf's live PTY id (resolved by the caller). */
-  agentPtyId: string | undefined;
+  target: AgentTarget;
   worktreePath: string;
   reviewPref?: string;
-  /** Called before writing the prompt so callers can surface the agent view. */
+  /** Called before dispatching the prompt so callers can surface the agent view. */
   onAgentFocus?: () => void;
 }
 
 /**
- * Fetch the worktree diff and send a review prompt to the agent PTY.
- * Returns `{ ran: false }` when the tree is clean OR the agent PTY hasn't spawned
- * yet — `pty_write` keys off the PTY id, not the workspace id, so a missing id
- * would otherwise silently no-op.
+ * Fetch the worktree diff and send a review prompt to the workspace's agent
+ * (terminal or headless). Returns `{ ran: false }` when the tree is clean or the
+ * agent is unreachable.
  */
 export async function runAiReview(opts: RunAiReviewOptions): Promise<{ ran: boolean }> {
   const diff = await diffGet(opts.worktreePath);
   if (diff.files.length === 0) return { ran: false };
-  if (!opts.agentPtyId) return { ran: false };
-  const prompt = buildReviewPrompt(diff, opts.reviewPref);
-  opts.onAgentFocus?.();
-  await ptyWrite(opts.agentPtyId, `${prompt}\n`);
-  return { ran: true };
+  return dispatchAgentPrompt(opts.target, buildReviewPrompt(diff, opts.reviewPref), opts.onAgentFocus);
 }

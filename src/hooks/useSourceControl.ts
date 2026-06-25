@@ -3,9 +3,9 @@
 // indicator off the current branch reported by git_branch_list.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { gitBranchList, gitFetch, gitPull, gitPush } from "@/lib/tauri";
+import { getGitAutoFetchMs, getGitRemote } from "@/lib/stores/settings";
 import type { Branch } from "@/lib/ipc";
 
-const AUTO_FETCH_THROTTLE_MS = 5 * 60_000;
 const AUTO_FETCH_LRU_LIMIT = 16;
 
 export type SourceControlRefreshMode = "auto" | "always" | "never";
@@ -210,16 +210,19 @@ export function useSourceControl(
         }
 
         let fetchedError: string | null | undefined;
+        // Honor the user's git.autoFetchMinutes (0 disables auto-fetch, as the UI
+        // promises) instead of a hardcoded 5-minute window.
+        const autoFetchMs = getGitAutoFetchMs();
         const shouldAutoFetch =
           Boolean(branch.upstream) &&
           remoteMode !== "never" &&
+          autoFetchMs > 0 &&
           (remoteMode === "always" ||
-            Date.now() - (autoFetchByPath.get(worktreePath) ?? 0) >=
-              AUTO_FETCH_THROTTLE_MS);
+            Date.now() - (autoFetchByPath.get(worktreePath) ?? 0) >= autoFetchMs);
 
         if (shouldAutoFetch) {
           try {
-            await gitFetch(worktreePath);
+            await gitFetch(worktreePath, getGitRemote());
             touchAutoFetch(worktreePath);
             fetchedError = null;
             if (requestId !== requestIdRef.current) return;
@@ -299,14 +302,15 @@ export function useSourceControl(
       setState((current) => ({ ...current, busyAction: action }));
 
       try {
+        const remote = getGitRemote();
         if (action === "fetch") {
-          await gitFetch(worktreePath);
+          await gitFetch(worktreePath, remote);
           touchAutoFetch(worktreePath);
         } else if (action === "pull") {
           await gitPull(worktreePath);
           touchAutoFetch(worktreePath);
         } else {
-          await gitPush(worktreePath);
+          await gitPush(worktreePath, remote);
         }
         setState((current) => ({ ...current, lastRemoteError: null }));
         await refresh({ remote: "never" });

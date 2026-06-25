@@ -6,6 +6,7 @@ import type {
   SettingsWriteResponse,
   SettingsSnapshot,
 } from "@/lib/ipc";
+import { SETTINGS_DEFAULTS } from "./settings-defaults";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -173,6 +174,29 @@ export function useSettings<V extends SettingsValue>(
   );
   const set = useSettingsStore((s) => s.set);
   return [value, (v: Widen<V>) => set(key, v)];
+}
+
+/**
+ * Imperative read of a boolean setting (with its built-in default) for non-React
+ * callers like store subscriptions. Defaults-on toggles return true unless the
+ * user has explicitly set them to false.
+ */
+export function getSettingBool(key: SettingsKey): boolean {
+  const v = useSettingsStore.getState().values[key] ?? SETTINGS_DEFAULTS[key];
+  return v !== false;
+}
+
+/** Auto-fetch interval in ms, or 0 when the user disabled it (`git.autoFetchMinutes` = 0). */
+export function getGitAutoFetchMs(): number {
+  const v = useSettingsStore.getState().values["git.autoFetchMinutes"] ?? SETTINGS_DEFAULTS["git.autoFetchMinutes"];
+  const minutes = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes * 60_000 : 0;
+}
+
+/** Configured git remote (`git.remote`), defaulting to "origin". */
+export function getGitRemote(): string {
+  const v = useSettingsStore.getState().values["git.remote"] ?? SETTINGS_DEFAULTS["git.remote"];
+  return typeof v === "string" && v.trim() ? v.trim() : "origin";
 }
 
 /** Test-only — clears the store and any pending debounced timers. */

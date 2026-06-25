@@ -1,5 +1,58 @@
-import { ptyWrite } from "@/lib/tauri";
+import { agentRun, ptyWrite } from "@/lib/tauri";
+import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
+import { supportsHeadlessLaunch } from "@/lib/agent-launch";
+import { useAgentOutput, selectAgentRun } from "@/lib/stores/agent-output";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type { DiffResult } from "@/lib/ipc";
+
+/** Identifies a workspace's agent so an action can reach it in either launch mode. */
+export interface AgentTarget {
+  workspaceId: string;
+  backend: string;
+  cwd: string;
+}
+
+/**
+ * Send a composed prompt to a workspace's agent, working in BOTH launch modes:
+ * write to the live terminal PTY when one exists, else — for a headless workspace
+ * (the DEFAULT mode, which has no PTY) — dispatch a background agentRun that
+ * resumes the session and streams into the Agent Output panel. Returns
+ * {ran:false} only when the prompt is empty or neither path is available, instead
+ * of the previous silent no-op for every headless workspace.
+ */
+export async function dispatchAgentPrompt(
+  target: AgentTarget,
+  prompt: string,
+  onAgentFocus?: () => void
+): Promise<{ ran: boolean }> {
+  if (!prompt.trim()) return { ran: false };
+  const ptyId = primaryAgentPtyId(target.workspaceId);
+  if (ptyId) {
+    onAgentFocus?.();
+    await ptyWrite(ptyId, `${prompt}\n`);
+    return { ran: true };
+  }
+  if (supportsHeadlessLaunch(target.backend)) {
+    const resumeSessionId = selectAgentRun(target.workspaceId)(useAgentOutput.getState()).sessionId;
+    useAgentOutput.getState().start(target.workspaceId);
+    useAgentStatusStore.getState().setStatus(target.workspaceId, "working");
+    onAgentFocus?.();
+    await agentRun({
+      workspaceId: target.workspaceId,
+      backend: target.backend,
+      prompt,
+      cwd: target.cwd,
+      resumeSessionId,
+    });
+    return { ran: true };
+  }
+  return { ran: false };
+}
+
+/** Whether an AI action can reach this workspace's agent (live PTY or headless). */
+export function canDispatchAgentAction(target: AgentTarget): boolean {
+  return primaryAgentPtyId(target.workspaceId) !== undefined || supportsHeadlessLaunch(target.backend);
+}
 
 // Injects each Project Settings preference into the prompt for ITS specific
 // action (not just the generic launch preamble), mirroring ai-review's
@@ -41,21 +94,13 @@ export function buildResolveConflictPrompt(files: string[], resolveConflictsPref
 }
 
 export interface SendAgentPromptOptions {
-  agentPtyId: string | undefined;
+  target: AgentTarget;
   prompt: string;
-  /** Called before writing so callers can surface the agent view. */
+  /** Called before dispatching so callers can surface the agent view. */
   onAgentFocus?: () => void;
 }
 
-/**
- * Write an action prompt to the agent PTY. Returns `{ ran: false }` with no side
- * effects when the prompt is empty or the agent PTY hasn't spawned — `pty_write`
- * keys off the PTY id, so a missing id would otherwise silently no-op.
- */
+/** Send an action prompt to a workspace's agent (terminal or headless). */
 export async function sendAgentPrompt(opts: SendAgentPromptOptions): Promise<{ ran: boolean }> {
-  if (!opts.prompt.trim()) return { ran: false };
-  if (!opts.agentPtyId) return { ran: false };
-  opts.onAgentFocus?.();
-  await ptyWrite(opts.agentPtyId, `${opts.prompt}\n`);
-  return { ran: true };
+  return dispatchAgentPrompt(opts.target, opts.prompt, opts.onAgentFocus);
 }
