@@ -453,6 +453,7 @@ export type SettingsKey =
   | "general.env"
   | "general.startupCommand"
   | "general.aiBranchNames"
+  | "general.agentLaunchMode"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"

@@ -4,12 +4,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanBoard from "./KanbanBoard";
 import { useWorkbench } from "@/state/store";
+import { useSettingsStore } from "@/lib/stores/settings";
 import { makeBackend, makeKanbanTask, makeProject, makeWorkspace } from "@/test/fixtures";
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  // Empty settings → agent launch mode defaults to "headless".
+  useSettingsStore.setState({ values: {} });
   useWorkbench.setState({
     ...initial,
     workspaces: [],
@@ -286,7 +289,7 @@ describe("KanbanBoard", () => {
     );
   });
 
-  it("handleStart creates workspace, stages a launch spec with title+description, and upserts to in_progress", async () => {
+  it("handleStart creates workspace, stages a HEADLESS run (default) with title+description, opens the Agent tab", async () => {
     const project = makeProject({ id: "p1", path: "/p1" });
     useWorkbench.setState({
       ...initial,
@@ -324,12 +327,15 @@ describe("KanbanBoard", () => {
     );
 
     await waitFor(() =>
-      expect(useWorkbench.getState().launchSpecs["ws-new"]).toEqual({
-        command: "claude",
-        args: [],
+      expect(useWorkbench.getState().agentLaunchSpecs["ws-new"]).toMatchObject({
+        workspaceId: "ws-new",
+        backend: "claude-code",
         prompt: "Implement auth\n\nUse JWT tokens",
       })
     );
+    // Headless staging opens the Agent Output tab and doesn't touch the terminal spec.
+    expect(useWorkbench.getState().layout.auxiliaryView).toBe("agent");
+    expect(useWorkbench.getState().launchSpecs["ws-new"]).toBeUndefined();
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
@@ -339,7 +345,9 @@ describe("KanbanBoard", () => {
     );
   });
 
-  it("handleStart uses task.title only when description is absent and falls back to the backend command map", async () => {
+  it("handleStart (terminal mode) uses task.title only when description is absent and falls back to the backend command map", async () => {
+    // Force the terminal launch surface so this exercises command-map fallback.
+    useSettingsStore.setState({ values: { "general.agentLaunchMode": "terminal" } });
     const project = makeProject({ id: "p2", path: "/p2" });
     useWorkbench.setState({
       ...initial,

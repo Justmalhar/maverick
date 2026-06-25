@@ -141,6 +141,7 @@ interface WorkbenchState {
   // Layout actions
   showPrimarySideBar: () => void;
   openSourceControl: () => void;
+  openAgentOutput: () => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
   setActivitybarCollapsed: (collapsed: boolean) => void;
   toggleActivitybarCollapsed: () => void;
@@ -325,6 +326,10 @@ export const useWorkbench = create<WorkbenchState>()(
     openSourceControl: () =>
       set((s) => ({
         layout: { ...s.layout, auxiliaryView: "scm", auxiliaryBarVisible: true },
+      })),
+    openAgentOutput: () =>
+      set((s) => ({
+        layout: { ...s.layout, auxiliaryView: "agent", auxiliaryBarVisible: true },
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),

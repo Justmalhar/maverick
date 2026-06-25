@@ -11,6 +11,8 @@ import {
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
 import { resolveTaskBranch } from "@/lib/feature-name";
+import { getAgentLaunchMode } from "@/lib/stores/settings";
+import { supportsHeadlessLaunch } from "@/lib/agent-launch";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -24,6 +26,20 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
   "review",
   "done",
 ];
+
+// Stage a task's agent: headless (background run streamed to the Agent Output
+// panel — the default) when the mode is headless and the backend supports it,
+// else the interactive terminal launch surface. Headless opens the Agent tab.
+function stageLaunch(workspaceId: string, backend: string, launchPrompt: string, cwd: string): void {
+  const wb = useWorkbench.getState();
+  if (getAgentLaunchMode() === "headless" && supportsHeadlessLaunch(backend)) {
+    wb.setAgentLaunchSpec(workspaceId, { workspaceId, backend, prompt: launchPrompt, cwd });
+    wb.openAgentOutput();
+  } else {
+    const { command, args } = resolveStartupLaunch(backend);
+    wb.setLaunchSpec(workspaceId, { command, args, prompt: launchPrompt });
+  }
+}
 
 
 export default function KanbanBoard() {
@@ -153,9 +169,8 @@ export default function KanbanBoard() {
         instructions: settings?.preferences?.branchRename,
       });
       const ws = await create(task.projectId, branch, backend, baseBranch);
-      const { command, args } = resolveStartupLaunch(backend);
       const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt: launchPrompt });
+      stageLaunch(ws.id, backend, launchPrompt, ws.worktreePath);
       await kanbanUpsert({
         ...task,
         status: "in_progress",
@@ -205,9 +220,8 @@ export default function KanbanBoard() {
         instructions: settings?.preferences?.branchRename,
       });
       const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
-      const { command, args } = resolveStartupLaunch(payload.agentBackend);
       const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
+      stageLaunch(ws.id, payload.agentBackend, prompt, ws.worktreePath);
 
       await kanbanUpsert({
         id: task.id,
