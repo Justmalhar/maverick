@@ -9,6 +9,23 @@ backends:
     - { name: claude, command: claude, args: [] }
 `;
 
+describe("ConfigLoader MCP validation", () => {
+  test("rejects an MCP server with an empty command (#40g)", () => {
+    const loader = new ConfigLoader({
+      read: () =>
+        JSON.stringify({
+          version: 1,
+          backends: { default: "claude", available: [] },
+          mcps: [{ name: "fs", command: "" }],
+        }),
+      exists: () => true,
+    });
+    // A blank command fails at parse with a clear message rather than a cryptic
+    // error when the server is later spawned.
+    expect(() => loader.load("/p")).toThrow(/command must not be empty/i);
+  });
+});
+
 const FULL_CONFIG = `
 version: 1
 backends:

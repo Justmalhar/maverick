@@ -1011,7 +1011,9 @@ describe("RpcHandlers", () => {
   it("project.settings.openFile returns the absolute path", async () => {
     const { handlers, dir, projectId } = makeWithTempProject();
     const res = (await handlers.dispatch("project.settings.openFile", { projectId })) as { path: string };
-    expect(res.path).toBe(`${dir}/maverick.json`);
+    // join (not a literal '/') so the separator is correct on Windows too.
+    const { join } = await import("path");
+    expect(res.path).toBe(join(dir, "maverick.json"));
   });
 
   it("workspace.create does NOT run scripts.setup (the Setup tab streams it)", async () => {

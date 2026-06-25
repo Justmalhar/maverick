@@ -38,7 +38,9 @@ export class AttachmentStore {
     if (params.text.length <= this.threshold) {
       return { filePath: "", ref: params.text, inlined: true };
     }
-    const filename = `${this.ids.now()}.txt`;
+    // A uuid (not a millisecond timestamp) so two attachments created in the
+    // same tick don't collide and overwrite each other.
+    const filename = `${this.ids.uuid("att")}.txt`;
     const dir = join(params.worktreePath, ".maverick", "attachments");
     this.mkdir(dir);
     const filePath = join(dir, filename);

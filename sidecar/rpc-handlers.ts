@@ -516,7 +516,7 @@ export class RpcHandlers {
         const p = Schemas.projectSettingsOpenFile.parse(params);
         const project = this.store.projectGet(p.projectId);
         if (!project) throw new Error(`project ${p.projectId} not found`);
-        return { path: `${project.path}/maverick.json` };
+        return { path: join(project.path, "maverick.json") };
       }
       case "workspace.create": {
         const p = Schemas.workspaceCreate.parse(params);

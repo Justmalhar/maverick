@@ -71,7 +71,9 @@ const AutomationSchema = z.object({
 
 const MCPSchema = z.object({
   name: z.string(),
-  command: z.string(),
+  // A blank command (hand-edited maverick.json) used to be accepted and only
+  // failed with a cryptic error at spawn time — reject it at parse.
+  command: z.string().trim().min(1, "MCP server command must not be empty"),
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).optional(),
 });
