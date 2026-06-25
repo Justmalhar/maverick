@@ -48,6 +48,16 @@ export function supportsHeadless(backend: string): boolean {
   return Object.prototype.hasOwnProperty.call(HEADLESS_ARGV, backend);
 }
 
+/**
+ * The headless CLI argv for a backend (prompt fed on stdin), or null if the
+ * backend has no verified headless mode. Lets non-streaming callers (e.g. an
+ * automation skill step) spawn-and-await the same command AgentRunner streams.
+ */
+export function headlessArgv(params: AgentRunParams): string[] | null {
+  const build = HEADLESS_ARGV[params.backend];
+  return build ? build(params) : null;
+}
+
 export class HeadlessUnsupportedError extends Error {
   readonly backend: string;
   constructor(backend: string) {

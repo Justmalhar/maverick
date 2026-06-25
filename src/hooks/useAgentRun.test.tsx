@@ -101,6 +101,25 @@ describe("useAgentRun", () => {
     expect(useAgentStatusStore.getState().statuses["w1"]).toBe("error");
   });
 
+  it("resolves a clean exit to done when no result event arrived (#22)", async () => {
+    useWorkbench.getState().setAgentLaunchSpec("w1", { workspaceId: "w1", backend: "claude-code", prompt: "p" });
+    await mount(makeWorkspace({ id: "w1" }));
+    // No result event — just a clean exit. The pill must not stay stuck on "working".
+    act(() => emitExit("w1", 0));
+    expect(run("w1").running).toBe(false);
+    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("done");
+  });
+
+  it("a clean exit does not clobber a status the result event already resolved (#22)", async () => {
+    useWorkbench.getState().setAgentLaunchSpec("w1", { workspaceId: "w1", backend: "claude-code", prompt: "p" });
+    await mount(makeWorkspace({ id: "w1" }));
+    act(() => {
+      emitData("w1", '{"type":"result","result":"bad","is_error":true}\n');
+      emitExit("w1", 0); // a clean exit afterwards must NOT downgrade error→done
+    });
+    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("error");
+  });
+
   it("agent.error events surface in the output", async () => {
     useWorkbench.getState().setAgentLaunchSpec("w1", { workspaceId: "w1", backend: "claude-code", prompt: "p" });
     await mount(makeWorkspace({ id: "w1" }));

@@ -112,33 +112,37 @@ export class SQLiteStore {
       .filter((f) => f.endsWith(".sql"))
       .sort();
 
-    const appliedCount = (this.db
-      .query("SELECT COUNT(*) AS n FROM schema_migrations")
-      .get() as { n: number }).n;
-    const projectsExists =
-      this.db
-        .query("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
-        .get() !== null;
-    if (appliedCount === 0 && projectsExists) {
-      const now = Math.floor(Date.now() / 1000);
-      const insert = this.db.query(
-        "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)"
-      );
-      for (const file of files) insert.run(file, now);
-      return;
-    }
-
-    const isApplied = this.db.query(
-      "SELECT 1 FROM schema_migrations WHERE name = ?"
-    );
+    // No blanket baseline: a legacy DB (created before migration tracking, so
+    // schema_migrations is empty) might have only SOME migrations applied — the
+    // old shortcut marked them ALL applied without running, permanently stranding
+    // a DB at 001 without kanban columns / workspaces.title. Instead, run every
+    // unapplied migration; each is safe to re-run (001-003 are IF NOT EXISTS,
+    // 004/005 ALTERs tolerate a "duplicate column" on a DB that already has them).
+    const isApplied = this.db.query("SELECT 1 FROM schema_migrations WHERE name = ?");
     const recordApplied = this.db.query(
       "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)"
     );
     for (const file of files) {
       if (isApplied.get(file) !== null) continue;
-      const sql = readFileSync(join(dir, file), "utf8");
-      this.db.exec(sql);
+      this.applyMigration(readFileSync(join(dir, file), "utf8"));
       recordApplied.run(file, Math.floor(Date.now() / 1000));
+    }
+  }
+
+  /**
+   * Apply a migration statement-by-statement so a benign "duplicate column" (a
+   * legacy DB that already carries a column from the pre-tracking era — SQLite
+   * has no ADD COLUMN IF NOT EXISTS) skips just that statement instead of
+   * aborting the rest of the file. Migration SQL has no semicolons in literals.
+   */
+  private applyMigration(sql: string): void {
+    for (const stmt of sql.split(";").map((s) => s.trim()).filter(Boolean)) {
+      try {
+        this.db.exec(stmt);
+      } catch (e) {
+        if (/duplicate column name/i.test(String(e))) continue;
+        throw e;
+      }
     }
   }
 

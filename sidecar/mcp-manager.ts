@@ -12,8 +12,15 @@ interface MCPEntry {
   command: string;
   args: string[];
   env?: Record<string, string>;
+  // Captured at first spawn so backoff restarts are deterministic even if
+  // setProjectPath() changes later; the server runs in the project root, not the
+  // sidecar's cwd (which may be a different drive on Windows).
+  cwd?: string;
   status: MCPStatus;
   restarts: number;
+  // Epoch (ms) of the most recent spawn — used to decide whether a crash is part
+  // of a consecutive run or a fresh sequence after the server had recovered.
+  lastSpawnAt: number;
   logs: LogRing;
   // Epoch (ms) at which an auto-restart becomes eligible after a crash backoff.
   // Until `now()` reaches it, `tick()` leaves the server in "restarting".
@@ -52,6 +59,10 @@ export class MCPManager {
   private maxRetries: number;
   private baseBackoffMs: number;
   private logCap: number;
+  // A server that stays up longer than this since its last spawn is considered
+  // recovered, so its next crash starts a fresh retry budget (consecutive, not
+  // lifetime). Outliving the worst-case backoff is a good "healthy" signal.
+  private stabilityResetMs: number;
 
   constructor(opts: MCPManagerOptions = {}) {
     this.spawner = opts.spawn ?? defaultSpawner;
@@ -62,6 +73,7 @@ export class MCPManager {
     this.maxRetries = opts.maxRetries ?? 5;
     this.baseBackoffMs = opts.baseBackoffMs ?? 1_000;
     this.logCap = opts.logCap ?? 256 * 1024;
+    this.stabilityResetMs = Math.max(this.baseBackoffMs * 2, MAX_BACKOFF_MS);
   }
 
   setProjectPath(path: string): void {
@@ -81,6 +93,7 @@ export class MCPManager {
       command: def.command,
       args: def.args,
       env: def.env,
+      cwd: this.projectPath,
       restarts: 0,
       logs: existing?.logs ?? new LogRing(this.logCap),
     });
@@ -91,10 +104,11 @@ export class MCPManager {
     command: string;
     args: string[];
     env?: Record<string, string>;
+    cwd?: string;
     restarts: number;
     logs: LogRing;
   }): { pid: number } {
-    const proc = this.spawner([seed.command, ...seed.args], { env: seed.env });
+    const proc = this.spawner([seed.command, ...seed.args], { cwd: seed.cwd, env: seed.env });
     const pid = (proc as unknown as { pid?: number }).pid ?? -1;
     const generation = (this.servers.get(seed.name)?.generation ?? 0) + 1;
     const entry: MCPEntry = {
@@ -104,8 +118,10 @@ export class MCPManager {
       command: seed.command,
       args: seed.args,
       env: seed.env,
+      cwd: seed.cwd,
       status: "running",
       restarts: seed.restarts,
+      lastSpawnAt: this.now(),
       logs: seed.logs,
       nextRetryAt: 0,
       stopping: false,
@@ -147,6 +163,12 @@ export class MCPManager {
       entry.status = "stopped";
       return;
     }
+    // Consecutive (not lifetime) semantics: if the server stayed up past the
+    // stability window before this crash, it had recovered — reset the budget so
+    // a server that crashes once in a while is never permanently disabled.
+    if (this.now() - entry.lastSpawnAt >= this.stabilityResetMs) {
+      entry.restarts = 0;
+    }
     // Unexpected exit: schedule an auto-restart unless the retry budget is spent.
     if (entry.restarts >= this.maxRetries) {
       entry.status = "crashed";
@@ -171,6 +193,7 @@ export class MCPManager {
         command: entry.command,
         args: entry.args,
         env: entry.env,
+        cwd: entry.cwd,
         restarts: entry.restarts,
         logs: entry.logs,
       });

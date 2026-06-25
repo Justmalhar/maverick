@@ -3,7 +3,7 @@ import { useWorkbench } from "@/state/store";
 import { agentRun, onAgentData, onAgentExit, onAgentError } from "@/lib/tauri";
 import { parseAgentEvent, LineBuffer, type AgentDelta } from "@/lib/agent-stream";
 import { useAgentOutput } from "@/lib/stores/agent-output";
-import { useAgentStatusStore } from "@/hooks/useAgentStatus";
+import { useAgentStatusStore, statusForExit } from "@/hooks/useAgentStatus";
 import type { Workspace } from "@/lib/ipc";
 
 // Workspaces whose staged agent-run spec has already been consumed, so keep-alive
@@ -92,8 +92,15 @@ export function useAgentRun(workspace: Workspace): void {
       const tail = stdoutBuf.flush();
       if (tail) drain([tail]);
       out.finish(workspaceId);
-      // Non-zero exit with no result event is an error the result branch missed.
-      if (p.code !== 0) useAgentStatusStore.getState().setStatus(workspaceId, "error");
+      // The `result` event resolves the pill to done/error. If the process exited
+      // WITHOUT one (killed, a backend whose stream-json had no result line, a
+      // parse failure), the pill would stay stuck on "working" forever — so
+      // reconcile from the exit code, but only when still unresolved so an
+      // already-recorded done/error isn't clobbered.
+      const status = useAgentStatusStore.getState();
+      if (status.statuses[workspaceId] === "working") {
+        status.setStatus(workspaceId, statusForExit(p.code));
+      }
     });
     const unErr = onAgentError((p) => {
       if (cancelled || p.workspaceId !== workspaceId) return;

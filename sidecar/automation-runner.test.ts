@@ -179,30 +179,83 @@ describe("AutomationRunner.executeStep", () => {
     ).rejects.toThrow(/no/);
   });
 
-  test("skill step runs SkillsEngine.run (name field)", async () => {
-    const loader = loaderWith([], [
-      { name: "review", description: "d", prompt: "p {{x}}" },
-    ]);
+  function captureShell(result: Partial<Step> = {}): {
+    shell: Shell;
+    runs: Array<{ cmd: string[]; cwd?: string; stdin?: string }>;
+  } {
+    const runs: Array<{ cmd: string[]; cwd?: string; stdin?: string }> = [];
+    const shell: Shell = {
+      async text() {
+        return "";
+      },
+      async run(cmd, cwd, stdin) {
+        runs.push({ cmd, cwd, stdin });
+        return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", exitCode: result.exitCode ?? 0 };
+      },
+    };
+    return { shell, runs };
+  }
+
+  test("skill step dispatches the interpolated prompt to a headless agent (name field) (#12)", async () => {
+    const loader = loaderWith([], [{ name: "review", description: "d", prompt: "p {{x}}" }]);
     const skills = new SkillsEngine({ loader });
-    await new AutomationRunner({ loader, skills }).executeStep(
+    const { shell, runs } = captureShell();
+    await new AutomationRunner({ loader, skills, shell }).executeStep(
       { type: "skill", name: "review" } as AutomationStep,
       "/wt",
       "/r",
       { x: "1" }
     );
+    // Resolved skill backend defaults to claude-code; prompt fed on stdin in the worktree.
+    expect(runs).toHaveLength(1);
+    expect(runs[0].cmd[0]).toBe("claude");
+    expect(runs[0].cmd).toContain("-p");
+    expect(runs[0].cwd).toBe("/wt");
+    expect(runs[0].stdin).toBe("p 1");
   });
 
-  test("skill step accepts the builder's `skill` field", async () => {
-    const loader = loaderWith([], [
-      { name: "review", description: "d", prompt: "p {{x}}" },
-    ]);
+  test("skill step accepts the builder's `skill` field and dispatches (#12)", async () => {
+    const loader = loaderWith([], [{ name: "review", description: "d", prompt: "p {{x}}" }]);
     const skills = new SkillsEngine({ loader });
-    await new AutomationRunner({ loader, skills }).executeStep(
+    const { shell, runs } = captureShell();
+    await new AutomationRunner({ loader, skills, shell }).executeStep(
       { type: "skill", skill: "review" } as AutomationStep,
       "/wt",
       "/r",
-      { x: "1" }
+      { x: "2" }
     );
+    expect(runs[0].stdin).toBe("p 2");
+  });
+
+  test("skill step throws when the headless agent exits non-zero (#12)", async () => {
+    const loader = loaderWith([], [{ name: "review", description: "d", prompt: "p" }]);
+    const skills = new SkillsEngine({ loader });
+    const { shell } = captureShell({ exitCode: 1, stderr: "agent blew up" });
+    await expect(
+      new AutomationRunner({ loader, skills, shell }).executeStep(
+        { type: "skill", skill: "review" } as AutomationStep,
+        "/wt",
+        "/r",
+        {}
+      )
+    ).rejects.toThrow(/agent blew up/);
+  });
+
+  test("skill step throws when the skill's backend has no headless mode (#12)", async () => {
+    const loader = loaderWith([], [
+      { name: "review", description: "d", prompt: "p", backend: "aider" },
+    ]);
+    const skills = new SkillsEngine({ loader });
+    const { shell, runs } = captureShell();
+    await expect(
+      new AutomationRunner({ loader, skills, shell }).executeStep(
+        { type: "skill", skill: "review" } as AutomationStep,
+        "/wt",
+        "/r",
+        {}
+      )
+    ).rejects.toThrow(/no headless mode/);
+    expect(runs).toHaveLength(0); // never tried to spawn an unsupported backend
   });
 
   test("git commit action", async () => {
@@ -216,6 +269,19 @@ describe("AutomationRunner.executeStep", () => {
     );
   });
 
+  test("git commit forwards a configured file list (#40a)", async () => {
+    const { shell, calls } = transcript([{}, {}, { stdout: "sha\n" }]);
+    const git = new GitModule({ shell });
+    await new AutomationRunner({ git, loader: loaderWith([]) }).executeStep(
+      { type: "git", action: "commit", message: "auto", files: ["a.ts"] } as AutomationStep,
+      "/wt",
+      "/r",
+      {}
+    );
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "add", "--", "a.ts"]);
+    expect(calls[1]).toEqual(["git", "-C", "/wt", "commit", "-m", "auto", "--", "a.ts"]);
+  });
+
   test("git push action", async () => {
     const { shell } = transcript([{}]);
     const git = new GitModule({ shell });
@@ -225,6 +291,18 @@ describe("AutomationRunner.executeStep", () => {
       "/r",
       {}
     );
+  });
+
+  test("git push forwards the configured remote and branch (#13)", async () => {
+    const { shell, calls } = transcript([{}]);
+    const git = new GitModule({ shell });
+    await new AutomationRunner({ git, loader: loaderWith([]) }).executeStep(
+      { type: "git", action: "push", remote: "origin", branch: "staging" } as AutomationStep,
+      "/wt",
+      "/r",
+      {}
+    );
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "push", "origin", "staging"]);
   });
 
   test("git pull action", async () => {

@@ -19,6 +19,19 @@ describe("ProjectSettingsStore", () => {
     expect(settings.scripts.setup).toBe("");
   });
 
+  it("read() falls back to defaults when maverick.json is a non-object like null (#30)", () => {
+    writeFileSync(join(dir, "maverick.json"), "null");
+    const settings = store.read(dir);
+    expect(settings.name).toBe(basename(dir)); // defaults applied, no cryptic TypeError
+  });
+
+  it("write() succeeds when the existing maverick.json is a non-object (#30)", () => {
+    writeFileSync(join(dir, "maverick.json"), "null");
+    expect(() => store.write(dir, { remote: "upstream" })).not.toThrow();
+    const raw = JSON.parse(readFileSync(join(dir, "maverick.json"), "utf8"));
+    expect(raw.project.remote).toBe("upstream");
+  });
+
   it("write creates the file atomically and merges into existing config", () => {
     writeFileSync(
       join(dir, "maverick.json"),

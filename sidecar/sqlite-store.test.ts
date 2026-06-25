@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -21,6 +22,36 @@ describe("SQLiteStore", () => {
 
   beforeEach(() => {
     store = makeStore();
+  });
+
+  test("a legacy DB (projects table, no migration rows) gets every migration applied (#23)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mvk-mig-"));
+    const dbPath = join(dir, "legacy.db");
+    // Pre-tracking DB that only ever ran 001: a projects table, NO schema_migrations.
+    // The old baseline marked all migrations applied WITHOUT running them, so
+    // kanban_tasks (002) and workspaces.title (005) never existed.
+    const legacy = new Database(dbPath, { create: true });
+    legacy.run("CREATE TABLE projects (id TEXT PRIMARY KEY, path TEXT NOT NULL, name TEXT, created_at INTEGER)");
+    legacy.close();
+
+    const store = new SQLiteStore({ path: dbPath, migrationsDir: defaultMigrationsDir() });
+    const kanbanCols = store.db.query("PRAGMA table_info(kanban_tasks)").all() as Array<{ name: string }>;
+    expect(kanbanCols.some((c) => c.name === "agent_backend")).toBe(true);
+    expect(kanbanCols.some((c) => c.name === "attachments")).toBe(true);
+    const wsCols = store.db.query("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>;
+    expect(wsCols.some((c) => c.name === "title")).toBe(true);
+  });
+
+  test("re-running migrations on a DB that already has the columns is a no-op (#23)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mvk-mig2-"));
+    const dbPath = join(dir, "full.db");
+    new SQLiteStore({ path: dbPath, migrationsDir: defaultMigrationsDir() }); // fully migrate
+    // Wipe tracking rows → next open re-runs every migration; the ADD COLUMNs
+    // must tolerate the now-duplicate columns instead of throwing.
+    const raw = new Database(dbPath);
+    raw.run("DELETE FROM schema_migrations");
+    raw.close();
+    expect(() => new SQLiteStore({ path: dbPath, migrationsDir: defaultMigrationsDir() })).not.toThrow();
   });
 
   test("projectAdd inserts and returns Project", () => {
