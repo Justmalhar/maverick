@@ -66,7 +66,8 @@ describe("GitModule.parseStashList", () => {
     const out = `stash@{0}\t1700000000\tWIP on main: abc fix\nstash@{1}\t1700000100\tOn feat: stuff`;
     const stashes = GitModule.parseStashList(out);
     expect(stashes).toHaveLength(2);
-    expect(stashes[1].branch).toBe("feat");
+    expect(stashes[0].branch).toBe("main"); // default `WIP on main:` form (#40p)
+    expect(stashes[1].branch).toBe("feat"); // custom `On feat:` form
   });
 
   test("returns empty array on empty input", () => {

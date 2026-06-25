@@ -676,7 +676,9 @@ export class GitModule {
       .filter(Boolean)
       .map((line, index) => {
         const [ref, ts, message] = line.split("\t");
-        const branchMatch = message?.match(/On ([^:]+):/);
+        // Match both the default `WIP on <branch>:` (lowercase "on") and a custom
+        // `On <branch>:` message — the old /On .../ missed the common WIP form.
+        const branchMatch = message?.match(/(?:WIP on|On) ([^:]+):/);
         return {
           index: parseInt(ref?.replace(/[^0-9]/g, "") || `${index}`, 10),
           message: message ?? "",

@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
@@ -308,13 +308,10 @@ pub fn jsonrpc_event_name(method: &str) -> String {
     method.replace('.', ":")
 }
 
-pub fn forward_request_payload(method: &str, params: Value) -> Value {
-    json!({ "jsonrpc": "2.0", "method": method, "params": params })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[tokio::test]
     async fn degraded_request_does_not_strand_a_pending_sender() {

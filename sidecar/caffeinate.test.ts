@@ -77,6 +77,22 @@ describe("Caffeinate", () => {
     expect(c.stop()).toEqual({ stopped: false });
   });
 
+  test("active() becomes false when the keep-awake process exits on its own (#40k)", async () => {
+    let resolveExit!: (n: number) => void;
+    const proc = {
+      exitCode: null,
+      exited: new Promise<number>((r) => (resolveExit = r)),
+      kill() {},
+    } as unknown as ManagedProc;
+    const c = new Caffeinate({ spawn: () => proc, platform: "darwin" });
+    c.start();
+    expect(c.active()).toBe(true);
+    resolveExit(0); // the process dies without stop() being called
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(c.active()).toBe(false);
+  });
+
   test("default constructor builds without DI", () => {
     expect(new Caffeinate()).toBeInstanceOf(Caffeinate);
   });

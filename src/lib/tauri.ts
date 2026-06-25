@@ -406,7 +406,9 @@ export async function contextRecord(
 export async function attachmentCreate(
   worktreePath: string,
   text: string
-): Promise<{ filePath: string; ref: string }> {
+): Promise<{ filePath: string; ref: string; inlined: boolean }> {
+  // `inlined` (small text kept inline vs. spilled to a file) is part of the
+  // sidecar's response — surface it instead of dropping it at the boundary.
   return invoke("attachment_create", { worktreePath, text });
 }
 

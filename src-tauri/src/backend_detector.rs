@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +78,11 @@ fn fallback_search_paths(command: &str, home: Option<&PathBuf>) -> Vec<PathBuf> 
         roots.push(h.join(".npm-global/bin"));
         roots.push(h.join(".bun/bin"));
         roots.push(h.join(".cargo/bin"));
+        // On Windows, npm global installs its CLI shims under %APPDATA%\npm
+        // (claude.cmd / claude.ps1) — not ~/.npm-global. Without this, a
+        // backend not on PATH is never found by the fallback.
+        #[cfg(windows)]
+        roots.push(h.join("AppData").join("Roaming").join("npm"));
         match command {
             "claude" => roots.push(h.join(".claude/local/claude")),
             "codex" => roots.push(h.join(".codex/bin/codex")),
@@ -118,24 +124,37 @@ impl BackendProbe for SystemProbe {
     }
 
     fn version(&self, _command: &str, path: &PathBuf) -> Option<String> {
-        // 2s timeout via std::process::Command + thread spawn.
-        let path_clone = path.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let out = version_command(&path_clone).output();
-            let _ = tx.send(out);
-        });
-        match rx.recv_timeout(Duration::from_secs(2)) {
-            Ok(Ok(out)) if out.status.success() => {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                Some(if s.is_empty() {
-                    String::from_utf8_lossy(&out.stderr).trim().to_string()
-                } else {
-                    s
-                })
+        let mut cmd = version_command(path);
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = cmd.spawn().ok()?;
+        // Poll for completion and KILL the child if it outlives its 2s budget, so
+        // a hung `--version` can't leak the child process (the old thread+output()
+        // approach left both the worker thread and the child running forever).
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(_) => return None,
             }
-            _ => None,
         }
+        let out = child.wait_with_output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        Some(if s.is_empty() {
+            String::from_utf8_lossy(&out.stderr).trim().to_string()
+        } else {
+            s
+        })
     }
 }
 
