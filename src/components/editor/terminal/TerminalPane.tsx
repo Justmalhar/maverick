@@ -156,6 +156,15 @@ export function TerminalPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ptyId, paneId]);
 
+  // Repaint live terminals when the app theme changes. The mount effect reads
+  // theme.terminal once at construction, so without this an already-open
+  // terminal keeps its original palette after a theme switch (only newly
+  // created terminals would pick up the change).
+  useEffect(() => {
+    if (pooledRef.current) pooledRef.current.setTheme(theme.terminal);
+    else handleRef.current?.setTheme(theme.terminal);
+  }, [theme.terminal]);
+
   // Acquire when scrolling into the live window, release when out. The session
   // (PTY + dormant ring) survives either way — only the renderer slot moves.
   useEffect(() => {
