@@ -47,9 +47,20 @@ export function StatusBar() {
         )}
         {active && indicator.visible ? (
           <StatusBarItem
-            icon={<RefreshCw className="h-3 w-3" />}
+            icon={
+              sourceControl.lastRemoteError ? (
+                <AlertCircle className="h-3 w-3" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )
+            }
             testId="statusbar-sync"
-            title={indicator.title}
+            tone={sourceControl.lastRemoteError ? "destructive" : "default"}
+            title={
+              sourceControl.lastRemoteError
+                ? `Remote action failed: ${sourceControl.lastRemoteError}`
+                : indicator.title
+            }
             onClick={
               indicator.disabled
                 ? undefined

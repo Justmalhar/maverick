@@ -120,4 +120,25 @@ describe("StatusBar", () => {
     // diverged → rendered as a non-button div (onClick undefined)
     expect(screen.getByTestId("statusbar-sync").tagName).toBe("DIV");
   });
+
+  it("surfaces a failed push in the sync indicator title", async () => {
+    vi.mocked(invoke).mockImplementation(((cmd: string) => {
+      if (cmd === "git_branch_list")
+        return Promise.resolve([branch({ upstream: "origin/main", ahead: 2, behind: 0 })]);
+      if (cmd === "git_push") return Promise.reject(new Error("rejected: non-fast-forward"));
+      return Promise.resolve(defaultResolve(cmd));
+    }) as unknown as typeof invoke);
+    useWorkbench.setState({
+      ...initial,
+      backends: [],
+      workspaces: [makeWorkspace({ id: "w1" })],
+      activeWorkspaceId: "w1",
+    });
+    renderWithProviders(<StatusBar />);
+    await waitFor(() => expect(screen.getByTestId("statusbar-sync")).toHaveTextContent("↑2"));
+    await userEvent.click(screen.getByTestId("statusbar-sync"));
+    await waitFor(() =>
+      expect(screen.getByTestId("statusbar-sync").getAttribute("title")).toContain("Remote action failed")
+    );
+  });
 });
