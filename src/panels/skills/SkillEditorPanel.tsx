@@ -44,8 +44,16 @@ export default function SkillEditorPanel() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeSystemTab = useWorkbench((s) => s.closeSystemTab);
+  const openSystemTab = useWorkbench((s) => s.openSystemTab);
   const setSkills = useWorkbench((s) => s.setSkills);
   const reduce = useReducedMotion();
+
+  // Close the editor AND re-activate the Skills list — otherwise closeSystemTab
+  // just nulls the active tab and drops the user on a blank EditorArea.
+  const returnToSkills = () => {
+    closeSystemTab("skill-editor");
+    openSystemTab("skills");
+  };
 
   async function save() {
     const parsed = parseFrontmatter(content);
@@ -59,7 +67,7 @@ export default function SkillEditorPanel() {
       await skillsCreateGlobal(parsed.name, parsed.description, parsed.prompt, parsed.backend);
       const updated = await skillsListGlobal();
       setSkills(updated);
-      closeSystemTab("skill-editor");
+      returnToSkills();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -91,7 +99,7 @@ export default function SkillEditorPanel() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => closeSystemTab("skill-editor")}
+            onClick={returnToSkills}
             data-testid="skill-editor-cancel"
           >
             <X className="h-3 w-3" />

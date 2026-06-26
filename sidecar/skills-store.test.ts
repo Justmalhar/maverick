@@ -122,4 +122,19 @@ describe("SkillsStore.create", () => {
     const filePath = store.create("---", "edge case");
     expect(filePath).toMatch(/skill\.md$/);
   });
+
+  it("rejects a colliding slug instead of silently overwriting", () => {
+    store.create("Dup Skill", "first");
+    // Different name, same slug — must not clobber the existing file.
+    expect(() => store.create("dup skill", "second")).toThrow(/already exists/);
+    expect(store.list()).toHaveLength(1);
+    expect(store.list()[0].description).toBe("first");
+  });
+
+  it("overwrites only when overwrite=true is passed explicitly", () => {
+    store.create("Dup Skill", "first");
+    store.create("Dup Skill", "third", "body", undefined, true);
+    expect(store.list()).toHaveLength(1);
+    expect(store.list()[0].description).toBe("third");
+  });
 });

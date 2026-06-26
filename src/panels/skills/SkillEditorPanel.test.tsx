@@ -26,10 +26,12 @@ describe("SkillEditorPanel", () => {
     expect(ta.value).toContain("---");
   });
 
-  it("cancel button closes the skill-editor tab", async () => {
+  it("cancel returns to the Skills list instead of a blank editor", async () => {
     renderWithProviders(<SkillEditorPanel />);
     await userEvent.click(screen.getByTestId("skill-editor-cancel"));
-    expect(useWorkbench.getState().systemTabs).not.toContain("skill-editor");
+    const s = useWorkbench.getState();
+    expect(s.systemTabs).not.toContain("skill-editor");
+    expect(s.activeSystemTab).toBe("skills");
   });
 
   it("save calls skills_create_global with parsed frontmatter then closes tab", async () => {
@@ -43,8 +45,9 @@ describe("SkillEditorPanel", () => {
     await userEvent.click(screen.getByTestId("skill-editor-save"));
 
     await waitFor(() =>
-      expect(useWorkbench.getState().systemTabs).not.toContain("skill-editor")
+      expect(useWorkbench.getState().activeSystemTab).toBe("skills")
     );
+    expect(useWorkbench.getState().systemTabs).not.toContain("skill-editor");
     expect(invoke).toHaveBeenCalledWith("skills_create_global", expect.objectContaining({ name: "my-skill" }));
   });
 

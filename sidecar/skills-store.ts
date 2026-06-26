@@ -40,7 +40,7 @@ export class SkillsStore {
     return skills;
   }
 
-  create(name: string, description: string, prompt = "", backend?: string): string {
+  create(name: string, description: string, prompt = "", backend?: string, overwrite = false): string {
     this.ensureDir();
     const slug = name
       .toLowerCase()
@@ -49,6 +49,13 @@ export class SkillsStore {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "") || "skill";
     const filePath = join(this.dir, `${slug}.md`);
+    // Guard against silent data loss: two names sharing a slug (e.g. "My Skill"
+    // and "my-skill", or the same name typed twice) would clobber the prior
+    // file. The editor's only flow is "New Skill", so a collision means the user
+    // is unknowingly overwriting an existing skill — reject unless told to.
+    if (existsSync(filePath) && !overwrite) {
+      throw new Error(`A skill named "${slug}" already exists — rename it or edit the file directly.`);
+    }
     const fm: Record<string, string> = { name, description };
     if (backend) fm.backend = backend;
     const content = `---\n${yaml.dump(fm)}---\n\n${prompt}`;
