@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, fireEvent, act } from "@/test/utils";
+import { useThemeContext } from "@/themes/theme-context";
 import { TerminalPane } from "./TerminalPane";
 import { __testing__ as fileDropTesting } from "@/lib/file-drop";
 import {
@@ -61,6 +62,24 @@ function makeProvider(): { provider: TerminalProvider; mountedHandle: Handle } {
   return { provider, mountedHandle: handle };
 }
 
+// Renders a control that switches to a different built-in theme and records the
+// terminal palette it switched to, so tests can assert live terminals adopt it.
+function ThemeSwitcher({ onSwitch }: { onSwitch: (terminal: unknown) => void }) {
+  const { themes, setTheme } = useThemeContext();
+  const next = themes[6];
+  return (
+    <button
+      data-testid="switch-theme"
+      onClick={() => {
+        onSwitch(next.terminal);
+        setTheme(next);
+      }}
+    >
+      switch
+    </button>
+  );
+}
+
 describe("TerminalPane", () => {
   it("mounts the terminal once, listens for clear, and disposes on unmount", () => {
     const { provider, mountedHandle } = makeProvider();
@@ -83,6 +102,23 @@ describe("TerminalPane", () => {
 
     unmount();
     expect(mountedHandle.dispose).toHaveBeenCalled();
+  });
+
+  it("repaints the live terminal when the app theme changes mid-session (#bug)", () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    let switched: unknown;
+    renderWithProviders(
+      <>
+        <TerminalPane ptyId="pth" paneId="pane-th" isFocused onFocus={() => {}} />
+        <ThemeSwitcher onSwitch={(t) => (switched = t)} />
+      </>
+    );
+    mountedHandle.setTheme.mockClear();
+    act(() => {
+      fireEvent.click(screen.getByTestId("switch-theme"));
+    });
+    expect(mountedHandle.setTheme).toHaveBeenCalledWith(switched);
   });
 
   it("ignores the clear broadcast when the pane is not focused (#bug)", () => {
@@ -265,6 +301,7 @@ interface PooledStub extends PooledTerminalHandle {
   release: ReturnType<typeof vi.fn>;
   feed: ReturnType<typeof vi.fn>;
   onResize: ReturnType<typeof vi.fn>;
+  setTheme: ReturnType<typeof vi.fn>;
   focus: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 }
@@ -414,6 +451,23 @@ describe("TerminalPane (pooled renderer path)", () => {
     expect(pooled.acquire).not.toHaveBeenCalled();
     unmount();
     expect(pooled.dispose).toHaveBeenCalled();
+  });
+
+  it("retints the pooled slot when the app theme changes mid-session (#bug)", () => {
+    const { provider, pooled } = makePooledProvider();
+    TerminalRegistry.register(provider);
+    let switched: unknown;
+    renderWithProviders(
+      <>
+        <TerminalPane ptyId="pthp" paneId="leaf-th" isFocused onFocus={() => {}} visible />
+        <ThemeSwitcher onSwitch={(t) => (switched = t)} />
+      </>
+    );
+    pooled.setTheme.mockClear();
+    act(() => {
+      fireEvent.click(screen.getByTestId("switch-theme"));
+    });
+    expect(pooled.setTheme).toHaveBeenCalledWith(switched);
   });
 
   it("refocuses the pooled slot when it becomes the active pane", () => {

@@ -302,7 +302,7 @@ describe("AutomationRunner.executeStep", () => {
       "/r",
       {}
     );
-    expect(calls[0]).toEqual(["git", "-C", "/wt", "push", "origin", "staging"]);
+    expect(calls[0]).toEqual(["git", "-C", "/wt", "push", "-u", "origin", "staging"]);
   });
 
   test("git pull action", async () => {

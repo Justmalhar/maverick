@@ -141,14 +141,24 @@ describe("GitModule methods", () => {
     ).rejects.toThrow(/nothing to commit/);
   });
 
-  test("push runs git push with optional remote/branch", async () => {
+  test("push uses the given branch as an explicit -u refspec (no bare push)", async () => {
     const { shell, calls } = transcript([{}]);
     await new GitModule({ shell }).push({ worktreePath: "/w", remote: "origin", branch: "main" });
-    expect(calls[0]).toEqual(["git", "-C", "/w", "push", "origin", "main"]);
+    expect(calls[0]).toEqual(["git", "-C", "/w", "push", "-u", "origin", "main"]);
+  });
+
+  test("push resolves the current branch when none is given, never a bare push (#bug)", async () => {
+    // A bare `git push` honours push.default=simple, which fatals when a worktree
+    // branch's upstream (origin/main) differs from its own name. Push must always
+    // pin an explicit branch refspec so the upstream mismatch can't surface.
+    const { shell, calls } = transcript([{ stdout: "feature/terminal-theme\n" }, {}]);
+    await new GitModule({ shell }).push({ worktreePath: "/w" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "rev-parse", "--abbrev-ref", "HEAD"]);
+    expect(calls[1]).toEqual(["git", "-C", "/w", "push", "-u", "origin", "feature/terminal-theme"]);
   });
 
   test("push throws on failure", async () => {
-    const { shell } = transcript([{ exitCode: 1, stderr: "rejected" }]);
+    const { shell } = transcript([{ stdout: "feat" }, { exitCode: 1, stderr: "rejected" }]);
     await expect(new GitModule({ shell }).push({ worktreePath: "/w" })).rejects.toThrow(/rejected/);
   });
 
@@ -330,10 +340,14 @@ describe("GitModule methods", () => {
     expect(names).not.toContain("origin/HEAD");
   });
 
-  test("pull runs git pull", async () => {
+  test("pull pins an explicit merge strategy so divergent branches don't fatal (#bug)", async () => {
+    // Since git 2.27 a bare `git pull` aborts with "Need to specify how to
+    // reconcile divergent branches" when neither pull.rebase nor pull.ff is
+    // configured. Pin --no-rebase (merge) so the GUI pull is deterministic
+    // regardless of the user's (absent) global git config.
     const { shell, calls } = transcript([{}]);
     await new GitModule({ shell }).pull({ worktreePath: "/w" });
-    expect(calls[0]).toEqual(["git", "-C", "/w", "pull"]);
+    expect(calls[0]).toEqual(["git", "-C", "/w", "pull", "--no-rebase"]);
   });
 
   test("pull throws on failure", async () => {
@@ -738,6 +752,7 @@ describe("GitModule methods", () => {
 
   test("push surfaces a typed auth error from stderr", async () => {
     const { shell } = transcript([
+      { stdout: "feat" },
       { exitCode: 128, stderr: "fatal: Authentication failed for 'https://github.com/o/r'" },
     ]);
     await expect(
@@ -747,6 +762,7 @@ describe("GitModule methods", () => {
 
   test("push surfaces a typed no-upstream error", async () => {
     const { shell } = transcript([
+      { stdout: "feat" },
       { exitCode: 128, stderr: "fatal: The current branch feat has no upstream branch." },
     ]);
     const err = await new GitModule({ shell })
