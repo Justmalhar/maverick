@@ -18,12 +18,17 @@ export function killLeaf(leafId: string): void {
   void ptyKill(ptyId).catch(() => {});
 }
 
-/** Kill every leaf shell PTY belonging to a workspace (ids are `${workspaceId}-…`). */
-export function killWorkspaceLeaves(workspaceId: string): void {
-  const prefix = `${workspaceId}-`;
+/** Kill every leaf shell PTY belonging to a terminal group (ids are `${groupId}-…`). */
+export function killTerminalGroupLeaves(groupId: string): void {
+  const prefix = `${groupId}-`;
   for (const leafId of [...leafPtyCache.keys()]) {
     if (leafId.startsWith(prefix)) killLeaf(leafId);
   }
+}
+
+/** Kill the PRIMARY group's leaves (group id === workspace id). Extra groups are killed by the store. */
+export function killWorkspaceLeaves(workspaceId: string): void {
+  killTerminalGroupLeaves(workspaceId);
 }
 
 /** The live shell PTY id for a leaf, or undefined if it has not spawned yet. */

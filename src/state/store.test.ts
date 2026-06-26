@@ -119,6 +119,17 @@ describe("workbench store", () => {
     expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-bbb" });
   });
 
+  it("removeWorkspace kills leaves for extra terminal groups too", async () => {
+    const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+    useWorkbench.getState().addWorkspace(makeWorkspace({ id: "w1" }));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    __testing__.leafPtyCache.set("w1-1", "pty-primary");
+    __testing__.leafPtyCache.set(`${id}-1`, "pty-extra");
+    useWorkbench.getState().removeWorkspace("w1");
+    expect(__testing__.leafPtyCache.has("w1-1")).toBe(false);
+    expect(__testing__.leafPtyCache.has(`${id}-1`)).toBe(false);
+  });
+
   it("removeWorkspace prunes the workspace's split tree (#40m)", () => {
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w-tree" })]);
     useWorkbench.getState().setSplitTree("w-tree", { type: "terminal", id: "w-tree-1", backend: "shell", ptyId: "" });

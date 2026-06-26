@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { disposeWorkspaceRunners } from "@/lib/script-runner";
-import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
+import { killTerminalGroupLeaves } from "@/components/editor/terminal/leaf-registry";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type {
   Project,
@@ -300,7 +300,9 @@ export const useWorkbench = create<WorkbenchState>()(
       // just the Archive action): kill the Run/Setup processes AND every per-leaf
       // shell PTY, so closing a tab can't orphan a dev server or a login shell.
       disposeWorkspaceRunners(id);
-      killWorkspaceLeaves(id);
+      for (const g of get().terminalGroups.filter((gr) => gr.workspaceId === id)) {
+        killTerminalGroupLeaves(g.id);
+      }
       useAgentStatusStore.getState().clearStatus(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
