@@ -84,7 +84,6 @@ export function ProjectsView() {
                 project={p}
                 onAddWorkspace={(projectId) => setNewWorkspaceProjectId(projectId)}
                 onSettings={(projectId) => openProjectSettings({ projectId })}
-                onCreateFrom={(projectId) => setNewWorkspaceProjectId(projectId)}
               />
             ))
           )}
