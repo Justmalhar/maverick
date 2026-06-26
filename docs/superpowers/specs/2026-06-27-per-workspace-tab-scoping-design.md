@@ -47,6 +47,36 @@ stay global. `+` adds a new terminal tab to the active workspace.
    active workspace.
 2. **Tab state is ephemeral.** Not persisted across app restart.
 
+## Implementation Refinement (2026-06-27, supersedes §1–6 mechanism)
+
+Reading the actual code changed the mechanism (behavior is unchanged). The original
+plan to *replace* `activeWorkspaceId`/`activeFileTabId`/`activeTerminalTabId` with a single
+`activeTabByWorkspace` map and *re-key* `splitTrees` by tab id is high-risk: `activeWorkspaceId`
+has ~40 consumers and `primaryAgentPtyId`, presets, ai-actions, and automation hard-depend on
+the `splitTrees[workspace.id]` + `${workspace.id}-N` leaf-id scheme.
+
+Refined approach — **per-workspace terminal groups, primary group id === `workspace.id`:**
+
+- A workspace owns an ordered list of **terminal groups**. Its *first* (primary) group has
+  `id === workspace.id`, so `splitTrees[group.id]`, `${group.id}-1` leaves, `primaryAgentPtyId`,
+  presets and ai-actions all keep working with zero changes. Extra groups get `term-<uuid>` ids
+  and their own `splitTrees[id]` + `${id}-N` leaves.
+- New state: `terminalGroups: TerminalGroup[]` and `activeGroupByWorkspace: Record<string,string>`.
+  The existing `activeWorkspaceId` / `activeFileTabId` / `activeSystemTab` pointers and their
+  four-way exclusivity are **kept unchanged** — no blast-radius migration.
+- Tab scoping is derived, not stored: `contextWorkspaceId(s) = activeWorkspaceId ?? fileTab(activeFileTabId)?.workspaceId`.
+  `EditorTabs` renders all workspace chips (switchers) + only the context workspace's terminal-group
+  tabs and file tabs. This reuses the existing `selectContextWorkspace` fallback logic.
+- The global standalone `terminalTabs[]` is removed (the approved fold): `+` now adds a terminal
+  group to the context workspace.
+- `FileTab` gains `workspaceId`, derived inside `openFileTab` from `worktreePath` so the ~15
+  `openFileTab` call sites need no changes.
+- The **primary group cannot be closed individually** (no per-tab X when it's the workspace's only
+  group, and the primary tab never shows an X); the workspace is closed via its chip. Extra groups
+  are closable. This preserves the `${workspace.id}-1` agent-pty contract.
+
+Where this section conflicts with §1–6 below, this section wins.
+
 ## Surface Area Summary
 
 1. `src/state/store.ts` — `TerminalTab` gains `workspaceId`; `FileTab` gains `workspaceId`;
