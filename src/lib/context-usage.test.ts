@@ -4,6 +4,7 @@ import {
   estimateTokensForMessages,
   pricePer1k,
   estimateCost,
+  estimateCostFromUsage,
   formatTokens,
 } from "./context-usage";
 
@@ -32,6 +33,19 @@ describe("context-usage helpers", () => {
     const cost = estimateCost(2000, "claude");
     expect(cost).toBeCloseTo(2 * pricePer1k("claude"));
     expect(estimateCost(1000, "ollama")).toBe(0);
+  });
+
+  it("estimateCostFromUsage discounts cache reads instead of full-rating totalTokens", () => {
+    const usage = {
+      inputTokens: 1000,
+      outputTokens: 0,
+      cacheReadTokens: 100_000,
+      cacheCreationTokens: 0,
+    };
+    // billable = 1000 + 100000*0.1 = 11000, NOT 101000
+    expect(estimateCostFromUsage(usage, "claude")).toBeCloseTo(11 * pricePer1k("claude"));
+    // and far below what blended totalTokens pricing would have charged
+    expect(estimateCostFromUsage(usage, "claude")).toBeLessThan(estimateCost(101_000, "claude"));
   });
 
   it("formatTokens abbreviates thousands and millions", () => {

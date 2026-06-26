@@ -106,10 +106,10 @@ describe("UsagePanel", () => {
   it("aggregates totals, sessions, and estimated cost across backends", async () => {
     mockSummary(
       summaryOf([
-        // 2000 tokens at claude pricing ($0.009/1k) = $0.018
-        usage("claude-code", { totalTokens: 2000, sessions: 2 }),
-        // 1000 tokens at codex pricing ($0.006/1k) = $0.006
-        usage("codex", { totalTokens: 1000, sessions: 1 }),
+        // 2000 input tokens at claude pricing ($0.009/1k) = $0.018
+        usage("claude-code", { inputTokens: 2000, totalTokens: 2000, sessions: 2 }),
+        // 1000 input tokens at codex pricing ($0.006/1k) = $0.006
+        usage("codex", { inputTokens: 1000, totalTokens: 1000, sessions: 1 }),
         usage("antigravity"),
       ])
     );

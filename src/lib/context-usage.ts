@@ -32,6 +32,29 @@ export function estimateCost(tokens: number, backend: string): number {
   return (tokens / 1000) * pricePer1k(backend);
 }
 
+// Cache-read tokens are billed at roughly a tenth of the base input price, so
+// pricing a usage row off its blended totalTokens (which sums cache reads at the
+// full rate) materially overstates cost on cache-heavy sessions. Weight cache
+// reads down to approximate real billing.
+const CACHE_READ_WEIGHT = 0.1;
+
+export function estimateCostFromUsage(
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  },
+  backend: string,
+): number {
+  const billable =
+    usage.inputTokens +
+    usage.outputTokens +
+    usage.cacheCreationTokens +
+    usage.cacheReadTokens * CACHE_READ_WEIGHT;
+  return (billable / 1000) * pricePer1k(backend);
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;

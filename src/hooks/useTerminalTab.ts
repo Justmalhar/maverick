@@ -5,8 +5,11 @@ import { resolveShell, type ShellKind } from "@/lib/terminal-shell";
 import { getDefaultShellKind, getGlobalEnv } from "@/lib/stores/settings";
 
 function basename(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  const idx = trimmed.lastIndexOf("/");
+  // Split on both separators: this is a Windows-first app and worktree/desktop
+  // paths come back backslash-style (e.g. C:\Users\me\proj), so a forward-slash-
+  // only split would render the whole path as the tab title.
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return idx === -1 ? trimmed : trimmed.slice(idx + 1);
 }
 

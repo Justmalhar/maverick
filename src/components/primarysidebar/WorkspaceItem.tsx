@@ -50,7 +50,11 @@ export function WorkspaceItem({ workspace }: Props) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") setActiveWorkspace(workspace.id);
+        if (e.key === "Enter" || e.key === " ") {
+          // preventDefault so Space activates the row without also scrolling.
+          e.preventDefault();
+          setActiveWorkspace(workspace.id);
+        }
       }}
       className={cn(
         "mv-workspace-item group/ws flex w-full cursor-pointer items-center gap-1.5 pr-2 text-left text-xs",

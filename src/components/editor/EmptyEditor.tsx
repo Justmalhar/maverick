@@ -53,7 +53,6 @@ export function EmptyEditor() {
           <QuickAction
             icon={FolderPlus}
             label="Add project"
-            shortcut={formatKeybinding("$mod+o", platform)}
             onClick={onAddProject}
             testId="empty-add-project"
           />

@@ -40,6 +40,14 @@ describe("useTerminalTab", () => {
     expect(state.activeTerminalTabId).toBe(tabId);
   });
 
+  it("derives the tab title from a Windows backslash path (not the full path)", async () => {
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("C:\\Users\\me\\my-proj");
+    });
+    expect(useWorkbench.getState().terminalTabs[0].title).toBe("my-proj");
+  });
+
   it.each([
     ["powershell", "powershell.exe", ["-NoLogo"]],
     ["cmd", "cmd.exe", []],

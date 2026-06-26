@@ -30,6 +30,7 @@ export default function GeneralSettings() {
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");
   const [startupCommand, setStartupCommand] = useSettings("general.startupCommand", "");
   const [aiBranchNames, setAiBranchNames] = useSettings("general.aiBranchNames", true);
+  const [agentLaunchMode, setAgentLaunchMode] = useSettings("general.agentLaunchMode", "headless");
   const [restore, setRestore] = useSettings("general.restoreSession", true);
   const [defaultShell, setDefaultShell] = useSettings("terminal.defaultShell", DEFAULT_SHELL_KIND);
   const shells = availableShells();
@@ -121,6 +122,22 @@ export default function GeneralSettings() {
               checked={aiBranchNames}
               onCheckedChange={setAiBranchNames}
               data-testid="general-ai-branch-names"
+            />
+          }
+        />
+        <SettingsRow
+          title="Agent launch mode"
+          description="Headless runs agents in the background and streams results to the panel. Terminal launches the agent CLI in an interactive workspace terminal."
+          control={
+            <SettingsSelect
+              label="Agent launch mode"
+              value={agentLaunchMode}
+              onValueChange={setAgentLaunchMode}
+              options={[
+                { value: "headless", label: "Headless" },
+                { value: "terminal", label: "Terminal" },
+              ]}
+              data-testid="general-agent-launch-mode"
             />
           }
         />
