@@ -35,6 +35,12 @@ export interface TerminalTab {
   ptyId: string;
 }
 
+export interface TerminalGroup {
+  id: string;
+  workspaceId: string;
+  title: string;
+}
+
 export type FileTabKind = "file" | "diff";
 export type FileTabMode = "view" | "edit" | "diff";
 
@@ -94,6 +100,9 @@ interface WorkbenchState {
   // Most-recently-used first. Drives LRU render suspension of editor groups.
   workspaceAccessOrder: string[];
   splitTrees: Record<string, SplitNode>;
+  // Terminal groups per workspace (primary group id === workspace.id).
+  terminalGroups: TerminalGroup[];
+  activeGroupByWorkspace: Record<string, string>;
   // Single-shot CLI launch directives, keyed by workspace id. Set when a
   // workspace is opened for an agent (kanban / preset); consumed once by the
   // primary terminal leaf when its shell PTY is ready, then deleted.
@@ -136,6 +145,9 @@ interface WorkbenchState {
   clearPendingAiRename: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
+  addTerminalGroup: (workspaceId: string) => string;
+  closeTerminalGroup: (groupId: string) => void;
+  setActiveGroup: (workspaceId: string, groupId: string) => void;
   /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
   setLaunchSpec: (workspaceId: string, spec: LaunchSpec) => void;
   setAgentLaunchSpec: (workspaceId: string, spec: AgentRunSpec) => void;
@@ -199,6 +211,12 @@ interface WorkbenchState {
   setFileTabViewed: (id: string, viewed: boolean) => void;
 }
 
+const primaryGroup = (workspaceId: string): TerminalGroup => ({
+  id: workspaceId,
+  workspaceId,
+  title: "Terminal 1",
+});
+
 export const useWorkbench = create<WorkbenchState>()(
   subscribeWithSelector((set, get) => ({
     projects: [],
@@ -216,6 +234,8 @@ export const useWorkbench = create<WorkbenchState>()(
     activeWorkspaceId: null,
     workspaceAccessOrder: [],
     splitTrees: {},
+    terminalGroups: [],
+    activeGroupByWorkspace: {},
     launchSpecs: {},
     agentLaunchSpecs: {},
     pendingAiRename: [],
@@ -243,12 +263,23 @@ export const useWorkbench = create<WorkbenchState>()(
     setProjects: (projects) => set({ projects }),
     addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
     setWorkspaces: (workspaces) =>
-      set((s) => ({
-        workspaces,
-        workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) =>
-          workspaces.some((w) => w.id === wid)
-        ),
-      })),
+      set((s) => {
+        const ids = new Set(workspaces.map((w) => w.id));
+        const kept = s.terminalGroups.filter((g) => ids.has(g.workspaceId));
+        const groups = [...kept];
+        const active: Record<string, string> = {};
+        for (const w of workspaces) {
+          if (!groups.some((g) => g.id === w.id)) groups.push(primaryGroup(w.id));
+          const existing = s.activeGroupByWorkspace[w.id];
+          active[w.id] = existing && groups.some((g) => g.id === existing) ? existing : w.id;
+        }
+        return {
+          workspaces,
+          workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => ids.has(wid)),
+          terminalGroups: groups,
+          activeGroupByWorkspace: active,
+        };
+      }),
     addWorkspace: (workspace) =>
       set((s) => ({
         workspaces: [...s.workspaces, workspace],
@@ -256,6 +287,13 @@ export const useWorkbench = create<WorkbenchState>()(
           workspace.id,
           ...s.workspaceAccessOrder.filter((wid) => wid !== workspace.id),
         ],
+        terminalGroups: s.terminalGroups.some((g) => g.id === workspace.id)
+          ? s.terminalGroups
+          : [...s.terminalGroups, primaryGroup(workspace.id)],
+        activeGroupByWorkspace: {
+          ...s.activeGroupByWorkspace,
+          [workspace.id]: s.activeGroupByWorkspace[workspace.id] ?? workspace.id,
+        },
       })),
     removeWorkspace: (id) => {
       // Canonical teardown for BOTH close paths (tab X / ⌘W go through here, not
@@ -267,11 +305,17 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
         const { [id]: _aspec, ...agentLaunchSpecs } = s.agentLaunchSpecs;
-        const { [id]: _tree, ...splitTrees } = s.splitTrees;
+        const groupIds = s.terminalGroups.filter((g) => g.workspaceId === id).map((g) => g.id);
+        const splitTrees = Object.fromEntries(
+          Object.entries(s.splitTrees).filter(([k]) => !groupIds.includes(k))
+        );
+        const { [id]: _ag, ...activeGroupByWorkspace } = s.activeGroupByWorkspace;
         return {
           workspaces: s.workspaces.filter((w) => w.id !== id),
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
+          terminalGroups: s.terminalGroups.filter((g) => g.workspaceId !== id),
+          activeGroupByWorkspace,
           launchSpecs,
           agentLaunchSpecs,
           splitTrees,
@@ -306,6 +350,35 @@ export const useWorkbench = create<WorkbenchState>()(
       })),
     setSplitTree: (workspaceId, tree) =>
       set((s) => ({ splitTrees: { ...s.splitTrees, [workspaceId]: tree } })),
+    addTerminalGroup: (workspaceId) => {
+      const id = `term-${crypto.randomUUID()}`;
+      set((s) => {
+        const count = s.terminalGroups.filter((g) => g.workspaceId === workspaceId).length;
+        return {
+          terminalGroups: [...s.terminalGroups, { id, workspaceId, title: `Terminal ${count + 1}` }],
+          activeGroupByWorkspace: { ...s.activeGroupByWorkspace, [workspaceId]: id },
+        };
+      });
+      return id;
+    },
+    closeTerminalGroup: (groupId) =>
+      set((s) => {
+        const group = s.terminalGroups.find((g) => g.id === groupId);
+        if (!group || group.id === group.workspaceId) return {};
+        const siblings = s.terminalGroups.filter((g) => g.workspaceId === group.workspaceId && g.id !== groupId);
+        const fallback = siblings[siblings.length - 1]?.id ?? group.workspaceId;
+        const { [groupId]: _tree, ...splitTrees } = s.splitTrees;
+        return {
+          terminalGroups: s.terminalGroups.filter((g) => g.id !== groupId),
+          splitTrees,
+          activeGroupByWorkspace:
+            s.activeGroupByWorkspace[group.workspaceId] === groupId
+              ? { ...s.activeGroupByWorkspace, [group.workspaceId]: fallback }
+              : s.activeGroupByWorkspace,
+        };
+      }),
+    setActiveGroup: (workspaceId, groupId) =>
+      set((s) => ({ activeGroupByWorkspace: { ...s.activeGroupByWorkspace, [workspaceId]: groupId } })),
     setLaunchSpec: (workspaceId, spec) =>
       set((s) => ({ launchSpecs: { ...s.launchSpecs, [workspaceId]: spec } })),
     consumeLaunchSpec: (workspaceId) => {
@@ -556,6 +629,11 @@ export const selectWorkspacesForProject =
   (projectId: string) =>
   (s: WorkbenchState): Workspace[] =>
     s.workspaces.filter((w) => w.projectId === projectId);
+
+export const selectWorkspaceGroups =
+  (workspaceId: string) =>
+  (s: WorkbenchState): TerminalGroup[] =>
+    s.terminalGroups.filter((g) => g.workspaceId === workspaceId);
 
 /**
  * The set of workspace ids whose editors stay rendered (keep-alive). When more

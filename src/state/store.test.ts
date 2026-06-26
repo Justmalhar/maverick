@@ -42,6 +42,8 @@ beforeEach(() => {
     launchSpecs: {},
     terminalTabs: [],
     activeTerminalTabId: null,
+    terminalGroups: [],
+    activeGroupByWorkspace: {},
     systemTabs: [],
     activeSystemTab: null,
     fileTabs: [],
@@ -514,5 +516,83 @@ describe("fileTabAccessOrder mutations", () => {
     useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
     useWorkbench.getState().closeFileTab("file:/wt/a.ts");
     expect(useWorkbench.getState().fileTabAccessOrder).toEqual(["file:/wt/b.ts"]);
+  });
+});
+
+function freshWorkspace(id: string) {
+  return {
+    id, projectId: "p1", branch: "b", agentBackend: "claude",
+    worktreePath: `/wt/${id}`, status: "active" as const, sessionId: "s",
+  };
+}
+
+describe("terminal groups", () => {
+  beforeEach(() => {
+    useWorkbench.setState({
+      workspaces: [], terminalGroups: [], activeGroupByWorkspace: {},
+      splitTrees: {}, activeWorkspaceId: null,
+    });
+  });
+
+  it("seeds a primary group (id === workspace.id) on addWorkspace", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const groups = useWorkbench.getState().terminalGroups;
+    expect(groups).toEqual([{ id: "w1", workspaceId: "w1", title: "Terminal 1" }]);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+  });
+
+  it("addTerminalGroup appends an extra group and activates it", () => {
+    const s = useWorkbench.getState();
+    s.addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    expect(id).toMatch(/^term-/);
+    const groups = useWorkbench.getState().terminalGroups.filter((g) => g.workspaceId === "w1");
+    expect(groups.map((g) => g.id)).toEqual(["w1", id]);
+    expect(groups[1].title).toBe("Terminal 2");
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id);
+  });
+
+  it("closeTerminalGroup removes an extra group, deletes its tree, re-points active", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.setState((st) => ({ splitTrees: { ...st.splitTrees, [id]: { type: "terminal", id: `${id}-1`, backend: "claude", ptyId: id } } }));
+    useWorkbench.getState().closeTerminalGroup(id);
+    expect(useWorkbench.getState().terminalGroups.find((g) => g.id === id)).toBeUndefined();
+    expect(useWorkbench.getState().splitTrees[id]).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+  });
+
+  it("closeTerminalGroup is a no-op for a primary group", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    useWorkbench.getState().closeTerminalGroup("w1");
+    expect(useWorkbench.getState().terminalGroups.find((g) => g.id === "w1")).toBeDefined();
+  });
+
+  it("setActiveGroup updates the active group for a workspace", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().setActiveGroup("w1", "w1");
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+    useWorkbench.getState().setActiveGroup("w1", id);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id);
+  });
+
+  it("removeWorkspace drops all groups, trees and active-group entry", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().removeWorkspace("w1");
+    expect(useWorkbench.getState().terminalGroups).toEqual([]);
+    expect(useWorkbench.getState().splitTrees[id]).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBeUndefined();
+  });
+
+  it("setWorkspaces seeds primary groups and prunes stale ones", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().setWorkspaces([freshWorkspace("w2")]);
+    const groups = useWorkbench.getState().terminalGroups;
+    expect(groups).toEqual([{ id: "w2", workspaceId: "w2", title: "Terminal 1" }]);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w2).toBe("w2");
   });
 });
