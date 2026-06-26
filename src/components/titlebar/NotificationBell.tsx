@@ -6,6 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   notifyList,
   notifyMarkAllRead,
@@ -26,11 +27,12 @@ export function NotificationBell() {
     notifyList(MAX_LIST)
       .then((list) => {
         if (cancelled) return;
+        const fetched = Array.isArray(list) ? list : [];
         // Merge, don't replace: a live notification can arrive (and be prepended
         // below) before this initial fetch resolves — replacing would drop it.
         setItems((prev) => {
-          const extras = prev.filter((p) => !list.some((f) => f.id === p.id));
-          return [...extras, ...list].slice(0, MAX_LIST);
+          const extras = prev.filter((p) => !fetched.some((f) => f.id === p.id));
+          return [...extras, ...fetched].slice(0, MAX_LIST);
         });
         setLoaded(true);
       })
@@ -69,27 +71,33 @@ export function NotificationBell() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-testid="statusbar-notifications"
-          aria-label={
-            unreadCount === 0
-              ? "Notifications"
-              : `Notifications, ${unreadCount} unread`
-          }
-          className="mv-statusbar-item flex h-full items-center gap-1 px-1.5 text-[11px] leading-none text-statusbar-fg transition-colors duration-100 hover:bg-statusbar-prominent"
-        >
-          <Bell className="h-3 w-3" />
-          <span>
-            {unreadCount > 0 ? (
-              <span data-testid="statusbar-notifications-count">{unreadCount}</span>
-            ) : (
-              <span className="text-muted-foreground/80">0</span>
-            )}
-          </span>
-        </button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-testid="titlebar-notifications"
+              aria-label={
+                unreadCount === 0
+                  ? "Notifications"
+                  : `Notifications, ${unreadCount} unread`
+              }
+              className="no-drag relative flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              {unreadCount > 0 && (
+                <span
+                  data-testid="titlebar-notifications-count"
+                  className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-semibold leading-none text-accent-foreground"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Notifications</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent
         align="end"
         sideOffset={6}
