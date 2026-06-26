@@ -340,10 +340,14 @@ describe("GitModule methods", () => {
     expect(names).not.toContain("origin/HEAD");
   });
 
-  test("pull runs git pull", async () => {
+  test("pull pins an explicit merge strategy so divergent branches don't fatal (#bug)", async () => {
+    // Since git 2.27 a bare `git pull` aborts with "Need to specify how to
+    // reconcile divergent branches" when neither pull.rebase nor pull.ff is
+    // configured. Pin --no-rebase (merge) so the GUI pull is deterministic
+    // regardless of the user's (absent) global git config.
     const { shell, calls } = transcript([{}]);
     await new GitModule({ shell }).pull({ worktreePath: "/w" });
-    expect(calls[0]).toEqual(["git", "-C", "/w", "pull"]);
+    expect(calls[0]).toEqual(["git", "-C", "/w", "pull", "--no-rebase"]);
   });
 
   test("pull throws on failure", async () => {

@@ -179,7 +179,11 @@ export class GitModule {
   }
 
   async pull(params: { worktreePath: string }): Promise<{ ok: true }> {
-    await this.network(["git", "-C", params.worktreePath, "pull"], "git pull");
+    // Pin --no-rebase (merge) instead of a bare `git pull`. Since git 2.27 a bare
+    // pull fatals with "Need to specify how to reconcile divergent branches" when
+    // the user has neither pull.rebase nor pull.ff configured. Merge is the
+    // historical, non-destructive default — the safe choice for a GUI pull button.
+    await this.network(["git", "-C", params.worktreePath, "pull", "--no-rebase"], "git pull");
     return { ok: true };
   }
 
