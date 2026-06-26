@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { makeBackend } from "@/test/fixtures";
+import { brandFor } from "@/lib/backend-brand";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 
 const initial = useWorkbench.getState();
@@ -61,5 +62,53 @@ describe("NewWorkspaceDialog — branch naming", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.not.objectContaining({ branch: expect.anything() })
     );
+  });
+});
+
+describe("NewWorkspaceDialog — agent select", () => {
+  it("defaults to the active backend and submits its id", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [
+        makeBackend({ id: "codex", name: "Codex", active: false }),
+        makeBackend({ id: "claude-code", name: "Claude Code", active: true }),
+      ],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "claude-code" }));
+  });
+
+  it("changing the agent select changes the submitted backend", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [
+        makeBackend({ id: "claude-code", name: "Claude Code", active: true }),
+        makeBackend({ id: "codex", name: "Codex", active: false }),
+      ],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(screen.getByTestId("agent-select"));
+    await userEvent.click(await screen.findByRole("option", { name: /Codex/ }));
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "codex" }));
+  });
+
+  it("falls back to claude-code when no agents are installed", async () => {
+    useWorkbench.setState({ ...initial, backends: [] });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    expect(screen.getByTestId("agent-select")).toBeDisabled();
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "claude-code" }));
+    expect(brandFor("claude-code")?.label).toBe("Claude Code");
   });
 });

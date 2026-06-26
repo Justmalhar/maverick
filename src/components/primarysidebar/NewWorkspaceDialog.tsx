@@ -11,8 +11,17 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { composeTypedBranch } from "@/lib/branch-name";
 import { cn } from "@/lib/utils";
+import { useWorkbench } from "@/state/store";
+import { brandFor } from "@/lib/backend-brand";
 
 const BRANCH_TYPES = ["feature", "fix", "bug", "chore", "hotfix"] as const;
 type BranchType = (typeof BRANCH_TYPES)[number];
@@ -40,8 +49,15 @@ export function NewWorkspaceDialog({
   projectPath,
   onSubmit,
 }: Props) {
-  // Silence unused-param until Task 2 populates the base-branch selector.
+  // Silence unused-param until Task 3 populates the base-branch selector.
   void projectPath;
+
+  const backends = useWorkbench((s) => s.backends);
+  const [backend, setBackend] = useState(
+    () => backends.find((b) => b.active)?.id ?? backends[0]?.id ?? "claude-code"
+  );
+  const selectedBrand = brandFor(backend);
+  const SelectedIcon = selectedBrand?.Icon;
 
   const [type, setType] = useState<BranchType>("feature");
   const [name, setName] = useState("");
@@ -54,11 +70,6 @@ export function NewWorkspaceDialog({
     setName("");
   }
 
-  // Placeholder until Task 2 wires the backend selector.
-  function backendId(): string {
-    return "claude-code";
-  }
-
   // Placeholder until Task 3 wires the base-branch selector.
   function baseBranch(): string | undefined {
     return undefined;
@@ -67,13 +78,13 @@ export function NewWorkspaceDialog({
   function create() {
     if (!canCreate) return;
     onOpenChange(false);
-    onSubmit({ backend: backendId(), baseBranch: baseBranch(), branch: composed });
+    onSubmit({ backend, baseBranch: baseBranch(), branch: composed });
     reset();
   }
 
   function aiLater() {
     onOpenChange(false);
-    onSubmit({ backend: backendId(), baseBranch: baseBranch(), aiLater: true });
+    onSubmit({ backend, baseBranch: baseBranch(), aiLater: true });
     reset();
   }
 
@@ -88,6 +99,30 @@ export function NewWorkspaceDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">Coding agent</span>
+            <Select value={backend} onValueChange={setBackend} disabled={backends.length === 0}>
+              <SelectTrigger className="h-8 text-[12px]" data-testid="agent-select">
+                {SelectedIcon ? <SelectedIcon size={14} /> : null}
+                <SelectValue placeholder={selectedBrand?.label ?? backend} />
+              </SelectTrigger>
+              <SelectContent>
+                {backends.map((b) => {
+                  const brand = brandFor(b.id);
+                  const BrandIcon = brand?.Icon;
+                  return (
+                    <SelectItem key={b.id} value={b.id} className="text-[12px]">
+                      <span className="flex items-center gap-2">
+                        {BrandIcon ? <BrandIcon size={14} /> : null}
+                        {brand?.label ?? b.name}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-muted-foreground">Branch type</span>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Branch type">
