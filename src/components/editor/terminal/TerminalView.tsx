@@ -8,30 +8,31 @@ import { killLeaf, getLeafPtyId } from "./leaf-registry";
 
 interface Props {
   workspace: Workspace;
+  groupId: string;
   // False when the owning workspace editor is keep-alive-hidden. Forwarded to
   // every leaf so dormant panes release their pooled xterm slot.
   visible?: boolean;
 }
 
-function singlePane(workspace: Workspace): SplitNode {
+function singlePane(groupId: string, backend: string): SplitNode {
   return {
     type: "terminal",
-    id: `${workspace.id}-1`,
-    backend: workspace.agentBackend,
-    ptyId: workspace.id,
+    id: `${groupId}-1`,
+    backend,
+    ptyId: groupId,
   };
 }
 
-export function TerminalView({ workspace, visible = true }: Props) {
-  const tree = useWorkbench((s) => s.splitTrees[workspace.id]);
+export function TerminalView({ workspace, groupId, visible = true }: Props) {
+  const tree = useWorkbench((s) => s.splitTrees[groupId]);
   const setSplitTree = useWorkbench((s) => s.setSplitTree);
   const [focusedPaneId, setFocusedPaneId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tree) {
-      setSplitTree(workspace.id, singlePane(workspace));
+      setSplitTree(groupId, singlePane(groupId, workspace.agentBackend));
     }
-  }, [tree, workspace, setSplitTree]);
+  }, [tree, groupId, workspace.agentBackend, setSplitTree]);
 
   // Default the focused pane to the tree's first leaf so split/close shortcuts
   // act on a sane target before the user has clicked a pane.
@@ -44,25 +45,25 @@ export function TerminalView({ workspace, visible = true }: Props) {
     // a single ⌘D would split every keep-alive-mounted terminal workspace.
     if (!visible) return;
     function onSplit(direction: "h" | "v") {
-      const current = useWorkbench.getState().splitTrees[workspace.id];
+      const current = useWorkbench.getState().splitTrees[groupId];
       if (!current || !focusedPaneId) return;
       if (!canSplit(current)) return;
-      const newId = `${workspace.id}-${Date.now()}`;
+      const newId = `${groupId}-${Date.now()}`;
       const next = splitNode(current, focusedPaneId, direction, {
         type: "terminal",
         id: newId,
         backend: workspace.agentBackend,
-        ptyId: workspace.id,
+        ptyId: groupId,
       });
-      setSplitTree(workspace.id, next);
+      setSplitTree(groupId, next);
       setFocusedPaneId(newId);
     }
     function onClose() {
-      const current = useWorkbench.getState().splitTrees[workspace.id];
+      const current = useWorkbench.getState().splitTrees[groupId];
       if (!current || !focusedPaneId) return;
       killLeaf(focusedPaneId);
       const next = removeNode(current, focusedPaneId);
-      setSplitTree(workspace.id, next ?? singlePane(workspace));
+      setSplitTree(groupId, next ?? singlePane(groupId, workspace.agentBackend));
     }
     const splitH = () => onSplit("h");
     const splitV = () => onSplit("v");
@@ -74,7 +75,7 @@ export function TerminalView({ workspace, visible = true }: Props) {
       window.removeEventListener("maverick:terminal:splitV", splitV);
       window.removeEventListener("maverick:terminal:closePane", onClose);
     };
-  }, [focusedPaneId, workspace, setSplitTree, visible]);
+  }, [focusedPaneId, groupId, workspace.agentBackend, setSplitTree, visible]);
 
   useEffect(() => {
     // Send-to-terminal (e.g. BrowserPanel selection) targets the focused leaf's
@@ -97,7 +98,7 @@ export function TerminalView({ workspace, visible = true }: Props) {
     if (!visible) return;
     function onFocusDirection(e: Event) {
       const direction = (e as CustomEvent<FocusDirection>).detail;
-      const current = useWorkbench.getState().splitTrees[workspace.id];
+      const current = useWorkbench.getState().splitTrees[groupId];
       if (!current || !focusedPaneId) return;
       const neighbour = findNeighbor(current, focusedPaneId, direction);
       if (neighbour) setFocusedPaneId(neighbour);
@@ -106,7 +107,7 @@ export function TerminalView({ workspace, visible = true }: Props) {
     return () => {
       window.removeEventListener("maverick:terminal:focusDirection", onFocusDirection);
     };
-  }, [focusedPaneId, workspace.id, visible]);
+  }, [focusedPaneId, groupId, visible]);
 
   if (!tree) {
     return (
@@ -118,7 +119,7 @@ export function TerminalView({ workspace, visible = true }: Props) {
 
   return (
     <section
-      data-testid={`terminal-view-${workspace.id}`}
+      data-testid={`terminal-view-${groupId}`}
       className="mv-terminal-view h-full w-full bg-background"
     >
       <SplitGrid

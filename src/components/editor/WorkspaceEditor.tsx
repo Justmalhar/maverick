@@ -31,7 +31,7 @@ export function WorkspaceEditor({ workspace, active }: Props) {
       aria-hidden={!active}
     >
       <div className="absolute inset-0">
-        <TerminalView workspace={workspace} visible={active} />
+        <TerminalView workspace={workspace} groupId={workspace.id} visible={active} />
       </div>
     </div>
   );

@@ -31,7 +31,8 @@ beforeEach(() => {
 
 describe("TerminalView", () => {
   it("seeds a singlePane on first mount and renders the grid", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(screen.getByTestId("terminal-view-w1")).toBeInTheDocument());
     expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined();
   });
@@ -39,13 +40,15 @@ describe("TerminalView", () => {
   it("renders the loading placeholder before a tree exists", () => {
     // Spy on store: prevent the singlePane effect from filling, by intercepting setSplitTree.
     const setSplitTree = vi.spyOn(useWorkbench.getState(), "setSplitTree").mockImplementation(() => {});
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     expect(screen.getByText("Initialising terminal…")).toBeInTheDocument();
     setSplitTree.mockRestore();
   });
 
   it("splits the default-focused first leaf without a prior click", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
 
     // No click: focus defaults to the tree's first leaf, so the split applies.
@@ -65,7 +68,8 @@ describe("TerminalView", () => {
   });
 
   it("splits vertically via the splitV event", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
       window.dispatchEvent(new CustomEvent("maverick:terminal:splitV"));
@@ -76,7 +80,8 @@ describe("TerminalView", () => {
   });
 
   it("closePane on the last remaining pane reseeds a fresh singlePane", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
       window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
@@ -87,7 +92,8 @@ describe("TerminalView", () => {
 
   it("split and close are no-ops while the tree has not been seeded yet", async () => {
     const setSplitTree = vi.spyOn(useWorkbench.getState(), "setSplitTree").mockImplementation(() => {});
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     act(() => {
       window.dispatchEvent(new CustomEvent("maverick:terminal:splitH"));
       window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
@@ -98,8 +104,9 @@ describe("TerminalView", () => {
   });
 
   it("ignores split events when not visible (inactive workspace)", async () => {
+    const ws = makeWorkspace({ id: "w1" });
     renderWithProviders(
-      <TerminalView workspace={makeWorkspace({ id: "w1" })} visible={false} />
+      <TerminalView workspace={ws} groupId={ws.id} visible={false} />
     );
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     // A global ⌘D must not split a keep-alive-hidden (inactive) terminal view.
@@ -111,7 +118,8 @@ describe("TerminalView", () => {
   });
 
   it("focusDirection right moves focus to the right pane after a horizontal split", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
 
     // Focus the initial pane, then split horizontally
@@ -134,7 +142,8 @@ describe("TerminalView", () => {
   });
 
   it("focusDirection is a no-op when no pane is focused", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     // No focused pane → should not throw
     act(() => { window.dispatchEvent(new CustomEvent("maverick:terminal:focusDirection", { detail: "right" })); });
@@ -144,7 +153,8 @@ describe("TerminalView", () => {
   });
 
   it("focusDirection is a no-op at the edge of the tree", async () => {
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
 
     // Focus the single pane (no neighbours exist)
@@ -162,7 +172,8 @@ describe("TerminalView", () => {
 
   it("input-append writes the text to the focused leaf's shell PTY", async () => {
     __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
       window.dispatchEvent(
@@ -176,8 +187,9 @@ describe("TerminalView", () => {
 
   it("input-append is a no-op when the view is not visible", async () => {
     __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
+    const ws = makeWorkspace({ id: "w1" });
     renderWithProviders(
-      <TerminalView workspace={makeWorkspace({ id: "w1" })} visible={false} />
+      <TerminalView workspace={ws} groupId={ws.id} visible={false} />
     );
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
@@ -191,7 +203,8 @@ describe("TerminalView", () => {
   it("input-append is a no-op when the focused leaf has no live PTY", async () => {
     // Shell spawn never resolves → no pty cached for the focused leaf.
     vi.mocked(invoke).mockImplementation(() => new Promise<never>(() => {}) as never);
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
       window.dispatchEvent(
@@ -203,7 +216,8 @@ describe("TerminalView", () => {
 
   it("input-append is a no-op when the event carries no text", async () => {
     __testing__.leafPtyCache.set("w1-1", "pty-w1-1");
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["w1"]).toBeDefined());
     act(() => {
       window.dispatchEvent(
@@ -227,7 +241,8 @@ describe("TerminalView", () => {
         })(),
       },
     });
-    renderWithProviders(<TerminalView workspace={makeWorkspace({ id: "w1" })} />);
+    const ws = makeWorkspace({ id: "w1" });
+    renderWithProviders(<TerminalView workspace={ws} groupId={ws.id} />);
     const pane = await screen.findByTestId("terminal-pane-1");
     act(() => {
       pane.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -235,5 +250,13 @@ describe("TerminalView", () => {
     });
     // Tree should remain a split with 6 leaves (no growth)
     expect(useWorkbench.getState().splitTrees["w1"]?.type).toBe("split");
+  });
+
+  it("seeds and reads the split tree under groupId, not workspace.id", async () => {
+    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s" };
+    renderWithProviders(<TerminalView workspace={ws} groupId="term-x" visible />);
+    await waitFor(() => expect(useWorkbench.getState().splitTrees["term-x"]).toBeDefined());
+    const node = useWorkbench.getState().splitTrees["term-x"];
+    expect(node.type === "terminal" && node.id).toBe("term-x-1");
   });
 });
