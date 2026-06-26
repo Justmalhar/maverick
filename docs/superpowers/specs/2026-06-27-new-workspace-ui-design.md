@@ -62,8 +62,10 @@ a startup command, so neither maps cleanly today.
   so the flow never hard-blocks.
 
 ### Base branch (folded in from CreateFromDialog)
-- Searchable `Popover` + `Command`, reusing `gitBranchList(projectPath)` and the
-  local (`GitBranch`) / remote (`Cloud`) iconography from `CreateFromDialog`.
+- shadcn `Select`, **matching the `TaskComposer` prior art** (project / base-branch /
+  agent are all `Select`s there). Avoids adding a new `Popover` primitive.
+- Loads via `gitBranchList(projectPath)` (returns `Branch[]` with `isCurrent` /
+  `isRemote`), so we can preselect the current branch and tag local/remote items.
 - Defaults to the project's **current** branch (`Branch.isCurrent`).
 - Optional: if unresolved, `baseBranch` is left `undefined` and the sidecar uses
   its default base.
@@ -107,8 +109,8 @@ takes a backend id.
 - `src/components/primarysidebar/NameWorkspaceDialog.tsx` (+ `.test.tsx`)
 - `src/components/primarysidebar/CreateFromDialog.tsx`
 
-**Possibly added (shadcn primitives, if absent)**
-- `src/components/ui/select.tsx`, `src/components/ui/popover.tsx` via `bunx shadcn add`.
+**No new primitives needed** — `src/components/ui/select.tsx`, `dialog.tsx`,
+`input.tsx` already exist.
 
 **Unchanged shared helpers reused**: `composeTypedBranch` (`lib/branch-name`),
 `gitBranchList` (`lib/tauri`), `brandFor` (`lib/backend-brand`),
