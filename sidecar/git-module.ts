@@ -156,10 +156,25 @@ export class GitModule {
   }
 
   async push(params: { worktreePath: string; remote?: string; branch?: string }): Promise<{ ok: true }> {
-    const cmd = ["git", "-C", params.worktreePath, "push"];
-    if (params.remote) cmd.push(params.remote);
-    if (params.branch) cmd.push(params.branch);
-    await this.network(cmd, "git push");
+    const remote = params.remote ?? "origin";
+    // Always push an explicit `<remote> <branch>` refspec with -u rather than a
+    // bare `git push`. Worktree branches are created off the base branch and
+    // inherit its upstream (origin/main), so a bare push under push.default=simple
+    // fatals with "upstream branch ... does not match the name of your current
+    // branch". Pinning the branch sidesteps push.default and rebinds the upstream
+    // to origin/<branch>, self-healing the inherited tracking config.
+    const branch =
+      params.branch ??
+      (
+        await this.shell.text(
+          ["git", "-C", params.worktreePath, "rev-parse", "--abbrev-ref", "HEAD"],
+          undefined
+        )
+      ).trim();
+    await this.network(
+      ["git", "-C", params.worktreePath, "push", "-u", remote, branch],
+      "git push"
+    );
     return { ok: true };
   }
 
