@@ -66,6 +66,10 @@ describe("NewWorkspaceDialog — branch naming", () => {
 });
 
 describe("NewWorkspaceDialog — agent select", () => {
+  beforeEach(() => {
+    useWorkbench.setState(initial);
+  });
+
   it("defaults to the active backend and submits its id", async () => {
     useWorkbench.setState({
       ...initial,
@@ -110,5 +114,18 @@ describe("NewWorkspaceDialog — agent select", () => {
     await userEvent.click(screen.getByTestId("branch-ai-later"));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "claude-code" }));
     expect(brandFor("claude-code")?.label).toBe("Claude Code");
+  });
+
+  it("renders without an icon when the backend id is unrecognised", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "unknown-agent", name: "UnknownAgent", active: true })],
+    });
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={vi.fn()} />
+    );
+    expect(screen.getByTestId("agent-select")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("agent-select"));
+    expect(await screen.findByRole("option", { name: /UnknownAgent/ })).toBeInTheDocument();
   });
 });
