@@ -145,7 +145,8 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
         <Button
           size="icon-sm"
           variant="ghost"
-          disabled={busy || server.status === "running"}
+          disabled={busy || server.status === "running" || !workspaceId}
+          title={!workspaceId ? "Open a project first" : undefined}
           onClick={start}
           data-testid="mcp-start"
         >
@@ -163,7 +164,8 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
         <Button
           size="icon-sm"
           variant="ghost"
-          disabled={busy}
+          disabled={busy || !workspaceId}
+          title={!workspaceId ? "Open a project first" : undefined}
           onClick={restart}
           data-testid="mcp-restart"
         >

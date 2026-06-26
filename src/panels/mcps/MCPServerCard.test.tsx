@@ -19,7 +19,7 @@ describe("MCPServerCard", () => {
   it("renders stopped server and starts it", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({ pid: 1 } as never);
     const onChange = vi.fn();
-    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "stopped" })} onChange={onChange} />);
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "stopped" })} onChange={onChange} workspaceId="ws1" />);
     await userEvent.click(screen.getByTestId("mcp-start"));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
   });
@@ -36,14 +36,14 @@ describe("MCPServerCard", () => {
   it("restart calls stop+start", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined as never).mockResolvedValueOnce({ pid: 1 } as never);
     const onChange = vi.fn();
-    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={onChange} />);
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={onChange} workspaceId="ws1" />);
     await userEvent.click(screen.getByTestId("mcp-restart"));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
   });
 
   it("start fail surfaces error", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("start fail"));
-    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "stopped" })} onChange={() => {}} />);
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "stopped" })} onChange={() => {}} workspaceId="ws1" />);
     await userEvent.click(screen.getByTestId("mcp-start"));
     await waitFor(() => expect(screen.getByText(/start fail/)).toBeInTheDocument());
   });
@@ -57,9 +57,15 @@ describe("MCPServerCard", () => {
 
   it("restart fail surfaces error", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("restart fail"));
-    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={() => {}} />);
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={() => {}} workspaceId="ws1" />);
     await userEvent.click(screen.getByTestId("mcp-restart"));
     await waitFor(() => expect(screen.getByText(/restart fail/)).toBeInTheDocument());
+  });
+
+  it("disables start and restart when no workspace is active", () => {
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "stopped" })} onChange={() => {}} />);
+    expect(screen.getByTestId("mcp-start")).toBeDisabled();
+    expect(screen.getByTestId("mcp-restart")).toBeDisabled();
   });
 
   it("uses error variant for error and crashed states", () => {
