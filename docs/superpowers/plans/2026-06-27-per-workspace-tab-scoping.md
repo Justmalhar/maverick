@@ -59,6 +59,8 @@ export interface TerminalGroup {
 - `removeWorkspace` must drop all `terminalGroups` for that workspace and their `splitTrees`, and delete its `activeGroupByWorkspace` entry. (Leaf-kill wiring is Task 2.)
 - `crypto.randomUUID()` is available (already used in `useTerminalTab`).
 - Title for extra groups: `"Terminal " + (count of that workspace's groups + 1)`.
+- **Update `src/state/store.test.ts` `beforeEach`** (lines ~34-65): add `terminalGroups: [],` and `activeGroupByWorkspace: {},` to the `useWorkbench.setState({...})` reset so other tests start clean.
+- The new tests below use the `makeWorkspace` fixture from `@/test/fixtures` rather than the inline `freshWorkspace` if you prefer; either works as long as ids match.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -419,21 +421,22 @@ Update `useWorkspace.ts` import line 13 to `import { killTerminalGroupLeaves } f
 
 - [ ] **Step 4: Add a store test asserting destroy kills extra-group leaves**
 
-Add to `src/state/store.test.ts` (mock leaf-registry already? store.test.ts likely mocks it — match existing pattern; if it mocks `killWorkspaceLeaves`, switch the mock to `killTerminalGroupLeaves` and assert it is called for each group id).
+`store.test.ts` does NOT mock leaf-registry — it uses the REAL registry via `__testing__.leafPtyCache` and asserts eviction (`invoke("pty_kill", …)` is mocked). Match that existing pattern (see the test "removeWorkspace kills the workspace's leaf shell PTYs (#17)"). Add:
 
 ```ts
-it("removeWorkspace kills leaves for every group", () => {
-  // Relies on the existing vi.mock of "@/components/editor/terminal/leaf-registry".
-  useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+it("removeWorkspace kills leaves for extra terminal groups too", async () => {
+  const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+  useWorkbench.getState().addWorkspace(makeWorkspace({ id: "w1" }));
   const id = useWorkbench.getState().addTerminalGroup("w1");
+  __testing__.leafPtyCache.set("w1-1", "pty-primary");
+  __testing__.leafPtyCache.set(`${id}-1`, "pty-extra");
   useWorkbench.getState().removeWorkspace("w1");
-  const { killTerminalGroupLeaves } = require("@/components/editor/terminal/leaf-registry");
-  expect(killTerminalGroupLeaves).toHaveBeenCalledWith("w1");
-  expect(killTerminalGroupLeaves).toHaveBeenCalledWith(id);
+  expect(__testing__.leafPtyCache.has("w1-1")).toBe(false);
+  expect(__testing__.leafPtyCache.has(`${id}-1`)).toBe(false);
 });
 ```
 
-> Check how `store.test.ts` currently mocks leaf-registry (it imports `killWorkspaceLeaves`). Update the `vi.mock` factory to also export `killTerminalGroupLeaves: vi.fn()`.
+> No `vi.mock` of leaf-registry is needed or wanted. The existing `#17` test still passes because `setWorkspaces([makeWorkspace({id:"w-pty"})])` now seeds a primary group `{id:"w-pty"}`, so `removeWorkspace` calls `killTerminalGroupLeaves("w-pty")` which evicts the `w-pty-*` leaves.
 
 - [ ] **Step 5: Run tests, verify pass**
 
@@ -460,6 +463,8 @@ git commit -m "feat(terminal): kill leaves for every terminal group on destroy"
 - Consumes: `selectContextWorkspace` (unchanged — still works via worktreePath).
 
 **Notes:** Derive inside `openFileTab` so the ~15 call sites are untouched. `null` when no workspace matches the worktree path.
+
+- **Update the local `makeTab` helper in `src/state/store.test.ts`** (lines ~15-28) and any other `FileTab` literal in tests to include `workspaceId: null` by default, so the new required field type-checks. Other test files that construct `FileTab` literals (grep `kind: "file"` / `worktreePath:` in `*.test.tsx`) must add `workspaceId` — the compiler in Task 8 will catch any missed ones; fix them there if not here.
 
 - [ ] **Step 1: Write failing test**
 
