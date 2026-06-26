@@ -6,11 +6,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { skillsListGlobal } from "@/lib/tauri";
 import { useWorkbench } from "@/state/store";
 
-function SkillRow({ name, description }: { name: string; description: string }) {
+function SkillRow({ name, description, onOpen }: { name: string; description: string; onOpen: () => void }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       data-testid={`skills-panel-row-${name}`}
-      className="flex items-start gap-3 rounded-md px-4 py-2.5 hover:bg-muted/50"
+      className="flex w-full items-start gap-3 rounded-md px-4 py-2.5 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
       <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
       <div className="min-w-0">
@@ -19,7 +21,7 @@ function SkillRow({ name, description }: { name: string; description: string }) 
           <p className="truncate text-[11px] text-muted-foreground">{description}</p>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -27,7 +29,17 @@ export default function SkillsPanel() {
   const skills = useWorkbench((s) => s.skills);
   const setSkills = useWorkbench((s) => s.setSkills);
   const openSystemTab = useWorkbench((s) => s.openSystemTab);
+  const setEditingSkill = useWorkbench((s) => s.setEditingSkill);
   const reduce = useReducedMotion();
+
+  const newSkill = () => {
+    setEditingSkill(null);
+    openSystemTab("skill-editor");
+  };
+  const editSkill = (skill: Parameters<typeof setEditingSkill>[0]) => {
+    setEditingSkill(skill);
+    openSystemTab("skill-editor");
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -58,7 +70,7 @@ export default function SkillsPanel() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => openSystemTab("skill-editor")}
+            onClick={newSkill}
             data-testid="skills-panel-new"
           >
             <Plus className="h-3 w-3" />
@@ -85,7 +97,7 @@ export default function SkillsPanel() {
         ) : (
           <div className="py-2">
             {skills.map((s) => (
-              <SkillRow key={s.name} name={s.name} description={s.description} />
+              <SkillRow key={s.name} name={s.name} description={s.description} onOpen={() => editSkill(s)} />
             ))}
           </div>
         )}

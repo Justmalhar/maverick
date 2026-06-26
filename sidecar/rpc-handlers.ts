@@ -88,6 +88,7 @@ const Schemas = {
     description: z.string(),
     prompt: nullishOptional(z.string()),
     backend: nullishOptional(z.string()),
+    overwrite: nullishOptional(z.boolean()),
   }),
   diffGet: z.object({
     worktreePath: z.string(),
@@ -645,7 +646,7 @@ export class RpcHandlers {
         return this.skillsStore.list();
       case "skills.createGlobal": {
         const p = Schemas.skillsCreateGlobal.parse(params);
-        const filePath = this.skillsStore.create(p.name, p.description, p.prompt ?? "", p.backend);
+        const filePath = this.skillsStore.create(p.name, p.description, p.prompt ?? "", p.backend ?? undefined, p.overwrite ?? false);
         return { ok: true, filePath };
       }
       case "diff.get": {

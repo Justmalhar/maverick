@@ -72,6 +72,8 @@ interface WorkbenchState {
   workspaces: Workspace[];
   backends: Backend[];
   skills: Skill[];
+  // The skill currently loaded into the editor (null = creating a new one).
+  editingSkill: Skill | null;
 
   // System tabs (browser, kanban etc) opened as editor tabs alongside workspaces
   systemTabs: SystemTabId[];
@@ -142,6 +144,7 @@ interface WorkbenchState {
   consumeLaunchSpec: (workspaceId: string) => LaunchSpec | null;
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
+  setEditingSkill: (skill: Skill | null) => void;
   queueSetup: (workspaceId: string) => void;
   clearPendingSetup: (workspaceId: string) => void;
 
@@ -202,6 +205,7 @@ export const useWorkbench = create<WorkbenchState>()(
     workspaces: [],
     backends: [],
     skills: [],
+    editingSkill: null,
     systemTabs: [],
     activeSystemTab: null,
     terminalTabs: [],
@@ -328,6 +332,7 @@ export const useWorkbench = create<WorkbenchState>()(
     },
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
+    setEditingSkill: (editingSkill) => set({ editingSkill }),
     queueSetup: (workspaceId) =>
       set((s) => ({
         pendingSetupIds: s.pendingSetupIds.includes(workspaceId)

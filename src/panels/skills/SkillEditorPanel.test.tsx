@@ -75,4 +75,25 @@ describe("SkillEditorPanel", () => {
     renderWithProviders(<SkillEditorPanel />);
     expect(screen.getByTestId("skill-editor-save")).not.toBeDisabled();
   });
+
+  it("loads an existing skill for editing and saves it with overwrite", async () => {
+    useWorkbench.setState({
+      editingSkill: { name: "refactor", description: "Refactors code", prompt: "the body", backend: "codex" },
+    });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({ ok: true, filePath: "/tmp/refactor.md" })
+      .mockResolvedValueOnce([]);
+    renderWithProviders(<SkillEditorPanel />);
+    const ta = screen.getByTestId("skill-editor-textarea") as HTMLTextAreaElement;
+    expect(ta.value).toContain("name: refactor");
+    expect(ta.value).toContain("the body");
+    expect(screen.getByText(/Edit Skill/)).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("skill-editor-save"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "skills_create_global",
+        expect.objectContaining({ name: "refactor", overwrite: true })
+      )
+    );
+  });
 });

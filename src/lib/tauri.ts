@@ -178,9 +178,10 @@ export async function skillsCreateGlobal(
   name: string,
   description: string,
   prompt?: string,
-  backend?: string
+  backend?: string,
+  overwrite?: boolean
 ): Promise<{ ok: true; filePath: string }> {
-  return invoke("skills_create_global", { name, description, prompt, backend });
+  return invoke("skills_create_global", { name, description, prompt, backend, overwrite });
 }
 
 export async function skillsRun(
