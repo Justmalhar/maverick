@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
-import { WorkspaceItem } from "./WorkspaceItem";
+import { WorkspaceItem, formatDiffCount } from "./WorkspaceItem";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 
@@ -100,5 +100,72 @@ describe("WorkspaceItem", () => {
     const notCancelled = fireEvent.keyDown(screen.getByTestId("workspace-item-w2"), { key: " " });
     expect(notCancelled).toBe(false);
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w2");
+  });
+
+  it("renders the diff count once git_diff_stat resolves", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_diff_stat") return { added: 2847, removed: 1 } as never;
+      return undefined as never;
+    });
+    const ws = makeWorkspace({ id: "w1", title: "Polaris" });
+    renderWithProviders(<WorkspaceItem workspace={ws} />);
+    const diff = await screen.findByTestId("workspace-diff-w1");
+    expect(diff).toHaveTextContent("+2.8k");
+    expect(diff).toHaveTextContent("−1");
+  });
+
+  it("omits the diff count when there are no changes", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_diff_stat") return { added: 0, removed: 0 } as never;
+      return undefined as never;
+    });
+    const ws = makeWorkspace({ id: "w1", title: "Polaris" });
+    renderWithProviders(<WorkspaceItem workspace={ws} />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_diff_stat", { worktreePath: ws.worktreePath })
+    );
+    expect(screen.queryByTestId("workspace-diff-w1")).not.toBeInTheDocument();
+  });
+
+  it("renders only the additions when nothing was removed", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_diff_stat") return { added: 5, removed: 0 } as never;
+      return undefined as never;
+    });
+    const ws = makeWorkspace({ id: "w1", title: "Polaris" });
+    renderWithProviders(<WorkspaceItem workspace={ws} />);
+    const diff = await screen.findByTestId("workspace-diff-w1");
+    expect(diff).toHaveTextContent("+5");
+    expect(diff).not.toHaveTextContent("−");
+  });
+
+  it("ignores a git_diff_stat failure without surfacing an error", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_diff_stat") throw new Error("not a git repo");
+      return undefined as never;
+    });
+    const ws = makeWorkspace({ id: "w1", title: "Polaris" });
+    renderWithProviders(<WorkspaceItem workspace={ws} />);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("git_diff_stat", { worktreePath: ws.worktreePath })
+    );
+    expect(screen.queryByTestId("workspace-diff-w1")).not.toBeInTheDocument();
+  });
+});
+
+describe("formatDiffCount", () => {
+  it("returns raw counts below 1000", () => {
+    expect(formatDiffCount(0)).toBe("0");
+    expect(formatDiffCount(999)).toBe("999");
+  });
+
+  it("uses one decimal for thousands under 10k", () => {
+    expect(formatDiffCount(1000)).toBe("1.0k");
+    expect(formatDiffCount(2847)).toBe("2.8k");
+  });
+
+  it("rounds to a whole number at 10k and above", () => {
+    expect(formatDiffCount(10500)).toBe("11k");
+    expect(formatDiffCount(123456)).toBe("123k");
   });
 });

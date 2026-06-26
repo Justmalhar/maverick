@@ -19,11 +19,15 @@ function ActionButton({
   label,
   onClick,
   testId,
+  persistent = false,
 }: {
   icon: typeof Settings2;
   label: string;
   onClick: () => void;
   testId?: string;
+  // Persistent buttons stay visible even when the row is not hovered, so the
+  // primary "new workspace" affordance survives a narrow sidebar.
+  persistent?: boolean;
 }) {
   return (
     <Tooltip>
@@ -36,7 +40,10 @@ function ActionButton({
           }}
           aria-label={label}
           data-testid={testId}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-all duration-100 group-hover/row:opacity-100 hover:bg-background/40 hover:text-foreground"
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-all duration-100 hover:bg-background/40 hover:text-foreground",
+            persistent ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
+          )}
         >
           <Icon className="h-3.5 w-3.5" />
         </button>
@@ -56,7 +63,7 @@ export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom 
     <div className="mv-project-item" data-testid={`project-item-${project.id}`}>
       <div
         className="group/row flex items-center gap-0.5 pr-1 transition-colors duration-100 hover:bg-sidebar-hover"
-        style={{ height: "26px" }}
+        style={{ height: "28px" }}
       >
         <button
           type="button"
@@ -91,6 +98,7 @@ export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom 
             label="New workspace"
             onClick={() => onAddWorkspace?.(project.id)}
             testId={`project-${project.id}-addworkspace`}
+            persistent
           />
         </div>
       </div>
@@ -100,7 +108,7 @@ export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom 
           {workspaces.length === 0 ? (
             <li
               className="flex items-center pl-6 text-xs text-muted-foreground"
-              style={{ height: "22px" }}
+              style={{ height: "28px" }}
             >
               No workspaces
             </li>

@@ -56,10 +56,10 @@ export function ProjectsView() {
         className="group/header flex shrink-0 items-center justify-between px-3 pt-4 pb-4"
         style={{ height: "var(--section-header-height)" }}
       >
-        <span className="pl-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-section">
+        <span className="min-w-0 truncate pl-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-section">
           Projects
         </span>
-        <div className="flex items-center">
+        <div className="flex shrink-0 items-center">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
