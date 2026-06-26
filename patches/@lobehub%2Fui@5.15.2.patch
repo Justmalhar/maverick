@@ -1,0 +1,82 @@
+diff --git a/es/Markdown/plugins/rehypeCustomFootnotes.mjs b/es/Markdown/plugins/rehypeCustomFootnotes.mjs
+index ff8b3d7b9e3a34eb6f56c55dd05486b91b1fb869..b05a6f5390f897deb61a930f7b3b4453005a341c 100644
+--- a/es/Markdown/plugins/rehypeCustomFootnotes.mjs
++++ b/es/Markdown/plugins/rehypeCustomFootnotes.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/rehypeCustomFootnotes.ts
+ const rehypeCustomFootnotes = () => (tree, file) => {
+ 	const linksData = file.data.footnoteLinks || {};
+diff --git a/es/Markdown/plugins/rehypeKatexDir.mjs b/es/Markdown/plugins/rehypeKatexDir.mjs
+index 2473013524883aec02d49a5bcb0ca60123d0c0e4..69e00f9c4d9ce0f5fcbb69377d3209ff952fdb64 100644
+--- a/es/Markdown/plugins/rehypeKatexDir.mjs
++++ b/es/Markdown/plugins/rehypeKatexDir.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/rehypeKatexDir.ts
+ const rehypeKatexDir = () => (tree) => {
+ 	visit(tree, "element", (node) => {
+diff --git a/es/Markdown/plugins/rehypeStreamAnimated.mjs b/es/Markdown/plugins/rehypeStreamAnimated.mjs
+index b13799d645d2f4facb97b27f2e7ccebbf9e53756..eb7f4172472e1123077cfaa6a67531e856b0e313 100644
+--- a/es/Markdown/plugins/rehypeStreamAnimated.mjs
++++ b/es/Markdown/plugins/rehypeStreamAnimated.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/rehypeStreamAnimated.ts
+ const BLOCK_TAGS = new Set([
+ 	"p",
+diff --git a/es/Markdown/plugins/remarkBr.mjs b/es/Markdown/plugins/remarkBr.mjs
+index b6f37bd355e521850ee11b925c0d122fdba67511..e6041a58dcfdcc7a3c6907f318b496794e86d9ad 100644
+--- a/es/Markdown/plugins/remarkBr.mjs
++++ b/es/Markdown/plugins/remarkBr.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/remarkBr.ts
+ /**
+ * Remark plugin to handle <br> and <br/> tags in markdown text
+diff --git a/es/Markdown/plugins/remarkColor.mjs b/es/Markdown/plugins/remarkColor.mjs
+index 4f79faf714289913f51af8eeaea788fcfa7655ba..a45149339f68cd052b48ddeb63faf08260648ad6 100644
+--- a/es/Markdown/plugins/remarkColor.mjs
++++ b/es/Markdown/plugins/remarkColor.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/remarkColor.ts
+ /**
+ * Remark plugin to handle color syntax in markdown code spans
+diff --git a/es/Markdown/plugins/remarkCustomFootnotes.mjs b/es/Markdown/plugins/remarkCustomFootnotes.mjs
+index 85301f3be27f06f55ef8d331a42d1a7f807cd8ad..95ea20e9947b9e92067c97f69ad951d01d7868da 100644
+--- a/es/Markdown/plugins/remarkCustomFootnotes.mjs
++++ b/es/Markdown/plugins/remarkCustomFootnotes.mjs
+@@ -1,5 +1,5 @@
+-import { SKIP } from "../../node_modules/unist-util-visit/node_modules/unist-util-visit-parents/lib/index.mjs";
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { SKIP } from "unist-util-visit-parents";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/remarkCustomFootnotes.ts
+ const remarkCustomFootnotes = () => (tree, file) => {
+ 	const footnoteLinks = /* @__PURE__ */ new Map();
+diff --git a/es/Markdown/plugins/remarkGfmPlus.mjs b/es/Markdown/plugins/remarkGfmPlus.mjs
+index 9d85bdc52347590c7235cb86450bd699767633b4..7a9cd8f15cbfef6442930941328f1d953d6bd877 100644
+--- a/es/Markdown/plugins/remarkGfmPlus.mjs
++++ b/es/Markdown/plugins/remarkGfmPlus.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/remarkGfmPlus.ts
+ const DEFAULT_ALLOW_HTML_TAGS = [
+ 	"sub",
+diff --git a/es/Markdown/plugins/remarkVideo.mjs b/es/Markdown/plugins/remarkVideo.mjs
+index b3f18d7ff6e4c2a4a2f7b1b00fffa30800bf807c..3bd4a49a87c55a8c3ded03151925e2ef9e05e696 100644
+--- a/es/Markdown/plugins/remarkVideo.mjs
++++ b/es/Markdown/plugins/remarkVideo.mjs
+@@ -1,4 +1,4 @@
+-import { visit } from "../../node_modules/unist-util-visit/lib/index.mjs";
++import { visit } from "unist-util-visit";
+ //#region src/Markdown/plugins/remarkVideo.ts
+ /**
+ * Remark plugin to handle <video> tags in markdown text

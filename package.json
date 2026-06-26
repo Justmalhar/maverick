@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "patchedDependencies": {
+    "@lobehub/ui@5.15.2": "patches/@lobehub%2Fui@5.15.2.patch"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
