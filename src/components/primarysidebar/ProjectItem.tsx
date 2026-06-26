@@ -79,7 +79,7 @@ export function ProjectItem({ project, onAddWorkspace, onSettings }: Props) {
             onClick={() => onSettings?.(project.id)}
             testId={`project-${project.id}-settings`}
           />
-<ActionButton
+          <ActionButton
             icon={Plus}
             label="New workspace"
             onClick={() => onAddWorkspace?.(project.id)}
