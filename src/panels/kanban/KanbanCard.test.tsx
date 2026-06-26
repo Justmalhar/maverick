@@ -260,6 +260,20 @@ describe("KanbanCard", () => {
     expect(useWorkbench.getState().activeWorkspaceId).toBe("ws-active");
   });
 
+  it("View surfaces an error instead of silently no-opping when the workspace is gone", async () => {
+    useWorkbench.setState({ ...initial, workspaces: [], activeWorkspaceId: null });
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "in_progress", workspaceId: "ws-missing" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-view"));
+    expect(screen.getByTestId("kanban-start-error").textContent).toContain("no longer available");
+    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
+  });
+
   it("calls onStart prop with the task when provided", async () => {
     const onStart = vi.fn().mockResolvedValue(undefined);
     const task = makeKanbanTask({ id: "t-start", projectId: "p1" });

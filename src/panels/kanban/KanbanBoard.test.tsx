@@ -569,6 +569,7 @@ describe("KanbanBoard", () => {
 
   it("deleting from the dialog invokes kanban_delete and refreshes (#39)", async () => {
     const t1 = makeKanbanTask({ id: "t1", status: "todo" });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(invoke).mockImplementation((async (cmd: string) => {
       if (cmd === "kanban_list") return [t1];
       if (cmd === "kanban_delete") return { ok: true };
@@ -579,6 +580,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("kanban-card-edit"));
     await userEvent.click(screen.getByTestId("kanban-delete"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("kanban_delete", { id: "t1" }));
+    confirmSpy.mockRestore();
   });
 
   it("onDragEnd surfaces upsert errors and refreshes", async () => {

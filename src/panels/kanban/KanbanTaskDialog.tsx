@@ -183,7 +183,11 @@ export default function KanbanTaskDialog({ open, task, onOpenChange, onSubmit, o
               size="sm"
               className="mr-auto text-destructive hover:text-destructive"
               data-testid="kanban-delete"
-              onClick={() => onDelete(task.id!)}
+              onClick={() => {
+                // Destructive + irreversible (drops the SQLite row); confirm
+                // first, mirroring the Create-PR guard on the card.
+                if (window.confirm("Delete this task? This cannot be undone.")) onDelete(task.id!);
+              }}
             >
               Delete
             </Button>

@@ -94,8 +94,9 @@ describe("KanbanTaskDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "ws-7" }));
   });
 
-  it("shows a Delete button for an existing task and calls onDelete", async () => {
+  it("deletes only after the user confirms", async () => {
     const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderWithProviders(
       <KanbanTaskDialog
         open
@@ -107,6 +108,24 @@ describe("KanbanTaskDialog", () => {
     );
     await userEvent.click(screen.getByTestId("kanban-delete"));
     expect(onDelete).toHaveBeenCalledWith("del-1");
+    confirmSpy.mockRestore();
+  });
+
+  it("does NOT delete when the confirm is dismissed", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithProviders(
+      <KanbanTaskDialog
+        open
+        onOpenChange={() => {}}
+        task={makeKanbanTask({ id: "del-2", title: "ed" })}
+        onSubmit={() => {}}
+        onDelete={onDelete}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-delete"));
+    expect(onDelete).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it("hides the Delete button when creating a new task", () => {

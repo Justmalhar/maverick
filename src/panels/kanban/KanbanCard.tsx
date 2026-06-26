@@ -78,7 +78,13 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
 
   const viewWorkspace = () => {
     const ws = workspaces.find((w) => w.id === task.workspaceId);
-    if (ws) setActiveWorkspace(ws.id);
+    if (ws) {
+      setActiveWorkspace(ws.id);
+    } else {
+      // The linked workspace is gone (destroyed, or not rehydrated after a
+      // restart). Don't silently no-op — tell the user how to recover.
+      setStartError("Workspace no longer available — restart it from Todo.");
+    }
   };
 
   const ActionButton = () => {

@@ -121,6 +121,23 @@ describe("TaskComposer", () => {
     expect((screen.getByTestId("composer-prompt") as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("Ctrl+Enter sends (Windows-first) — not just Cmd+Enter", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(["main"] as never);
+    const { onSend } = setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
+    await userEvent.click(screen.getByTestId("composer-branch"));
+    await userEvent.click(await screen.findByText("main"));
+    await userEvent.type(screen.getByTestId("composer-prompt"), "ship it");
+    await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
+
+    fireEvent.keyDown(screen.getByTestId("composer-prompt"), { key: "Enter", ctrlKey: true });
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ prompt: "ship it" }))
+    );
+  });
+
   it("onSend failure shows inline error and preserves fields", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(["main"] as never);
     const { onSend } = setup();
