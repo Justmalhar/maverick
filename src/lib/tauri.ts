@@ -3,9 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AgentRunSpec,
-  AgentStreamEvent,
-  AgentExitEvent,
-  AgentErrorEvent,
   BlameLine,
   BootstrapStatus,
   Branch,
@@ -697,22 +694,6 @@ export async function agentRun(spec: AgentRunSpec): Promise<{ agentId: string }>
     permissionMode: spec.permissionMode,
     env: spec.env,
   });
-}
-
-export async function agentKill(agentId: string): Promise<{ ok: true }> {
-  return invoke("agent_kill", { agentId });
-}
-
-export function onAgentData(callback: (payload: AgentStreamEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentStreamEvent>("agent:data", (e) => callback(e.payload));
-}
-
-export function onAgentExit(callback: (payload: AgentExitEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentExitEvent>("agent:exit", (e) => callback(e.payload));
-}
-
-export function onAgentError(callback: (payload: AgentErrorEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentErrorEvent>("agent:error", (e) => callback(e.payload));
 }
 
 export function onProjectSettingsChanged(

@@ -1,7 +1,6 @@
 import type { Workspace } from "@/lib/ipc";
 import { TerminalView } from "./terminal/TerminalView";
 import { useAutomationTriggers } from "@/hooks/useAutomationTriggers";
-import { useAgentRun } from "@/hooks/useAgentRun";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -18,8 +17,6 @@ interface Props {
 export function WorkspaceEditor({ workspace, active }: Props) {
   // Activate this workspace's automation triggers while its editor is mounted.
   useAutomationTriggers(workspace);
-  // Consume any staged headless agent run for this workspace (no-op in terminal mode).
-  useAgentRun(workspace);
   return (
     <div
       data-testid={`workspace-editor-${workspace.id}`}

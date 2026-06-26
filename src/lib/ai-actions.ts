@@ -1,7 +1,6 @@
 import { agentRun, ptyWrite } from "@/lib/tauri";
 import { primaryAgentPtyId } from "@/components/editor/terminal/leaf-registry";
 import { supportsHeadlessLaunch } from "@/lib/agent-launch";
-import { useAgentOutput, selectAgentRun } from "@/lib/stores/agent-output";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type { DiffResult } from "@/lib/ipc";
 
@@ -15,10 +14,8 @@ export interface AgentTarget {
 /**
  * Send a composed prompt to a workspace's agent, working in BOTH launch modes:
  * write to the live terminal PTY when one exists, else — for a headless workspace
- * (the DEFAULT mode, which has no PTY) — dispatch a background agentRun that
- * resumes the session and streams into the Agent Output panel. Returns
- * {ran:false} only when the prompt is empty or neither path is available, instead
- * of the previous silent no-op for every headless workspace.
+ * (no PTY) — dispatch a background agentRun. Returns {ran:false} only when the
+ * prompt is empty or neither path is available.
  */
 export async function dispatchAgentPrompt(
   target: AgentTarget,
@@ -33,8 +30,6 @@ export async function dispatchAgentPrompt(
     return { ran: true };
   }
   if (supportsHeadlessLaunch(target.backend)) {
-    const resumeSessionId = selectAgentRun(target.workspaceId)(useAgentOutput.getState()).sessionId;
-    useAgentOutput.getState().start(target.workspaceId);
     useAgentStatusStore.getState().setStatus(target.workspaceId, "working");
     onAgentFocus?.();
     await agentRun({
@@ -42,7 +37,6 @@ export async function dispatchAgentPrompt(
       backend: target.backend,
       prompt,
       cwd: target.cwd,
-      resumeSessionId,
     });
     return { ran: true };
   }

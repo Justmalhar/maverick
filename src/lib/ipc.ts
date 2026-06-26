@@ -316,7 +316,7 @@ export interface MaverickConfig {
   project?: ProjectSettings;
 }
 
-export type AuxiliaryView = "files" | "diff" | "scm" | "checks" | "agent" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "checks" | "none";
 
 export interface AgentRunSpec {
   workspaceId: string;
@@ -326,25 +326,6 @@ export interface AgentRunSpec {
   resumeSessionId?: string;
   permissionMode?: string;
   env?: Record<string, string>;
-}
-
-export interface AgentStreamEvent {
-  agentId: string;
-  workspaceId: string;
-  stream: "stdout" | "stderr";
-  data: string;
-}
-
-export interface AgentExitEvent {
-  agentId: string;
-  workspaceId: string;
-  code: number;
-}
-
-export interface AgentErrorEvent {
-  agentId: string;
-  workspaceId: string;
-  message: string;
 }
 
 export type CheckStatus = "pass" | "fail" | "pending" | "neutral";
@@ -479,7 +460,6 @@ export type SettingsKey =
   | "general.env"
   | "general.startupCommand"
   | "general.aiBranchNames"
-  | "general.agentLaunchMode"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"

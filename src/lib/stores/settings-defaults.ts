@@ -19,9 +19,6 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   // Use the agent CLI to name task branches (feature-name in the scheme) instead
   // of a title slug. Falls back to the slug if the CLI is slow/unavailable.
   "general.aiBranchNames": true,
-  // Where a task/workspace agent runs: "headless" (background, streamed to the
-  // Agent Output panel — the default) or "terminal" (typed into an interactive PTY).
-  "general.agentLaunchMode": "headless",
 
   // Appearance
   "appearance.theme": "",
