@@ -51,6 +51,8 @@ export interface FileTab {
   path: string;
   /** Worktree root — diff context and breadcrumb base. */
   worktreePath: string;
+  /** The workspace (worktree) this tab belongs to; null when no workspace matches. */
+  workspaceId: string | null;
   /** "Open With…" override; undefined = registry default. */
   viewerId?: string;
   /** Italic preview tab — reused by the next single-click open. */
@@ -526,11 +528,13 @@ export const useWorkbench = create<WorkbenchState>()(
             fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
           };
         }
+        const workspaceId = s.workspaces.find((w) => w.worktreePath === input.worktreePath)?.id ?? null;
         const tab: FileTab = {
           id,
           kind: input.kind,
           path: input.path,
           worktreePath: input.worktreePath,
+          workspaceId,
           viewerId: input.viewerId,
           preview: input.preview,
           dirty: false,

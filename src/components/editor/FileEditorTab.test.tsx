@@ -116,6 +116,7 @@ describe("FileEditorTab (isolated)", () => {
     kind: "file",
     path: "/wt/src/a.ts",
     worktreePath: "/wt",
+    workspaceId: null,
     preview: false,
     dirty: false,
     mode: "edit",

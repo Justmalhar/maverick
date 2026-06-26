@@ -122,4 +122,20 @@ describe("FileTab store", () => {
     useWorkbench.getState().pinFileTab(id);
     expect(useWorkbench.getState().fileTabs[0].preview).toBe(false);
   });
+
+  it("openFileTab stamps the owning workspaceId from worktreePath", () => {
+    useWorkbench.setState({
+      workspaces: [{ id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s" }],
+      fileTabs: [], activeFileTabId: null, fileTabAccessOrder: [],
+    });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/w1/a.ts", worktreePath: "/wt/w1", preview: true });
+    const tab = useWorkbench.getState().fileTabs[0];
+    expect(tab.workspaceId).toBe("w1");
+  });
+
+  it("openFileTab sets workspaceId null when no workspace matches", () => {
+    useWorkbench.setState({ workspaces: [], fileTabs: [], activeFileTabId: null, fileTabAccessOrder: [] });
+    useWorkbench.getState().openFileTab({ kind: "file", path: "/x/a.ts", worktreePath: "/x", preview: true });
+    expect(useWorkbench.getState().fileTabs[0].workspaceId).toBeNull();
+  });
 });

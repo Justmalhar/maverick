@@ -19,6 +19,7 @@ function makeTab(overrides: Partial<FileTab> = {}): FileTab {
     kind: "file",
     path,
     worktreePath: "/wt",
+    workspaceId: null,
     preview: false,
     dirty: false,
     mode: "edit",
