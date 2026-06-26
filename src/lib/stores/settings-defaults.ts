@@ -36,7 +36,6 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "appearance.customColors.border": "",
   "appearance.customColors.card": "",
   "appearance.customColors.sidebar": "",
-  "appearance.customColors.statusbar": "",
 
   // Notifications
   "notifications.agent.waiting": true,

@@ -8,6 +8,7 @@ import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { WindowControls } from "./WindowControls";
 import { Breadcrumb } from "./Breadcrumb";
 import { TrafficLights } from "./TrafficLights";
+import { NotificationBell } from "./NotificationBell";
 
 async function startDrag() {
   try {
@@ -141,6 +142,7 @@ export function TitleBar() {
             {auxiliaryBarVisible ? "Hide" : "Show"} Auxiliary Bar
           </TooltipContent>
         </Tooltip>
+        <NotificationBell />
         <Tooltip>
           <TooltipTrigger asChild>
             <button

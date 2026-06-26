@@ -11,7 +11,6 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { TitleBar } from "@/components/titlebar/TitleBar";
-import { StatusBar } from "@/components/statusbar/StatusBar";
 import { PrimarySideBar } from "@/components/primarysidebar/PrimarySideBar";
 import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
@@ -130,8 +129,6 @@ export function Workbench() {
           )}
         </ResizablePanelGroup>
       </div>
-
-      <StatusBar />
 
       <QuickOpen />
       <CommandPalette />

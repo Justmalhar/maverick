@@ -492,7 +492,6 @@ export type SettingsKey =
   | "appearance.customColors.border"
   | "appearance.customColors.card"
   | "appearance.customColors.sidebar"
-  | "appearance.customColors.statusbar"
   | "notifications.agent.waiting"
   | "notifications.agent.complete"
   | "notifications.agent.error"

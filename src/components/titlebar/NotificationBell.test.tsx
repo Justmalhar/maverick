@@ -38,7 +38,8 @@ describe("NotificationBell", () => {
     vi.mocked(invoke).mockResolvedValueOnce([] as never);
     renderWithProviders(<NotificationBell />);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("notify_list", { limit: 50, unreadOnly: undefined }));
-    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    expect(screen.queryByTestId("titlebar-notifications-count")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-empty")).toBeInTheDocument();
   });
 
@@ -57,7 +58,7 @@ describe("NotificationBell", () => {
     await act(async () => {
       resolveList([makeNotification({ id: "fromlist", title: "From list" })]);
     });
-    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    await userEvent.click(screen.getByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-item-live")).toBeInTheDocument();
     expect(screen.getByTestId("notification-item-fromlist")).toBeInTheDocument();
   });
@@ -69,17 +70,26 @@ describe("NotificationBell", () => {
     ];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    expect(await screen.findByTestId("statusbar-notifications-count")).toHaveTextContent("1");
-    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    expect(await screen.findByTestId("titlebar-notifications-count")).toHaveTextContent("1");
+    await userEvent.click(screen.getByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-item-n1")).toBeInTheDocument();
     expect(screen.getByTestId("notification-item-n2")).toBeInTheDocument();
+  });
+
+  it("caps the unread badge at 9+", async () => {
+    const items = Array.from({ length: 12 }, (_, i) =>
+      makeNotification({ id: `n${i}`, read: false })
+    );
+    vi.mocked(invoke).mockResolvedValueOnce(items as never);
+    renderWithProviders(<NotificationBell />);
+    expect(await screen.findByTestId("titlebar-notifications-count")).toHaveTextContent("9+");
   });
 
   it("marks a single notification read and updates the badge", async () => {
     const items = [makeNotification({ id: "n1", read: false })];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    await userEvent.click(await screen.findByTestId("statusbar-notifications"));
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-item-n1")).toBeInTheDocument();
 
     vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
@@ -87,7 +97,7 @@ describe("NotificationBell", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("notify_mark_read", { id: "n1" })
     );
-    expect(screen.queryByTestId("statusbar-notifications-count")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("titlebar-notifications-count")).not.toBeInTheDocument();
   });
 
   it("marks all read via the header action", async () => {
@@ -97,12 +107,12 @@ describe("NotificationBell", () => {
     ];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    await userEvent.click(await screen.findByTestId("statusbar-notifications"));
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
 
     vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
     await userEvent.click(screen.getByTestId("notification-mark-all"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("notify_mark_all_read"));
-    expect(screen.queryByTestId("statusbar-notifications-count")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("titlebar-notifications-count")).not.toBeInTheDocument();
   });
 
   it("marks one of several notifications read, leaving the rest untouched", async () => {
@@ -112,13 +122,13 @@ describe("NotificationBell", () => {
     ];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    expect(await screen.findByTestId("statusbar-notifications-count")).toHaveTextContent("2");
-    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    expect(await screen.findByTestId("titlebar-notifications-count")).toHaveTextContent("2");
+    await userEvent.click(screen.getByTestId("titlebar-notifications"));
 
     vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
     await userEvent.click(screen.getByTestId("notification-mark-n1"));
     await waitFor(() =>
-      expect(screen.getByTestId("statusbar-notifications-count")).toHaveTextContent("1")
+      expect(screen.getByTestId("titlebar-notifications-count")).toHaveTextContent("1")
     );
   });
 
@@ -150,7 +160,7 @@ describe("NotificationBell", () => {
   it("still resolves to an empty loaded state when notify_list rejects", async () => {
     vi.mocked(invoke).mockReset().mockRejectedValueOnce(new Error("boom"));
     renderWithProviders(<NotificationBell />);
-    await userEvent.click(await screen.findByTestId("statusbar-notifications"));
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-empty")).toBeInTheDocument();
   });
 
@@ -158,12 +168,12 @@ describe("NotificationBell", () => {
     const items = [makeNotification({ id: "n1", read: false })];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    await userEvent.click(await screen.findByTestId("statusbar-notifications"));
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
 
     vi.mocked(invoke).mockRejectedValueOnce(new Error("nope"));
     await userEvent.click(screen.getByTestId("notification-mark-n1"));
     await waitFor(() =>
-      expect(screen.queryByTestId("statusbar-notifications-count")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("titlebar-notifications-count")).not.toBeInTheDocument()
     );
   });
 
@@ -171,12 +181,12 @@ describe("NotificationBell", () => {
     const items = [makeNotification({ id: "n1", read: false })];
     vi.mocked(invoke).mockResolvedValueOnce(items as never);
     renderWithProviders(<NotificationBell />);
-    await userEvent.click(await screen.findByTestId("statusbar-notifications"));
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
 
     vi.mocked(invoke).mockRejectedValueOnce(new Error("nope"));
     await userEvent.click(screen.getByTestId("notification-mark-all"));
     await waitFor(() =>
-      expect(screen.queryByTestId("statusbar-notifications-count")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("titlebar-notifications-count")).not.toBeInTheDocument()
     );
   });
 
@@ -187,8 +197,8 @@ describe("NotificationBell", () => {
 
     notifySendHandlers[0](makeNotification({ id: "n-live", title: "Live event" }));
 
-    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    await userEvent.click(screen.getByTestId("titlebar-notifications"));
     expect(await screen.findByTestId("notification-item-n-live")).toBeInTheDocument();
-    expect(screen.getByTestId("statusbar-notifications-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("titlebar-notifications-count")).toHaveTextContent("1");
   });
 });
