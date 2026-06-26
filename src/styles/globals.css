@@ -52,9 +52,6 @@
   --color-tab-fg-active: hsl(var(--tab-fg-active));
   --color-tab-indicator: hsl(var(--tab-active-border));
 
-  --color-traffic-red: hsl(var(--traffic-red));
-  --color-traffic-yellow: hsl(var(--traffic-yellow));
-  --color-traffic-green: hsl(var(--traffic-green));
   --color-overlay: hsl(var(--overlay));
 
   --color-diff-add: hsl(var(--diff-add));

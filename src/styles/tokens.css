@@ -111,11 +111,6 @@
   --settings-nav-width: 220px;
   --settings-modal-max-w: 960px;
 
-  /* macOS traffic-light dots (decorative, themable) */
-  --traffic-red: 3 100% 67%;     /* #ff5f57 */
-  --traffic-yellow: 41 99% 59%;  /* #febc2e */
-  --traffic-green: 129 67% 47%;  /* #28c840 */
-
   /* Modal/dialog dim. Always a dark dim so it works for light AND dark themes
      (white-on-white would lose the focus-attention dimming effect). */
   --overlay: 0 0% 0%;
