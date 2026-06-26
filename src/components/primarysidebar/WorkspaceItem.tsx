@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GitBranch, Archive, Loader2 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { brandFor } from "@/lib/backend-brand";
-import { notifySend } from "@/lib/tauri";
-import type { Workspace } from "@/lib/ipc";
+import { notifySend, gitDiffStat } from "@/lib/tauri";
+import type { DiffStat, Workspace } from "@/lib/ipc";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -13,14 +13,38 @@ interface Props {
   workspace: Workspace;
 }
 
+// Compact line-count formatting: 2_847 → "2.8k", matching the reference sidebar.
+export function formatDiffCount(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 10 ? Math.round(k) : k.toFixed(1)}k`;
+}
+
 export function WorkspaceItem({ workspace }: Props) {
   const isActive = useWorkbench((s) => s.activeWorkspaceId === workspace.id);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const { destroy } = useWorkspace();
   const [archiving, setArchiving] = useState(false);
+  const [diff, setDiff] = useState<DiffStat | null>(null);
 
   const label = workspace.title ?? workspace.branch;
   const brand = brandFor(workspace.agentBackend);
+
+  useEffect(() => {
+    let cancelled = false;
+    gitDiffStat(workspace.worktreePath)
+      .then((stat) => {
+        if (!cancelled) setDiff(stat);
+      })
+      .catch(() => {
+        /* a fresh worktree with no diff is not an error worth surfacing */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.worktreePath]);
+
+  const hasDiff = !!diff && (diff.added > 0 || diff.removed > 0);
 
   async function onArchive(e: React.MouseEvent) {
     e.stopPropagation();
@@ -46,7 +70,7 @@ export function WorkspaceItem({ workspace }: Props) {
       data-testid={`workspace-item-${workspace.id}`}
       data-active={isActive ? "true" : "false"}
       onMouseDown={() => setActiveWorkspace(workspace.id)}
-      style={{ height: "22px", paddingLeft: "28px" }}
+      style={{ height: "28px", paddingLeft: "28px" }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -64,9 +88,20 @@ export function WorkspaceItem({ workspace }: Props) {
       )}
     >
       <GitBranch className="h-3.5 w-3.5 shrink-0 text-sidebar-fg" />
-      <span className="truncate flex-1">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {hasDiff && (
+        <span
+          data-testid={`workspace-diff-${workspace.id}`}
+          className="flex shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums"
+        >
+          {diff!.added > 0 && <span className="text-success">+{formatDiffCount(diff!.added)}</span>}
+          {diff!.removed > 0 && (
+            <span className="text-destructive">−{formatDiffCount(diff!.removed)}</span>
+          )}
+        </span>
+      )}
       {/* The backend brand mark yields to the archive action on hover — the
-          row is 22px and can't fit both. */}
+          row can't comfortably fit both. */}
       <span
         data-testid={`workspace-backend-${workspace.id}`}
         aria-label={brand?.label ?? workspace.agentBackend}

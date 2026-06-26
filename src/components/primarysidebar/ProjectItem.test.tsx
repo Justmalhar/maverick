@@ -57,4 +57,14 @@ describe("ProjectItem", () => {
     await userEvent.click(screen.getByLabelText("Create from"));
     expect(onCreateFrom).toHaveBeenCalledWith("p1");
   });
+
+  it("keeps the new-workspace button persistent while settings/create-from reveal on hover", () => {
+    renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} />);
+    // The "+" affordance must survive a narrow sidebar — always opaque.
+    expect(screen.getByLabelText("New workspace").className).toContain("opacity-100");
+    expect(screen.getByLabelText("New workspace").className).not.toContain("opacity-0");
+    // Secondary actions stay hidden until the row is hovered.
+    expect(screen.getByLabelText("Project settings").className).toContain("opacity-0");
+    expect(screen.getByLabelText("Create from").className).toContain("opacity-0");
+  });
 });
