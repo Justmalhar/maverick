@@ -60,6 +60,20 @@ describe("AddMCPDialog", () => {
     expect(onOpen).toHaveBeenCalledWith(false);
   });
 
+  it("splits a comma-separated arg entry into separate args", async () => {
+    renderWithProviders(<AddMCPDialog open onOpenChange={() => {}} onAdded={() => {}} />);
+    await userEvent.type(screen.getByTestId("mcp-arg-input"), "-y, @scope/pkg{Enter}");
+    expect(screen.getByText(/^-y/)).toBeInTheDocument();
+    expect(screen.getByText(/@scope\/pkg/)).toBeInTheDocument();
+  });
+
+  it("labels an env var with no value as (empty), not masked dots", async () => {
+    renderWithProviders(<AddMCPDialog open onOpenChange={() => {}} onAdded={() => {}} />);
+    await userEvent.type(screen.getByTestId("mcp-env-key"), "FLAG");
+    await userEvent.click(screen.getAllByText("Add")[1]);
+    expect(screen.getByText("FLAG=(empty)")).toBeInTheDocument();
+  });
+
   it("includes env in the submitted payload (covers env reduce)", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
     const onAdded = vi.fn();

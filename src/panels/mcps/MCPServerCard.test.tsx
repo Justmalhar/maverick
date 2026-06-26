@@ -98,6 +98,13 @@ describe("MCPServerCard", () => {
     await waitFor(() => expect(screen.queryByTestId("mcp-logs")).not.toBeInTheDocument());
   });
 
+  it("shows a dropped-bytes indicator when the log ring overflowed", async () => {
+    vi.mocked(invoke).mockResolvedValue({ data: "hello\n", nextOffset: 6, dropped: 128 } as never);
+    renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={() => {}} />);
+    await userEvent.click(screen.getByTestId("mcp-logs-toggle"));
+    expect(await screen.findByTestId("mcp-logs-dropped")).toHaveTextContent("128");
+  });
+
   it("shows an empty-logs placeholder when no output has been captured", async () => {
     vi.mocked(invoke).mockResolvedValue({ data: "", nextOffset: 0, dropped: 0 } as never);
     renderWithProviders(<MCPServerCard server={makeMCPServer({ status: "running" })} onChange={() => {}} />);
