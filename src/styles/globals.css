@@ -56,9 +56,6 @@
   --color-statusbar-no-folder: hsl(var(--statusbar-no-folder-bg));
   --color-statusbar-prominent: hsl(var(--statusbar-prominent-bg));
 
-  --color-traffic-red: hsl(var(--traffic-red));
-  --color-traffic-yellow: hsl(var(--traffic-yellow));
-  --color-traffic-green: hsl(var(--traffic-green));
   --color-overlay: hsl(var(--overlay));
 
   --color-diff-add: hsl(var(--diff-add));

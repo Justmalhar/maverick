@@ -114,9 +114,9 @@ describe("TitleBar", () => {
     expect(bc).toHaveTextContent("codex");
   });
 
-  it("does not render the macOS traffic-light hint on non-mac (jsdom)", () => {
+  it("does not render the macOS traffic-light spacer on non-mac (jsdom)", () => {
     renderWithProviders(<TitleBar />);
-    expect(screen.queryByTestId("traffic-lights")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("traffic-light-spacer")).not.toBeInTheDocument();
   });
 
   describe("below the responsive breakpoint", () => {

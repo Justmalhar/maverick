@@ -7,7 +7,7 @@ import { formatKeybinding } from "@/shortcuts/format";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { WindowControls } from "./WindowControls";
 import { Breadcrumb } from "./Breadcrumb";
-import { TrafficLights } from "./TrafficLights";
+import { TrafficLightSpacer } from "./TrafficLightSpacer";
 
 async function startDrag() {
   try {
@@ -67,7 +67,7 @@ export function TitleBar() {
         className="drag flex h-full min-w-0 items-center gap-1"
         style={{ paddingLeft: isMac ? "0px" : "8px" }}
       >
-        {isMac && <TrafficLights />}
+        {isMac && <TrafficLightSpacer />}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
