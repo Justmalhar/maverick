@@ -69,6 +69,10 @@ export function TerminalPane({
   onOutputRef.current = onOutput;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  // Latest-focus ref: the mount effect (and its clear listener) is keyed on
+  // ptyId/paneId, so a plain closure over isFocused would go stale.
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
   const { theme } = useThemeContext();
   // Pooled path routes pty:data through the session (slot or dormant ring). We
   // also tee output to onOutput (status detection) and exit to onExit, while
@@ -136,6 +140,9 @@ export function TerminalPane({
     }
 
     const onClear = () => {
+      // Clear only the focused pane — the event is broadcast to every mounted
+      // pane (incl. keep-alive-hidden workspaces and other split leaves).
+      if (!isFocusedRef.current) return;
       if (pooledRef.current) pooledRef.current.feed("\x1b[2J\x1b[H");
       else handleRef.current?.write("\x1b[2J\x1b[H");
     };
