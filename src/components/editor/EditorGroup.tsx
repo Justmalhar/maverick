@@ -4,7 +4,6 @@ import { useSettings } from "@/lib/stores/settings";
 import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
-import { TerminalPane } from "./terminal/TerminalPane";
 import { DashboardView } from "@/components/primarysidebar/DashboardView";
 import { cn } from "@/lib/utils";
 
@@ -49,9 +48,6 @@ export function EditorGroup() {
   const systemTabs = useWorkbench((s) => s.systemTabs);
   const activeSystemTab = useWorkbench((s) => s.activeSystemTab);
   const [lruLimit] = useSettings("advanced.lruLimit", 8);
-  const terminalTabs = useWorkbench((s) => s.terminalTabs);
-  const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
-  const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
 
   const fileTabs = useWorkbench((s) => s.fileTabs);
   const activeFileTabId = useWorkbench((s) => s.activeFileTabId);
@@ -62,11 +58,9 @@ export function EditorGroup() {
     [fileTabs, fileTabAccessOrder, activeFileTabId, lruLimit]
   );
 
-  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || terminalTabs.length > 0 || fileTabs.length > 0;
+  const hasAnyTabs = workspaces.length > 0 || systemTabs.length > 0 || fileTabs.length > 0;
   const showEmpty = !hasAnyTabs;
   const showSystemTab = activeSystemTab && systemTabs.includes(activeSystemTab);
-  const showTerminalTab =
-    !!activeTerminalTabId && terminalTabs.some((t) => t.id === activeTerminalTabId);
   const showFileTab = !!activeFileTabId && fileTabs.some((t) => t.id === activeFileTabId);
   // Keep the browser mounted for the lifetime of its tab. It is only torn down
   // when its tab is closed, so a page survives switching to any other tab.
@@ -96,42 +90,9 @@ export function EditorGroup() {
             <WorkspaceEditor
               key={ws.id}
               workspace={ws}
-              active={!showSystemTab && !showTerminalTab && !showFileTab && ws.id === activeId}
+              active={!showSystemTab && !showFileTab && ws.id === activeId}
             />
           ))}
-
-        {/* Standalone terminal tabs: keep-alive mounted, hidden (not unmounted)
-            when not active so the PTY and scrollback survive a tab switch. */}
-        {terminalTabs.map((tab) => {
-          const active = showTerminalTab && tab.id === activeTerminalTabId;
-          return (
-            <div
-              key={tab.id}
-              data-testid={`terminal-tab-content-${tab.id}`}
-              aria-hidden={!active}
-              className={cn(
-                "absolute inset-0 bg-background",
-                !active && "keep-alive-hidden content-visibility-auto"
-              )}
-            >
-              {tab.ptyId ? (
-                <TerminalPane
-                  ptyId={tab.ptyId}
-                  paneId={tab.id}
-                  isFocused={active}
-                  onFocus={() => setActiveTerminalTab(tab.id)}
-                />
-              ) : (
-                <div
-                  data-testid={`terminal-tab-starting-${tab.id}`}
-                  className="flex h-full items-center justify-center text-xs text-muted-foreground"
-                >
-                  Starting terminal…
-                </div>
-              )}
-            </div>
-          );
-        })}
 
         {/* Browser: keep-alive mounted while its tab exists; hidden (not
             unmounted) when another tab is active so the page survives. */}
@@ -147,11 +108,10 @@ export function EditorGroup() {
           </Suspense>
         )}
 
-        {/* File tabs: suspended (unmounted) when outside the LRU window.
-            Clean suspended tabs remount from disk on re-focus — safe because
-            they cannot have unsaved changes (dirty tabs are always kept live).
-            Terminal tabs are keep-alive hidden; file tabs are LRU suspended
-            to bound Monaco editor instance count and RSS. */}
+        {/* File tabs: LRU suspended (unmounted) when outside the window.
+            Clean tabs remount from disk on re-focus — safe because they
+            cannot have unsaved changes (dirty tabs are always kept live).
+            LRU suspension bounds Monaco editor instance count and RSS. */}
         {fileTabs
           .filter((tab) => liveFileTabIds.has(tab.id))
           .map((tab) => {
