@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  AlertTriangle,
   GitBranch,
   RefreshCw,
   Check,
@@ -82,18 +81,8 @@ export function StatusBar() {
             <AgentStatusPill status={agentStatus} />
           </StatusBarItem>
         )}
-        <StatusBarItem
-          icon={<AlertCircle className="h-3 w-3" />}
-          testId="statusbar-errors"
-        >
-          0
-        </StatusBarItem>
-        <StatusBarItem
-          icon={<AlertTriangle className="h-3 w-3" />}
-          testId="statusbar-warnings"
-        >
-          0
-        </StatusBarItem>
+        {/* Diagnostics counters removed: they were hard-coded 0 wired to nothing.
+            Re-add bound to a real diagnostics store + a Problems panel jump. */}
       </div>
 
       <div className="flex h-full items-center">
