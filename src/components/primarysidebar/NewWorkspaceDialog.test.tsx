@@ -129,6 +129,22 @@ describe("NewWorkspaceDialog — agent select", () => {
     await userEvent.click(screen.getByTestId("agent-select"));
     expect(await screen.findByRole("option", { name: /UnknownAgent/ })).toBeInTheDocument();
   });
+
+  it("defaults to the first backend when none is marked active", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [
+        makeBackend({ id: "codex", name: "Codex", active: false }),
+        makeBackend({ id: "gemini", name: "Gemini", active: false }),
+      ],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "codex" }));
+  });
 });
 
 describe("NewWorkspaceDialog — base branch select", () => {
@@ -193,5 +209,67 @@ describe("NewWorkspaceDialog — base branch select", () => {
     });
     await userEvent.click(screen.getByTestId("branch-ai-later"));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ baseBranch: undefined }));
+  });
+
+  it("leaves base empty when no loaded branch is current", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") {
+        return [
+          { name: "main", isRemote: false, isCurrent: false },
+          { name: "dev", isRemote: false, isCurrent: false },
+        ] as never;
+      }
+      return undefined as never;
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    // Wait for branches to load (select becomes enabled) and then open to verify options exist
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("base-branch-select")).toBeEnabled();
+    });
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ baseBranch: undefined }));
+  });
+
+  it("submits the current base branch with a typed branch name via Create", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") {
+        return [{ name: "develop", isRemote: false, isCurrent: true }] as never;
+      }
+      return undefined as never;
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    await screen.findByText("develop");
+    await userEvent.type(screen.getByTestId("branch-name-input"), "Login Page");
+    await userEvent.click(screen.getByTestId("branch-create"));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ branch: "feature/login-page", baseBranch: "develop" })
+    );
+  });
+
+  it("submits on Enter in the branch name input", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.type(screen.getByTestId("branch-name-input"), "Dark Mode{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ branch: "feature/dark-mode" }));
   });
 });
