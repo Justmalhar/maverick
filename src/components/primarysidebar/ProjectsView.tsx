@@ -9,8 +9,6 @@ import { NewWorkspaceDialog, type NewWorkspacePayload } from "./NewWorkspaceDial
 import { pickProjectFolder } from "@/lib/dialog";
 import { resolveStartupLaunch } from "@/lib/launch";
 
-const DEFAULT_BACKEND = "claude-code";
-
 export function ProjectsView() {
   const projects = useWorkbench((s) => s.projects);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
@@ -29,7 +27,7 @@ export function ProjectsView() {
 
   async function onAddWorkspace(projectId: string, opts: NewWorkspacePayload) {
     try {
-      const backend = opts.backend || DEFAULT_BACKEND;
+      const backend = opts.backend;
       const ws = await create(projectId, opts.branch, backend, opts.baseBranch);
       const { command, args } = resolveStartupLaunch(backend);
       useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
