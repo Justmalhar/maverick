@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/tauri", () => ({ ptyKill: vi.fn(() => Promise.resolve()) }));
 import { ptyKill } from "@/lib/tauri";
