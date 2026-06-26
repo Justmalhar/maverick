@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { act } from "@testing-library/react";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { NotificationBell } from "./NotificationBell";
 import type { Notification } from "@/lib/ipc";
@@ -39,6 +40,26 @@ describe("NotificationBell", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("notify_list", { limit: 50, unreadOnly: undefined }));
     await userEvent.click(screen.getByTestId("statusbar-notifications"));
     expect(await screen.findByTestId("notification-empty")).toBeInTheDocument();
+  });
+
+  it("merges a live notification that arrived before the initial list resolved", async () => {
+    let resolveList!: (v: Notification[]) => void;
+    vi.mocked(invoke).mockReset().mockImplementation(((cmd: string) =>
+      cmd === "notify_list"
+        ? new Promise((r) => { resolveList = r; })
+        : Promise.resolve(undefined)) as unknown as typeof invoke);
+    renderWithProviders(<NotificationBell />);
+    await waitFor(() => expect(notifySendHandlers.length).toBeGreaterThan(0));
+    await act(async () => {
+      notifySendHandlers[0](makeNotification({ id: "live", title: "Live one" }));
+    });
+    // The initial list resolves WITHOUT the live item — it must not be clobbered.
+    await act(async () => {
+      resolveList([makeNotification({ id: "fromlist", title: "From list" })]);
+    });
+    await userEvent.click(screen.getByTestId("statusbar-notifications"));
+    expect(await screen.findByTestId("notification-item-live")).toBeInTheDocument();
+    expect(screen.getByTestId("notification-item-fromlist")).toBeInTheDocument();
   });
 
   it("renders the unread count badge and notification rows", async () => {

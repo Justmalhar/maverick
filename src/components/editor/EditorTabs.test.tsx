@@ -6,7 +6,8 @@ import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTabs } from "./EditorTabs";
 import { useWorkbench } from "@/state/store";
 import { defaultTerminalCwd } from "@/lib/default-cwd";
-import { __resetTerminalShellCacheForTests } from "@/hooks/useTerminalTab";
+import { availableShells } from "@/lib/terminal-shell";
+import { wslAvailable, ptySpawn } from "@/lib/tauri";
 import { makeWorkspace, makePreset } from "@/test/fixtures";
 
 vi.mock("@/lib/tauri", async (orig) => {
@@ -15,8 +16,15 @@ vi.mock("@/lib/tauri", async (orig) => {
     ...actual,
     ptySpawn: vi.fn(async () => ({ ptyId: "pty-1" })),
     ptyKill: vi.fn(async () => undefined),
-    defaultShell: vi.fn(async () => "/bin/zsh"),
+    wslAvailable: vi.fn(async () => true),
   };
+});
+
+// availableShells is exercised in terminal-shell.test.ts; here we drive the "+"
+// menu directly by stubbing which profiles a platform offers.
+vi.mock("@/lib/terminal-shell", async (orig) => {
+  const actual = await orig<typeof import("@/lib/terminal-shell")>();
+  return { ...actual, availableShells: vi.fn(() => []) };
 });
 
 vi.mock("@/lib/default-cwd", () => ({
@@ -26,7 +34,9 @@ vi.mock("@/lib/default-cwd", () => ({
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
-  __resetTerminalShellCacheForTests();
+  vi.mocked(availableShells).mockReturnValue([]);
+  vi.mocked(wslAvailable).mockResolvedValue(true);
+  vi.mocked(ptySpawn).mockReset().mockResolvedValue({ ptyId: "pty-1" });
   useWorkbench.setState({
     ...initial,
     workspaces: [],
@@ -97,6 +107,56 @@ describe("EditorTabs", () => {
     expect(state.terminalTabs[0].cwd).toBe("/Users/test/Desktop");
     expect(state.terminalTabs[0].ptyId).toBe("pty-1");
     expect(state.activeTerminalTabId).toBe(state.terminalTabs[0].id);
+  });
+
+  describe("Windows shell profiles", () => {
+    beforeEach(() => {
+      vi.mocked(availableShells).mockReturnValue(["powershell", "cmd", "wsl"]);
+    });
+
+    it("lists PowerShell, Command Prompt, and WSL when WSL is detected", async () => {
+      vi.mocked(wslAvailable).mockResolvedValue(true);
+      renderWithProviders(<EditorTabs />);
+      await userEvent.click(screen.getByTestId("editor-tabs-new"));
+      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-tabs-open-terminal-cmd")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-tabs-open-terminal-wsl")).toBeInTheDocument();
+      expect(screen.getByText("PowerShell")).toBeInTheDocument();
+      expect(screen.getByText("Command Prompt")).toBeInTheDocument();
+      expect(screen.getByText("WSL")).toBeInTheDocument();
+      // The platform-agnostic "Terminal" item is replaced by the profiles.
+      expect(screen.queryByTestId("editor-tabs-open-terminal-tab")).not.toBeInTheDocument();
+    });
+
+    it("hides WSL when no usable install is detected", async () => {
+      vi.mocked(wslAvailable).mockResolvedValue(false);
+      renderWithProviders(<EditorTabs />);
+      await userEvent.click(screen.getByTestId("editor-tabs-new"));
+      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-tabs-open-terminal-cmd")).toBeInTheDocument();
+      expect(screen.queryByTestId("editor-tabs-open-terminal-wsl")).not.toBeInTheDocument();
+    });
+
+    it("hides WSL when detection rejects", async () => {
+      vi.mocked(wslAvailable).mockRejectedValue(new Error("no wsl"));
+      renderWithProviders(<EditorTabs />);
+      await userEvent.click(screen.getByTestId("editor-tabs-new"));
+      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
+      expect(screen.queryByTestId("editor-tabs-open-terminal-wsl")).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["powershell", "powershell.exe", ["-NoLogo"]],
+      ["cmd", "cmd.exe", []],
+      ["wsl", "wsl.exe", []],
+    ] as const)("clicking %s spawns %s", async (kind, shell, args) => {
+      vi.mocked(wslAvailable).mockResolvedValue(true);
+      renderWithProviders(<EditorTabs />);
+      await userEvent.click(screen.getByTestId("editor-tabs-new"));
+      await userEvent.click(await screen.findByTestId(`editor-tabs-open-terminal-${kind}`));
+      await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(1));
+      expect(ptySpawn).toHaveBeenCalledWith(shell, args, "/Users/test/Desktop", {});
+    });
   });
 
   it("renders terminal tabs in the strip and switches on click", async () => {

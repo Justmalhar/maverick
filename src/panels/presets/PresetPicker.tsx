@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/command";
 import { presetList, presetLaunch } from "@/lib/tauri";
 import { useWorkbench } from "@/state/store";
+import { presetNodeToSplitTree } from "@/hooks/usePresets";
 import type { WorkspacePreset } from "@/lib/ipc";
 import PresetThumbnail from "./PresetThumbnail";
 
@@ -33,6 +34,7 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
   });
   const addWorkspace = useWorkbench((s) => s.addWorkspace);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
+  const setSplitTree = useWorkbench((s) => s.setSplitTree);
 
   useEffect(() => {
     if (!open) return;
@@ -53,12 +55,19 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
     if (!projectPath) return;
     try {
       const result = await presetLaunch(preset, projectPath, preset.baseBranch);
+      // Build the SplitGrid from the returned layout and seed it BEFORE adding
+      // the workspace, so each terminal spawns its agent via the Rust ConPTY path
+      // (single PTY authority) instead of the old undriveable sidecar pipe-PTYs.
+      setSplitTree(result.workspaceId, presetNodeToSplitTree(result.layout, result.workspaceId));
       addWorkspace({
         id: result.workspaceId,
         projectId,
-        branch: preset.baseBranch ?? "main",
+        // Use the real worktree path + branch the sidecar created — an empty
+        // worktreePath broke every worktree-keyed feature (file tabs, terminals,
+        // diff, automations).
+        branch: result.branch,
         agentBackend: "preset",
-        worktreePath: "",
+        worktreePath: result.worktreePath,
         status: "active",
         sessionId: result.workspaceId,
         title: preset.name,

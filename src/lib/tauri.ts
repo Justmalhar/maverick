@@ -2,9 +2,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AgentRunSpec,
+  AgentStreamEvent,
+  AgentExitEvent,
+  AgentErrorEvent,
   BlameLine,
   BootstrapStatus,
   Branch,
+  ChecksReport,
   Commit,
   ConflictHunk,
   ConflictResolution,
@@ -17,6 +22,7 @@ import type {
   FileReadResult,
   FileWriteResult,
   FsChangedPayload,
+  TextEncoding,
   KanbanTask,
   SearchResult,
   MaverickConfig,
@@ -25,6 +31,8 @@ import type {
   Message,
   Notification,
   NotificationPermission,
+  CredentialProvider,
+  CredentialStatus,
   PairedDevice,
   PairingTicket,
   Project,
@@ -38,6 +46,7 @@ import type {
   UsageSummary,
   Workspace,
   WorkspacePreset,
+  PresetLaunchResult,
   PresetNode,
 } from "./ipc";
 
@@ -124,8 +133,9 @@ export async function remoteRevoke(deviceId: string): Promise<boolean> {
   return invoke("remote_revoke", { deviceId });
 }
 
-export async function defaultShell(): Promise<string> {
-  return invoke("default_shell");
+/** True when a usable WSL installation is present (Windows only). */
+export async function wslAvailable(): Promise<boolean> {
+  return invoke("wsl_available");
 }
 
 export async function configLoad(projectPath: string): Promise<MaverickConfig> {
@@ -168,9 +178,10 @@ export async function skillsCreateGlobal(
   name: string,
   description: string,
   prompt?: string,
-  backend?: string
+  backend?: string,
+  overwrite?: boolean
 ): Promise<{ ok: true; filePath: string }> {
-  return invoke("skills_create_global", { name, description, prompt, backend });
+  return invoke("skills_create_global", { name, description, prompt, backend, overwrite });
 }
 
 export async function skillsRun(
@@ -224,9 +235,10 @@ export async function fileRead(filePath: string): Promise<FileReadResult> {
 export async function fileWrite(
   filePath: string,
   content: string,
-  expectedMtime?: number
+  expectedMtime?: number,
+  encoding?: TextEncoding
 ): Promise<FileWriteResult> {
-  return invoke("file_write", { filePath, content, expectedMtime });
+  return invoke("file_write", { filePath, content, expectedMtime, encoding });
 }
 
 export async function fileReadAtRef(
@@ -285,6 +297,10 @@ export async function kanbanUpsert(task: Partial<KanbanTask>): Promise<KanbanTas
   return invoke("kanban_upsert", { task });
 }
 
+export async function kanbanDelete(id: string): Promise<{ ok: true }> {
+  return invoke("kanban_delete", { id });
+}
+
 export async function presetList(projectPath?: string): Promise<WorkspacePreset[]> {
   return invoke("preset_list", { projectPath });
 }
@@ -308,7 +324,7 @@ export async function presetLaunch(
   preset: WorkspacePreset,
   projectPath: string,
   branch?: string
-): Promise<{ workspaceId: string }> {
+): Promise<PresetLaunchResult> {
   return invoke("preset_launch", { preset, projectPath, branch });
 }
 
@@ -391,7 +407,9 @@ export async function contextRecord(
 export async function attachmentCreate(
   worktreePath: string,
   text: string
-): Promise<{ filePath: string; ref: string }> {
+): Promise<{ filePath: string; ref: string; inlined: boolean }> {
+  // `inlined` (small text kept inline vs. spilled to a file) is part of the
+  // sidecar's response — surface it instead of dropping it at the boundary.
   return invoke("attachment_create", { worktreePath, text });
 }
 
@@ -402,6 +420,18 @@ export async function automationRun(
   worktreePath?: string
 ): Promise<void> {
   return invoke("automation_run", { automationName, workspaceId, projectPath, worktreePath });
+}
+
+export async function automationActivateTriggers(
+  workspaceId: string,
+  projectPath: string,
+  worktreePath: string
+): Promise<void> {
+  return invoke("automation_activate_triggers", { workspaceId, projectPath, worktreePath });
+}
+
+export async function automationDeactivateTriggers(workspaceId: string): Promise<void> {
+  return invoke("automation_deactivate_triggers", { workspaceId });
 }
 
 export async function notifySend(
@@ -473,10 +503,57 @@ export async function gitRemoteInfo(
   return invoke("git_remote_info", { worktreePath, remote });
 }
 
+export async function checksGet(worktreePath: string): Promise<ChecksReport> {
+  return invoke("checks_get", { worktreePath });
+}
+
 export async function aiCommitMessage(
   worktreePath: string
 ): Promise<{ message: string }> {
   return invoke("ai_commit_message", { worktreePath });
+}
+
+export async function aiBranchName(
+  prompt: string,
+  cwd?: string,
+  instructions?: string
+): Promise<{ name: string }> {
+  return invoke("ai_branch_name", { prompt, cwd, instructions });
+}
+
+export async function aiBranchNameFromDiff(
+  cwd: string,
+  instructions?: string
+): Promise<{ name: string }> {
+  return invoke("ai_branch_name_from_diff", { cwd, instructions });
+}
+
+export async function gitRenameBranch(
+  worktreePath: string,
+  newBranch: string
+): Promise<{ ok: true; branch: string }> {
+  return invoke("git_rename_branch", { worktreePath, newBranch });
+}
+
+export async function gitCredentialStatus(
+  provider: CredentialProvider
+): Promise<CredentialStatus> {
+  return invoke("git_credential_status", { provider });
+}
+
+export async function gitCredentialConnect(
+  provider: CredentialProvider,
+  username: string,
+  password: string
+): Promise<{ username: string }> {
+  return invoke("git_credential_connect", { provider, username, password });
+}
+
+export async function gitCredentialDisconnect(
+  provider: CredentialProvider,
+  username?: string
+): Promise<{ ok: true }> {
+  return invoke("git_credential_disconnect", { provider, username });
 }
 
 // Embedded Browser (native child webview) controls.
@@ -608,6 +685,34 @@ export function onWorkspaceStatus(
   return listen<{ workspaceId: string; status: string }>("workspace:status", (e) =>
     callback(e.payload)
   );
+}
+
+export async function agentRun(spec: AgentRunSpec): Promise<{ agentId: string }> {
+  return invoke("agent_run", {
+    workspaceId: spec.workspaceId,
+    backend: spec.backend,
+    prompt: spec.prompt,
+    cwd: spec.cwd,
+    resumeSessionId: spec.resumeSessionId,
+    permissionMode: spec.permissionMode,
+    env: spec.env,
+  });
+}
+
+export async function agentKill(agentId: string): Promise<{ ok: true }> {
+  return invoke("agent_kill", { agentId });
+}
+
+export function onAgentData(callback: (payload: AgentStreamEvent) => void): Promise<UnlistenFn> {
+  return listen<AgentStreamEvent>("agent:data", (e) => callback(e.payload));
+}
+
+export function onAgentExit(callback: (payload: AgentExitEvent) => void): Promise<UnlistenFn> {
+  return listen<AgentExitEvent>("agent:exit", (e) => callback(e.payload));
+}
+
+export function onAgentError(callback: (payload: AgentErrorEvent) => void): Promise<UnlistenFn> {
+  return listen<AgentErrorEvent>("agent:error", (e) => callback(e.payload));
 }
 
 export function onProjectSettingsChanged(

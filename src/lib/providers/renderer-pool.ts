@@ -416,13 +416,16 @@ function scheduleUnhide(slot: Slot, stale: boolean): void {
     slot.unhideRaf = requestAnimationFrame(() => {
       slot.unhideRaf = null;
       slot.host.style.visibility = "";
-      if (stale) {
-        if (!slot.webgl) attachWebgl(slot);
-        try {
-          slot.term.refresh(0, slot.term.rows - 1);
-        } catch {
-          // refresh racing teardown
-        }
+      if (stale && !slot.webgl) attachWebgl(slot);
+      // Always repaint on unhide. A slot revealed from a display:none subtree
+      // (workspace/tab switch) can retain a stale or blank canvas that xterm
+      // won't repaint on its own — the terminal shows blank until the next PTY
+      // byte. refresh() is a cheap repaint from the existing buffer and fixes
+      // the blank-on-switch regardless of how recently the slot was used.
+      try {
+        slot.term.refresh(0, slot.term.rows - 1);
+      } catch {
+        // refresh racing teardown
       }
       const leafId = slot.currentLeafId;
       if (leafId !== null && adapter?.isLeafFocused(leafId)) {

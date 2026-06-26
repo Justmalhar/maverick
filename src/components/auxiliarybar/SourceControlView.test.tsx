@@ -42,6 +42,8 @@ function mockInvoke(overrides: Record<string, (args?: unknown) => unknown> = {})
       case "git_pull":
       case "git_push":
         return { ok: true } as never;
+      case "git_credential_status":
+        return { provider: "bitbucket", connected: false } as never;
       default:
         return undefined as never;
     }
@@ -72,7 +74,7 @@ describe("SourceControlView", () => {
     await waitFor(() => expect(screen.getByTestId("scm-branch")).toHaveTextContent("viper"));
     expect(screen.getByTestId("scm-ahead")).toHaveTextContent("↑2");
     expect(screen.getByTestId("scm-behind")).toHaveTextContent("↓1");
-    await waitFor(() => expect(screen.getByTestId("scm-provider")).toHaveTextContent("Bitbucket"));
+    await waitFor(() => expect(screen.getByTestId("scm-connect")).toHaveTextContent("Connect Bitbucket"));
     expect(await screen.findByTestId("scm-file-src/a.ts")).toBeInTheDocument();
     expect(screen.getByTestId("scm-file-src/b.ts")).toBeInTheDocument();
   });
@@ -253,6 +255,27 @@ describe("SourceControlView", () => {
     );
   });
 
+  it("keeps the changes list and commit UI after opening a diff (activeWorkspaceId cleared)", async () => {
+    mockInvoke();
+    useWorkbench.setState({
+      ...useWorkbench.getState(),
+      fileTabs: [],
+      activeFileTabId: null,
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.type(screen.getByTestId("scm-message"), "fix: stay put");
+
+    // Opening a diff clears activeWorkspaceId (the editor shows the diff, not the
+    // workspace). The panel must recover its worktree from the active file tab
+    // instead of collapsing to the empty state.
+    await userEvent.click(screen.getByTestId("scm-open-diff-src/a.ts"));
+
+    expect(screen.queryByTestId("scm-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("scm-file-src/a.ts")).toBeInTheDocument();
+    expect(screen.getByTestId("scm-message")).toHaveValue("fix: stay put");
+  });
+
   it("clicking the file name opens a diff tab without affecting staging selection", async () => {
     mockInvoke();
     useWorkbench.setState({
@@ -280,10 +303,42 @@ describe("SourceControlView", () => {
       worktreePath: "/wt",
       preview: true,
     });
-    // Staging selection state was NOT toggled — the store still has a.ts selected
-    // (the click did not call toggle() because stopPropagation was applied)
-    // We verify by checking the store's selected set indirectly via aria-pressed before the click
-    // and confirming only the file tab is open (no staging change was dispatched).
-    // After openFileTab, activeWorkspaceId is cleared by design, so the SCM view unmounts — that's expected.
+    // Staging selection state was NOT toggled — the click opened a diff via the
+    // file-name button, which does not call toggle().
+    // Opening the diff clears activeWorkspaceId, but the SCM view stays mounted:
+    // selectContextWorkspace recovers the worktree from the active file tab.
+    expect(screen.queryByTestId("scm-empty")).not.toBeInTheDocument();
+  });
+
+  it("opens the Connect dialog from the provider header button", async () => {
+    mockInvoke();
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.click(await screen.findByTestId("scm-connect"));
+    expect(await screen.findByTestId("connect-host-dialog")).toBeInTheDocument();
+  });
+
+  it("shows a Connect shortcut when a push fails with an auth error", async () => {
+    mockInvoke({
+      git_push: () => {
+        throw new Error("authentication required: could not read Username for https://bitbucket.org");
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.click(screen.getByTestId("scm-push"));
+    const shortcut = await screen.findByTestId("scm-feedback-connect");
+    expect(shortcut).toHaveTextContent("Connect Bitbucket");
+    await userEvent.click(shortcut);
+    expect(await screen.findByTestId("connect-host-dialog")).toBeInTheDocument();
+  });
+
+  it("reflects an already-connected host in the header", async () => {
+    mockInvoke({ git_credential_status: () => ({ provider: "bitbucket", connected: true, username: "alice" }) });
+    renderWithProviders(<SourceControlView />);
+    await waitFor(() =>
+      expect(screen.getByTestId("scm-connect")).toHaveTextContent("Bitbucket")
+    );
+    expect(screen.getByTestId("scm-connect")).not.toHaveTextContent("Connect Bitbucket");
   });
 });

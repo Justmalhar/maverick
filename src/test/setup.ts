@@ -285,6 +285,7 @@ vi.mock("monaco-editor/esm/vs/editor/editor.api", () => {
         addCommand: vi.fn(),
         focus: vi.fn(),
       })),
+      goToDiff: vi.fn(),
       layout: vi.fn(),
       dispose: vi.fn(),
     })),

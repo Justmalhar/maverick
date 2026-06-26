@@ -9,6 +9,23 @@ backends:
     - { name: claude, command: claude, args: [] }
 `;
 
+describe("ConfigLoader MCP validation", () => {
+  test("rejects an MCP server with an empty command (#40g)", () => {
+    const loader = new ConfigLoader({
+      read: () =>
+        JSON.stringify({
+          version: 1,
+          backends: { default: "claude", available: [] },
+          mcps: [{ name: "fs", command: "" }],
+        }),
+      exists: () => true,
+    });
+    // A blank command fails at parse with a clear message rather than a cryptic
+    // error when the server is later spawned.
+    expect(() => loader.load("/p")).toThrow(/command must not be empty/i);
+  });
+});
+
 const FULL_CONFIG = `
 version: 1
 backends:
@@ -139,13 +156,16 @@ describe("ConfigLoader", () => {
 describe("ConfigLoader.save", () => {
   function harness(seed?: { yaml?: string; json?: string }) {
     const files: Record<string, string> = {};
+    // load/save compute paths via path.join → native '\' on Windows. Normalize
+    // at the fake-fs boundary so the forward-slash keys/asserts match either way.
+    const norm = (p: string) => p.split(/[\\/]/).join("/");
     if (seed?.yaml !== undefined) files["/p/maverick.yaml"] = seed.yaml;
     if (seed?.json !== undefined) files["/p/maverick.json"] = seed.json;
     const loader = new ConfigLoader({
-      read: (path) => files[path] ?? "",
-      exists: (path) => path in files,
+      read: (path) => files[norm(path)] ?? "",
+      exists: (path) => norm(path) in files,
       write: (path, contents) => {
-        files[path] = contents;
+        files[norm(path)] = contents;
       },
     });
     return { loader, files };

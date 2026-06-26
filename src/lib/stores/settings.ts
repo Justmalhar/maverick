@@ -6,6 +6,7 @@ import type {
   SettingsWriteResponse,
   SettingsSnapshot,
 } from "@/lib/ipc";
+import { SETTINGS_DEFAULTS } from "./settings-defaults";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -110,6 +111,44 @@ export function getGlobalEnv(): Record<string, string> {
   return parseEnvMap(useSettingsStore.getState().values["general.env"]);
 }
 
+/**
+ * Imperative read of the persisted default terminal shell kind for non-React
+ * callers (PTY spawns). Returns undefined when unset so the caller falls back
+ * to the platform default.
+ */
+export function getDefaultShellKind(): string | undefined {
+  const v = useSettingsStore.getState().values["terminal.defaultShell"];
+  return typeof v === "string" ? v : undefined;
+}
+
+/**
+ * Imperative read of the configured workspace startup command for non-React
+ * callers (workspace create). Empty string when unset.
+ */
+export function getStartupCommand(): string {
+  const v = useSettingsStore.getState().values["general.startupCommand"];
+  return typeof v === "string" ? v : "";
+}
+
+/** Imperative read of the branch naming scheme. Defaults to maverick/{feature-name}. */
+export function getNamingScheme(): string {
+  const v = useSettingsStore.getState().values["general.namingScheme"];
+  return typeof v === "string" && v.trim() ? v : "maverick/{feature-name}";
+}
+
+/** Whether to use the agent CLI to name task branches. Defaults to true. */
+export function getAiBranchNames(): boolean {
+  const v = useSettingsStore.getState().values["general.aiBranchNames"];
+  return typeof v === "boolean" ? v : true;
+}
+
+/** Where a task/workspace agent runs. Defaults to "headless" (background + Agent Output panel). */
+export function getAgentLaunchMode(): "headless" | "terminal" {
+  return useSettingsStore.getState().values["general.agentLaunchMode"] === "terminal"
+    ? "terminal"
+    : "headless";
+}
+
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);
@@ -135,6 +174,29 @@ export function useSettings<V extends SettingsValue>(
   );
   const set = useSettingsStore((s) => s.set);
   return [value, (v: Widen<V>) => set(key, v)];
+}
+
+/**
+ * Imperative read of a boolean setting (with its built-in default) for non-React
+ * callers like store subscriptions. Defaults-on toggles return true unless the
+ * user has explicitly set them to false.
+ */
+export function getSettingBool(key: SettingsKey): boolean {
+  const v = useSettingsStore.getState().values[key] ?? SETTINGS_DEFAULTS[key];
+  return v !== false;
+}
+
+/** Auto-fetch interval in ms, or 0 when the user disabled it (`git.autoFetchMinutes` = 0). */
+export function getGitAutoFetchMs(): number {
+  const v = useSettingsStore.getState().values["git.autoFetchMinutes"] ?? SETTINGS_DEFAULTS["git.autoFetchMinutes"];
+  const minutes = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes * 60_000 : 0;
+}
+
+/** Configured git remote (`git.remote`), defaulting to "origin". */
+export function getGitRemote(): string {
+  const v = useSettingsStore.getState().values["git.remote"] ?? SETTINGS_DEFAULTS["git.remote"];
+  return typeof v === "string" && v.trim() ? v.trim() : "origin";
 }
 
 /** Test-only — clears the store and any pending debounced timers. */

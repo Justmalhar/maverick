@@ -186,10 +186,11 @@ describe("ImageViewer", () => {
     );
 
     expect(screen.getByTestId("image-preview")).toBeInTheDocument();
-    // The img src should be the file path passed via tab.
+    // The img src is the asset-converted URL (convertFileSrc, mocked as asset://),
+    // not the raw OS path — a bare path won't load in the WebView.
     expect(screen.getByTestId("image-preview-img")).toHaveAttribute(
       "src",
-      "/wt/logo.png"
+      "asset:///wt/logo.png"
     );
   });
 });
@@ -216,7 +217,7 @@ describe("VideoViewer", () => {
     expect(screen.getByTestId("video-preview")).toBeInTheDocument();
     expect(screen.getByTestId("video-preview-el")).toHaveAttribute(
       "src",
-      "/wt/demo.mp4"
+      "asset:///wt/demo.mp4"
     );
   });
 });

@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import { join } from "node:path";
 import { GitModule, GitError } from "./git-module";
 import type { Shell } from "./types";
 
@@ -65,7 +66,8 @@ describe("GitModule.parseStashList", () => {
     const out = `stash@{0}\t1700000000\tWIP on main: abc fix\nstash@{1}\t1700000100\tOn feat: stuff`;
     const stashes = GitModule.parseStashList(out);
     expect(stashes).toHaveLength(2);
-    expect(stashes[1].branch).toBe("feat");
+    expect(stashes[0].branch).toBe("main"); // default `WIP on main:` form (#40p)
+    expect(stashes[1].branch).toBe("feat"); // custom `On feat:` form
   });
 
   test("returns empty array on empty input", () => {
@@ -111,6 +113,25 @@ describe("GitModule methods", () => {
     const { shell, calls } = transcript([{}, { stdout: "sha\n" }]);
     await new GitModule({ shell }).commit({ worktreePath: "/w", message: "m" });
     expect(calls[0]).toContain("commit");
+  });
+
+  test("commit scopes the commit to exactly the selected files (#19)", async () => {
+    const { shell, calls } = transcript([{}, {}, { stdout: "sha\n" }]);
+    await new GitModule({ shell }).commit({
+      worktreePath: "/w",
+      message: "m",
+      files: ["a.ts", "b.ts"],
+    });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "add", "--", "a.ts", "b.ts"]);
+    // The commit itself carries a `-- <files>` pathspec so pre-staged hunks/files
+    // outside the selection are not swept in.
+    expect(calls[1]).toEqual(["git", "-C", "/w", "commit", "-m", "m", "--", "a.ts", "b.ts"]);
+  });
+
+  test("commit without files commits the whole index (no pathspec) (#19)", async () => {
+    const { shell, calls } = transcript([{}, { stdout: "sha\n" }]);
+    await new GitModule({ shell }).commit({ worktreePath: "/w", message: "m" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "commit", "-m", "m"]);
   });
 
   test("commit throws on commit failure", async () => {
@@ -215,7 +236,8 @@ describe("GitModule methods", () => {
       },
     };
     const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
-    expect(result.url).toBe("https://github.com/o/r/compare/main...feature-q?expand=1");
+    // No base → single-ref compare form (GitHub auto-resolves the default branch).
+    expect(result.url).toBe("https://github.com/o/r/compare/feature-q?expand=1");
   });
 
   test("prCreate rethrows non-ENOENT spawn errors from gh", async () => {
@@ -415,13 +437,25 @@ describe("GitModule methods", () => {
     expect(calls[0]).toEqual(["git", "-C", "/w", "checkout", "feat"]);
   });
 
-  test("checkoutBranch strips remotes/ prefix so git auto-tracks", async () => {
-    const { shell, calls } = transcript([{}]);
-    await new GitModule({ shell }).checkoutBranch({
-      worktreePath: "/w",
-      branch: "remotes/origin/feat",
-    });
-    expect(calls[0]).toEqual(["git", "-C", "/w", "checkout", "origin/feat"]);
+  test("checkoutBranch strips the remote off a remote-tracking ref so git auto-tracks (#10)", async () => {
+    // The real shape from branchList is `origin/feat` (refs/remotes already
+    // stripped); `git checkout origin/feat` would DETACH HEAD on the remote ref.
+    const { shell, calls } = transcript([
+      { stdout: "origin\n" }, // git remote
+      { exitCode: 1 }, // rev-parse: no local branch literally named origin/feat
+      {}, // checkout
+    ]);
+    await new GitModule({ shell }).checkoutBranch({ worktreePath: "/w", branch: "origin/feat" });
+    expect(calls[calls.length - 1]).toEqual(["git", "-C", "/w", "checkout", "feat"]);
+  });
+
+  test("checkoutBranch leaves a local slash branch intact when the prefix isn't a remote (#10)", async () => {
+    const { shell, calls } = transcript([
+      { stdout: "origin\n" }, // git remote — "feature" is not a configured remote
+      {}, // checkout
+    ]);
+    await new GitModule({ shell }).checkoutBranch({ worktreePath: "/w", branch: "feature/login" });
+    expect(calls[calls.length - 1]).toEqual(["git", "-C", "/w", "checkout", "feature/login"]);
   });
 
   test("checkoutBranch throws on failure", async () => {
@@ -505,7 +539,7 @@ describe("GitModule methods", () => {
       { stdout: "base line" }, // git show :1:file.ts
     ]);
     const readFile = async (path: string) => {
-      expect(path).toBe("/w/file.ts");
+      expect(path).toBe(join("/w", "file.ts"));
       return bytes(conflicted);
     };
     const hunks = await new GitModule({ shell, readFile }).conflicts({ worktreePath: "/w" });
@@ -645,6 +679,61 @@ describe("GitModule methods", () => {
         resolution: "ours",
       })
     ).rejects.toThrow(/add failed/);
+  });
+
+  test("resolveConflict rewrites only the targeted hunk and leaves others conflicted (#20)", async () => {
+    const content = [
+      "head",
+      "<<<<<<< HEAD",
+      "ours-A",
+      "=======",
+      "theirs-A",
+      ">>>>>>> branch",
+      "mid",
+      "<<<<<<< HEAD",
+      "ours-B",
+      "=======",
+      "theirs-B",
+      ">>>>>>> branch",
+      "tail",
+    ].join("\n");
+    let written = "";
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text(cmd) { calls.push(cmd); return ""; },
+      async run(cmd) { calls.push(cmd); return { stdout: "", stderr: "", exitCode: 0 }; },
+    };
+    await new GitModule({
+      shell,
+      readFile: async () => bytes(content),
+      writeFile: async (_p, c) => { written = c; },
+    }).resolveConflict({ worktreePath: "/w", filePath: "f.ts", hunkIndex: 0, resolution: "ours" });
+
+    // Hunk 0 resolved to ours (markers + theirs gone); hunk 1 untouched.
+    expect(written).toContain("ours-A");
+    expect(written).not.toContain("theirs-A");
+    expect(written).toContain("<<<<<<< HEAD\nours-B");
+    expect(written).toContain("theirs-B");
+    // File still has markers → must NOT be staged yet.
+    expect(calls.some((c) => c.includes("add"))).toBe(false);
+  });
+
+  test("resolveConflict stages the file once the last hunk is resolved (#20)", async () => {
+    const content = ["<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> b"].join("\n");
+    let written = "";
+    const calls: string[][] = [];
+    const shell: Shell = {
+      async text(cmd) { calls.push(cmd); return ""; },
+      async run(cmd) { calls.push(cmd); return { stdout: "", stderr: "", exitCode: 0 }; },
+    };
+    await new GitModule({
+      shell,
+      readFile: async () => bytes(content),
+      writeFile: async (_p, c) => { written = c; },
+    }).resolveConflict({ worktreePath: "/w", filePath: "f.ts", hunkIndex: 0, resolution: "theirs" });
+
+    expect(written).toBe("theirs");
+    expect(calls).toContainEqual(["git", "-C", "/w", "add", "--", "f.ts"]);
   });
 
   test("push surfaces a typed auth error from stderr", async () => {
@@ -807,6 +896,57 @@ describe("GitModule.parseConflictMarkers", () => {
     expect(hunks[0].hunkIndex).toBe(0);
     expect(hunks[1].hunkIndex).toBe(1);
     expect(hunks[1].ours).toEqual(["a2"]);
+  });
+});
+
+describe("GitModule.applyConflictResolution", () => {
+  const twoHunks = [
+    "head",
+    "<<<<<<< HEAD",
+    "ours-A",
+    "=======",
+    "theirs-A",
+    ">>>>>>> branch",
+    "mid",
+    "<<<<<<< HEAD",
+    "ours-B",
+    "=======",
+    "theirs-B",
+    ">>>>>>> branch",
+    "tail",
+  ].join("\n");
+
+  test("resolves the targeted hunk to ours, leaves the other verbatim", () => {
+    const out = GitModule.applyConflictResolution(twoHunks, 0, "ours");
+    expect(out).toBe(
+      ["head", "ours-A", "mid", "<<<<<<< HEAD", "ours-B", "=======", "theirs-B", ">>>>>>> branch", "tail"].join("\n")
+    );
+  });
+
+  test("resolves a later hunk to theirs without touching earlier hunks", () => {
+    const out = GitModule.applyConflictResolution(twoHunks, 1, "theirs");
+    expect(out).toBe(
+      ["head", "<<<<<<< HEAD", "ours-A", "=======", "theirs-A", ">>>>>>> branch", "mid", "theirs-B", "tail"].join("\n")
+    );
+  });
+
+  test("both keeps ours then theirs for the targeted hunk", () => {
+    const single = ["<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> b"].join("\n");
+    expect(GitModule.applyConflictResolution(single, 0, "both")).toBe("ours\ntheirs");
+  });
+
+  test("drops the diff3 base block when resolving", () => {
+    const content = ["<<<<<<< HEAD", "ours", "||||||| base", "orig", "=======", "theirs", ">>>>>>> b"].join("\n");
+    expect(GitModule.applyConflictResolution(content, 0, "ours")).toBe("ours");
+  });
+
+  test("an out-of-range hunkIndex leaves all markers intact", () => {
+    expect(GitModule.applyConflictResolution(twoHunks, 5, "ours")).toBe(twoHunks);
+  });
+
+  test("hasConflictMarkers detects open conflicts", () => {
+    expect(GitModule.hasConflictMarkers("a\n<<<<<<< x\nb")).toBe(true);
+    expect(GitModule.hasConflictMarkers("a\nb\nc")).toBe(false);
   });
 });
 
@@ -989,7 +1129,7 @@ describe("discardFile", () => {
     const res = await git.discardFile({ worktreePath: "/wt", filePath: "new.txt" });
     expect(res).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
-    expect(removed).toEqual(["/wt/new.txt"]);
+    expect(removed).toEqual([join("/wt", "new.txt")]);
   });
 
   test("absolute filePath rejects with /relative/ and records zero shell calls", async () => {
@@ -1006,5 +1146,21 @@ describe("discardFile", () => {
       git.discardFile({ worktreePath: "/wt", filePath: "/etc/passwd" })
     ).rejects.toThrow(/relative/);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("GitModule.renameBranch", () => {
+  test("runs git branch -m and returns the new name", async () => {
+    const { shell, calls } = transcript([{}]);
+    const r = await new GitModule({ shell }).renameBranch({ worktreePath: "/w", newBranch: "feature/login" });
+    expect(r).toEqual({ ok: true, branch: "feature/login" });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "branch", "-m", "feature/login"]);
+  });
+
+  test("throws when git branch -m fails", async () => {
+    const { shell } = transcript([{ exitCode: 1, stderr: "branch exists" }]);
+    await expect(
+      new GitModule({ shell }).renameBranch({ worktreePath: "/w", newBranch: "x" })
+    ).rejects.toThrow();
   });
 });

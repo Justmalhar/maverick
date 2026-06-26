@@ -299,6 +299,51 @@ describe("MCPManager", () => {
     expect(list.find((s) => s.name === "b")?.status).toBe("crashed");
   });
 
+  test("spawns the server in the project root (cwd), not the sidecar cwd (#24)", () => {
+    const loader = loaderWith(FS);
+    const seen: Array<string | undefined> = [];
+    const spawner: Spawner = (_cmd, opts) => {
+      seen.push(opts.cwd);
+      return Object.assign(fakeProc(), { pid: 1 }) as ManagedProc;
+    };
+    const mgr = new MCPManager({ spawn: spawner, loader, projectPath: "/proj", notifier: { write() {} } });
+    mgr.start("fs");
+    expect(seen[0]).toBe("/proj");
+  });
+
+  test("a crash after a long healthy run resets the consecutive retry budget (#25)", async () => {
+    const loader = loaderWith([{ name: "a", command: "x", args: [] }]);
+    let now = 0;
+    const procs: FakeProc[] = [];
+    const mgr = new MCPManager({
+      spawn: () => {
+        const p = Object.assign(fakeProc(), { pid: procs.length + 1 }) as FakeProc;
+        procs.push(p);
+        return p as ManagedProc;
+      },
+      loader,
+      projectPath: "/r",
+      notifier: { write() {} },
+      now: () => now,
+      maxRetries: 3,
+      baseBackoffMs: 1,
+    });
+    mgr.start("a"); // spawn at now=0
+    procs[0].resolveExit(1); // immediate crash → restarts=1 (no reset, elapsed 0)
+    await new Promise((r) => setTimeout(r, 5));
+    expect(mgr.list()[0].restarts).toBe(1);
+
+    now = 1;
+    mgr.tick(); // respawn at now=1 (lastSpawnAt=1)
+    // Server stays healthy well past the stability window (>= 30s), THEN crashes:
+    // the budget resets so it counts as the first of a fresh sequence, not the 2nd.
+    now = 1 + 40_000;
+    procs[1].resolveExit(1);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(mgr.list()[0].restarts).toBe(1);
+    expect(mgr.health("a")).toBe("restarting"); // not crashed
+  });
+
   test("default constructor builds without DI", () => {
     expect(new MCPManager()).toBeInstanceOf(MCPManager);
   });

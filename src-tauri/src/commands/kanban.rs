@@ -23,3 +23,12 @@ pub async fn kanban_upsert(state: State<'_, AppState>, task: Value) -> Result<Va
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn kanban_delete(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("kanban.delete", json!({ "id": id }))
+        .await
+        .map_err(|e| e.to_string())
+}

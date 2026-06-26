@@ -7,6 +7,7 @@ import { SettingsSelect } from "../primitives/SettingsSelect";
 import { useSettings } from "@/lib/stores/settings";
 import { useWorkbench } from "@/state/store";
 import { resetFirstRun } from "@/lib/tauri";
+import { availableShells, DEFAULT_SHELL_KIND } from "@/lib/terminal-shell";
 
 const BACKENDS = [
   { value: "claude", label: "Claude" },
@@ -16,12 +17,23 @@ const BACKENDS = [
   { value: "other", label: "Other (custom binary)" },
 ];
 
+const SHELL_LABELS: Record<string, string> = {
+  powershell: "PowerShell",
+  cmd: "Command Prompt (cmd)",
+  wsl: "WSL",
+};
+
 export default function GeneralSettings() {
   const [defaultBackend, setDefaultBackend] = useSettings("general.defaultBackend", "claude");
   const [binPath, setBinPath] = useSettings("general.defaultBackendBinPath", "");
   const [defaultBranch, setDefaultBranch] = useSettings("general.defaultBranch", "origin/main");
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");
+  const [startupCommand, setStartupCommand] = useSettings("general.startupCommand", "");
+  const [aiBranchNames, setAiBranchNames] = useSettings("general.aiBranchNames", true);
+  const [agentLaunchMode, setAgentLaunchMode] = useSettings("general.agentLaunchMode", "headless");
   const [restore, setRestore] = useSettings("general.restoreSession", true);
+  const [defaultShell, setDefaultShell] = useSettings("terminal.defaultShell", DEFAULT_SHELL_KIND);
+  const shells = availableShells();
   const setSettingsOpen = useWorkbench((s) => s.setSettingsOpen);
 
   function runSetupWizard() {
@@ -88,7 +100,66 @@ export default function GeneralSettings() {
             />
           }
         />
+        <SettingsRow
+          title="Workspace startup command"
+          description="Runs automatically in each new workspace terminal, e.g. claude --dangerously-skip-permissions. Leave blank to use the default backend's command."
+          control={
+            <Input
+              data-testid="general-startup-command"
+              value={startupCommand}
+              onChange={(e) => setStartupCommand(e.target.value)}
+              placeholder="claude --dangerously-skip-permissions"
+              className="w-72 font-mono"
+            />
+          }
+        />
+        <SettingsRow
+          title="AI-generated branch names"
+          description="Use the agent CLI to name task branches (the {feature-name} in the scheme) from the task. Falls back to a title slug if it's slow or unavailable."
+          control={
+            <SettingsToggle
+              label="AI branch names"
+              checked={aiBranchNames}
+              onCheckedChange={setAiBranchNames}
+              data-testid="general-ai-branch-names"
+            />
+          }
+        />
+        <SettingsRow
+          title="Agent launch mode"
+          description="Headless runs agents in the background and streams results to the panel. Terminal launches the agent CLI in an interactive workspace terminal."
+          control={
+            <SettingsSelect
+              label="Agent launch mode"
+              value={agentLaunchMode}
+              onValueChange={setAgentLaunchMode}
+              options={[
+                { value: "headless", label: "Headless" },
+                { value: "terminal", label: "Terminal" },
+              ]}
+              data-testid="general-agent-launch-mode"
+            />
+          }
+        />
       </SettingsGroup>
+
+      {shells.length > 0 ? (
+        <SettingsGroup title="Terminal" description="Which shell new terminals launch under on Windows.">
+          <SettingsRow
+            title="Default shell"
+            description="PowerShell, Command Prompt, or WSL. Applies to terminals opened after this change."
+            control={
+              <SettingsSelect
+                label="Default shell"
+                value={defaultShell}
+                onValueChange={setDefaultShell}
+                options={shells.map((s) => ({ value: s, label: SHELL_LABELS[s] }))}
+                data-testid="general-default-shell"
+              />
+            }
+          />
+        </SettingsGroup>
+      ) : null}
 
       <SettingsGroup title="Startup">
         <SettingsRow

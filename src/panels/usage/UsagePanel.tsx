@@ -6,7 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Activity, Coins, Cpu, DollarSign, Gauge, Zap } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { usageSummary } from "@/lib/tauri";
-import { estimateCost, formatTokens } from "@/lib/context-usage";
+import { estimateCostFromUsage, formatTokens } from "@/lib/context-usage";
 import { brandFor } from "@/lib/backend-brand";
 import type { BackendTokenUsage } from "@/lib/ipc";
 
@@ -68,7 +68,7 @@ export default function UsagePanel() {
   const totalTokens = rows.reduce((sum, r) => sum + r.totalTokens, 0);
   const totalSessions = rows.reduce((sum, r) => sum + r.sessions, 0);
   const totalCost = rows.reduce(
-    (sum, r) => sum + estimateCost(r.totalTokens, r.backend),
+    (sum, r) => sum + estimateCostFromUsage(r, r.backend),
     0
   );
 
@@ -194,7 +194,7 @@ function StatCard({
 function BackendRow({ row }: { row: BackendTokenUsage }) {
   const brand = brandFor(row.backend);
   const Icon = brand?.Icon;
-  const cost = estimateCost(row.totalTokens, row.backend);
+  const cost = estimateCostFromUsage(row, row.backend);
   return (
     <div
       className="flex flex-col gap-3 px-4 py-3.5"

@@ -1,7 +1,14 @@
 import { useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { ptyWrite, onPtyData, onPtyExit } from "@/lib/tauri";
-import { buildLaunchCommandLine, wrapBracketedPaste, IdleWatcher } from "@/lib/terminal-launch";
+import {
+  buildLaunchCommandLine,
+  wrapBracketedPaste,
+  IdleWatcher,
+  type LaunchShell,
+} from "@/lib/terminal-launch";
+import { getDefaultShellKind } from "@/lib/stores/settings";
+import { isWindows } from "@/lib/terminal-shell";
 import { recordUsageEstimate } from "@/hooks/useContextUsage";
 import { useAgentStatusStore, useAgentStatusReporter } from "@/hooks/useAgentStatus";
 import type { LaunchSpec, Workspace } from "@/lib/ipc";
@@ -15,6 +22,19 @@ const launched = new Set<string>();
 /** Test-only: forget every recorded launch so each test starts clean. */
 export function __resetLaunchedForTests(): void {
   launched.clear();
+}
+
+/**
+ * The shell the primary leaf runs, which decides launch-command quoting. The
+ * primary leaf spawns under the global default-shell setting (see TerminalLeaf),
+ * so we mirror that here. WSL runs a POSIX shell inside, hence "posix".
+ */
+function launchShell(): LaunchShell {
+  if (!isWindows()) return "posix";
+  const kind = getDefaultShellKind();
+  if (kind === "cmd") return "cmd";
+  if (kind === "wsl") return "posix";
+  return "powershell";
 }
 
 /**
@@ -42,7 +62,7 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
     launched.add(workspaceId);
 
     useAgentStatusStore.getState().setStatus(workspaceId, "working");
-    void ptyWrite(ptyId, buildLaunchCommandLine(spec)).catch(() => {});
+    void ptyWrite(ptyId, buildLaunchCommandLine(spec, launchShell())).catch(() => {});
 
     let watcher: IdleWatcher | null = null;
     if (spec.prompt !== undefined && spec.prompt !== "") {

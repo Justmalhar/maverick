@@ -2,6 +2,10 @@ import { describe, test, expect } from "bun:test";
 import { FileSearch } from "./file-search";
 import type { Shell } from "./types";
 
+// Production walks with path.join (native '\' on Windows); the fake fs is keyed
+// by forward-slash POSIX paths. Normalize so the fixture matches either way.
+const norm = (p: string) => p.split(/[\\/]/).join("/");
+
 function gitShell(files: string[]): Shell {
   return {
     async text(cmd) {
@@ -99,7 +103,8 @@ describe("FileSearch (walk fallback)", () => {
     return new FileSearch({
       shell: noGitShell,
       maxScanned,
-      readdir(p) {
+      readdir(rawP) {
+        const p = norm(rawP);
         const out: string[] = [];
         for (const d of dirs) {
           if (d !== p && d.startsWith(p + "/") && !d.slice(p.length + 1).includes("/")) {
@@ -113,8 +118,8 @@ describe("FileSearch (walk fallback)", () => {
         }
         return out;
       },
-      stat(p) {
-        return { isDirectory: dirs.has(p) };
+      stat(rawP) {
+        return { isDirectory: dirs.has(norm(rawP)) };
       },
     });
   }
@@ -151,10 +156,10 @@ describe("FileSearch (walk fallback)", () => {
     const fs = new FileSearch({
       shell: noGitShell,
       readdir(p) {
-        return p === "/r" ? ["a.ts", "b.ts"] : [];
+        return norm(p) === "/r" ? ["a.ts", "b.ts"] : [];
       },
       stat(p) {
-        if (p.endsWith("/a.ts")) throw new Error("perm");
+        if (norm(p).endsWith("/a.ts")) throw new Error("perm");
         return { isDirectory: false };
       },
     });

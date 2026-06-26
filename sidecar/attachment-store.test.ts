@@ -26,8 +26,9 @@ describe("AttachmentStore", () => {
     });
     const r = store.create({ worktreePath: "/r", text: "12345" });
     expect(r.inlined).toBe(false);
-    expect(r.ref).toMatch(/^@attachment:1234\.txt$/);
-    expect(r.filePath.endsWith("1234.txt")).toBe(true);
+    // Filename is a uuid (collision-safe), not a millisecond timestamp.
+    expect(r.ref).toMatch(/^@attachment:x\.txt$/);
+    expect(r.filePath.endsWith("x.txt")).toBe(true);
     expect(mkdirs[0]).toContain("attachments");
     expect(writes[0][1]).toBe("12345");
   });

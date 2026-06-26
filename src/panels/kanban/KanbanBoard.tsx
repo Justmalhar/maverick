@@ -4,9 +4,16 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useWorkbench } from "@/state/store";
 import {
   gitDiffStat,
+  kanbanDelete,
   kanbanList,
   kanbanUpsert,
+  projectSettingsGet,
 } from "@/lib/tauri";
+import { buildLaunchPrompt } from "@/lib/agent-prompt";
+import { resolveStartupLaunch } from "@/lib/launch";
+import { resolveTaskBranch } from "@/lib/feature-name";
+import { getAgentLaunchMode } from "@/lib/stores/settings";
+import { supportsHeadlessLaunch } from "@/lib/agent-launch";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -21,23 +28,20 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
   "done",
 ];
 
-// Mirrors the old AgentTerminal backend→command map; resolves the launch
-// command when a backend has no explicit `command` in the store.
-const BACKEND_COMMAND_FALLBACK: Record<string, string> = {
-  "claude-code": "claude",
-  codex: "codex",
-  gemini: "gemini",
-  aider: "aider",
-  ollama: "ollama",
-};
-
-function resolveLaunch(backendId: string): { command: string; args: string[] } {
-  const backend = useWorkbench.getState().backends.find((b) => b.id === backendId);
-  return {
-    command: backend?.command ?? BACKEND_COMMAND_FALLBACK[backendId] ?? backendId,
-    args: backend?.args ?? [],
-  };
+// Stage a task's agent: headless (background run streamed to the Agent Output
+// panel — the default) when the mode is headless and the backend supports it,
+// else the interactive terminal launch surface. Headless opens the Agent tab.
+function stageLaunch(workspaceId: string, backend: string, launchPrompt: string, cwd: string): void {
+  const wb = useWorkbench.getState();
+  if (getAgentLaunchMode() === "headless" && supportsHeadlessLaunch(backend)) {
+    wb.setAgentLaunchSpec(workspaceId, { workspaceId, backend, prompt: launchPrompt, cwd });
+    wb.openAgentOutput();
+  } else {
+    const { command, args } = resolveStartupLaunch(backend);
+    wb.setLaunchSpec(workspaceId, { command, args, prompt: launchPrompt });
+  }
 }
+
 
 export default function KanbanBoard() {
   const workspaces = useWorkbench((s) => s.workspaces);
@@ -96,26 +100,34 @@ export default function KanbanBoard() {
       const moved = tasks.find((t) => t.id === result.draggableId);
       if (!moved) return;
 
-      const newOrder = [...tasks];
-      const srcCol = newOrder.filter((t) => t.status === fromCol && t.id !== moved.id);
-      const destCol = newOrder.filter((t) => t.status === toCol && t.id !== moved.id);
-      destCol.splice(result.destination.index, 0, { ...moved, status: toCol });
+      // No-op drop (dropped back where it started) — nothing to persist.
+      if (fromCol === toCol && result.source.index === result.destination.index) return;
 
       const recompute = (list: KanbanTask[]) =>
         list.map((t, i) => ({ ...t, columnOrder: i }));
-      const updatedSrc = recompute(srcCol);
-      const updatedDest = recompute(destCol);
 
-      const updated = newOrder.map((t) => {
-        if (t.id === moved.id) return updatedDest.find((d) => d.id === moved.id)!;
-        if (t.status === fromCol) return updatedSrc.find((s) => s.id === t.id) ?? t;
-        if (t.status === toCol) return updatedDest.find((s) => s.id === t.id) ?? t;
-        return t;
-      });
+      // `changed` holds every card whose order/status moved, each exactly once.
+      let changed: KanbanTask[];
+      if (fromCol === toCol) {
+        // Reorder within one column: pull the card out, reinsert at the target
+        // index, then reindex the whole column once. Reindexing both a "src" and
+        // a "dest" view of the same column (the old code) gave the moved card and
+        // its neighbours colliding column_order values.
+        const col = tasks.filter((t) => t.status === fromCol && t.id !== moved.id);
+        col.splice(result.destination.index, 0, { ...moved, status: toCol });
+        changed = recompute(col);
+      } else {
+        const updatedSrc = recompute(tasks.filter((t) => t.status === fromCol && t.id !== moved.id));
+        const destCol = tasks.filter((t) => t.status === toCol && t.id !== moved.id);
+        destCol.splice(result.destination.index, 0, { ...moved, status: toCol });
+        changed = [...updatedSrc, ...recompute(destCol)];
+      }
 
-      setTasks(updated);
+      const changedById = new Map(changed.map((t) => [t.id, t]));
+      setTasks(tasks.map((t) => changedById.get(t.id) ?? t));
       try {
-        await Promise.all([...updatedSrc, ...updatedDest].map((t) => kanbanUpsert(t)));
+        // Dedup by id so each task is written exactly once (no ordering race).
+        await Promise.all(changed.map((t) => kanbanUpsert(t)));
       } catch (e) {
         setError(String(e));
         await refresh();
@@ -137,6 +149,19 @@ export default function KanbanBoard() {
     [refresh]
   );
 
+  const remove = useCallback(
+    async (id: string) => {
+      try {
+        await kanbanDelete(id);
+        setDialogTask(null);
+        await refresh();
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [refresh]
+  );
+
   const handleStart = useCallback(
     async (task: KanbanTask) => {
       const baseBranch = task.branch || "main";
@@ -145,15 +170,35 @@ export default function KanbanBoard() {
         useWorkbench.getState().backends.find((b) => b.active)?.id ||
         useWorkbench.getState().backends[0]?.id ||
         "claude-code";
-      const ws = await create(task.projectId, undefined, backend, baseBranch);
       const prompt = task.description
         ? `${task.title}\n\n${task.description}`
         : task.title;
-      const { command, args } = resolveLaunch(backend);
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt });
+      const projectPath = useWorkbench.getState().projects.find((p) => p.id === task.projectId)?.path;
+      // Fetch settings once: the branchRename preference drives the branch name
+      // and the rest of the preferences are prepended to the launch prompt.
+      // Best-effort — a settings failure must not block starting the task.
+      let settings: Awaited<ReturnType<typeof projectSettingsGet>> | null = null;
+      try {
+        settings = await projectSettingsGet(task.projectId);
+      } catch (e) {
+        console.warn("projectSettingsGet failed; naming and launching without preferences", e);
+      }
+      const branch = await resolveTaskBranch({
+        title: task.title,
+        prompt,
+        cwd: projectPath,
+        backend,
+        instructions: settings?.preferences?.branchRename,
+      });
+      const ws = await create(task.projectId, branch, backend, baseBranch);
+      const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
+      stageLaunch(ws.id, backend, launchPrompt, ws.worktreePath);
+      // Link the task to the workspace it just spawned — without this the card's
+      // View button (and the diff-stat lookup) can't find the workspace.
       await kanbanUpsert({
         ...task,
         status: "in_progress",
+        workspaceId: ws.id,
       });
       await refresh();
     },
@@ -179,19 +224,35 @@ export default function KanbanBoard() {
         createdAt: Math.floor(Date.now() / 1000),
       });
 
-      const ws = await create(payload.projectId, undefined, payload.agentBackend, payload.baseBranch);
-      const { command, args } = resolveLaunch(payload.agentBackend);
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args, prompt: payload.prompt });
+      // Fetch settings once: the branchRename preference drives the branch name
+      // (AI-generated from the task, honoring the project's convention — never a
+      // random callsign), and the full preference set is prepended to the launch
+      // prompt. Best-effort: a settings failure must not block starting the task.
+      const projectPath = useWorkbench
+        .getState()
+        .projects.find((p) => p.id === payload.projectId)?.path;
+      let settings: Awaited<ReturnType<typeof projectSettingsGet>> | null = null;
+      try {
+        settings = await projectSettingsGet(payload.projectId);
+      } catch (e) {
+        console.warn("projectSettingsGet failed; naming and launching without preferences", e);
+      }
+      const branch = await resolveTaskBranch({
+        title: payload.prompt.split("\n")[0],
+        prompt: payload.prompt,
+        cwd: projectPath,
+        backend: payload.agentBackend,
+        instructions: settings?.preferences?.branchRename,
+      });
+      const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
+      const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
+      stageLaunch(ws.id, payload.agentBackend, prompt, ws.worktreePath);
 
+      // Spread the persisted task so the description (and every other field) is
+      // carried through — listing the fields by hand dropped `description`,
+      // which the full-row upsert then nulled out.
       await kanbanUpsert({
-        id: task.id,
-        projectId: task.projectId,
-        title: task.title,
-        labels: task.labels,
-        columnOrder: task.columnOrder,
-        attachments: task.attachments,
-        agentBackend: task.agentBackend,
-        branch: task.branch,
+        ...task,
         status: "in_progress",
         workspaceId: ws.id,
       });
@@ -239,6 +300,7 @@ export default function KanbanBoard() {
         task={dialogTask ?? undefined}
         onOpenChange={(o) => !o && setDialogTask(null)}
         onSubmit={upsert}
+        onDelete={remove}
       />
     </motion.div>
   );

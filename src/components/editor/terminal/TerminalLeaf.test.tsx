@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
-import { TerminalLeaf, killLeaf, killWorkspaceLeaves, getLeafPtyId, __testing__ } from "./TerminalLeaf";
+import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
+import { TerminalLeaf } from "./TerminalLeaf";
+import { killLeaf, killWorkspaceLeaves, getLeafPtyId, __testing__ } from "./leaf-registry";
 import { makeWorkspace } from "@/test/fixtures";
 import { useWorkbench } from "@/state/store";
 import { __resetLaunchedForTests } from "@/hooks/useLaunchSpec";
@@ -143,6 +144,19 @@ describe("TerminalLeaf", () => {
     );
   });
 
+  it("spawns the chosen shell when terminal.defaultShell is set", async () => {
+    useSettingsStore.setState({ values: { "terminal.defaultShell": "cmd" } });
+    renderWithProviders(
+      <TerminalLeaf leafId="leaf-cmd" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ command: "cmd.exe", args: [] })
+      )
+    );
+  });
+
   it("the primary leaf consumes the staged launch spec and types the command", async () => {
     vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-primary" } as never);
     useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--yolo"] });
@@ -156,6 +170,53 @@ describe("TerminalLeaf", () => {
       )
     );
     expect(useWorkbench.getState().launchSpecs["w1"]).toBeUndefined();
+  });
+
+  it("a preset leaf spawns its own command in its cwd and types the startup line (#3)", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-preset" } as never);
+    renderWithProviders(
+      <TerminalLeaf
+        leafId="w1-1"
+        workspace={ws}
+        isFocused
+        onFocus={() => {}}
+        command="claude"
+        args={["--print"]}
+        cwd="/wt/sub"
+        startup="run tests"
+      />
+    );
+    // Spawns the preset command + cwd (not the default shell).
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "pty_spawn",
+        expect.objectContaining({ command: "claude", args: ["--print"], cwd: "/wt/sub" })
+      )
+    );
+    // Types the startup line into it once.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-preset", data: "run tests\r" })
+    );
+    // A preset leaf must NOT also consume a staged launch spec (would double-type).
+    useWorkbench.getState().setLaunchSpec("w1", { command: "x", args: [] });
+    expect(useWorkbench.getState().launchSpecs["w1"]).toBeDefined();
+  });
+
+  it("evicts the leaf from the cache on a natural pty exit (#40l)", async () => {
+    const exitHandlers: Array<(e: { payload: { ptyId: string; code: number } }) => void> = [];
+    vi.mocked(listen).mockImplementation((async (event: string, cb: unknown) => {
+      if (event === "pty:exit") exitHandlers.push(cb as never);
+      return () => {};
+    }) as never);
+    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-exit" } as never);
+    renderWithProviders(
+      <TerminalLeaf leafId="leaf-exit" workspace={ws} isFocused onFocus={() => {}} />
+    );
+    await waitFor(() => expect(__testing__.leafPtyCache.get("leaf-exit")).toBe("pty-exit"));
+    // The shell exits on its own — the stale ptyId must be evicted so a later
+    // remount respawns instead of binding the corpse.
+    act(() => exitHandlers.forEach((h) => h({ payload: { ptyId: "pty-exit", code: 0 } })));
+    expect(__testing__.leafPtyCache.has("leaf-exit")).toBe(false);
   });
 
   it("a non-primary leaf never consumes the launch spec", async () => {

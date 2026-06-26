@@ -9,23 +9,43 @@ import {
   GitCommitVertical,
   GitPullRequest,
   Loader2,
+  Plug,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
+import { renameWorkspaceBranchWithAI } from "@/lib/ai-rename";
+import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useSourceControl } from "@/hooks/useSourceControl";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import {
   aiCommitMessage,
   diffGet,
   gitCommit,
+  gitCredentialStatus,
   gitRemoteInfo,
   prCreate,
 } from "@/lib/tauri";
-import type { DiffFile, RemoteInfo } from "@/lib/ipc";
+import type { CredentialProvider, DiffFile, GitProvider, RemoteInfo } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ConnectHostDialog } from "./ConnectHostDialog";
+
+// The "unknown" remote has no credential flow; everything else maps 1:1.
+function credentialProviderFor(provider: GitProvider | undefined): CredentialProvider | null {
+  return provider && provider !== "unknown" ? provider : null;
+}
+
+// Auth failures from push/PR surface as a stderr string; detect them so we can
+// offer a Connect shortcut instead of a dead-end error.
+function looksLikeAuthError(text: string): boolean {
+  return /authentication|credential|permission denied|rejected the credentials|could not read (?:username|password)/i.test(
+    text
+  );
+}
 
 const STATUS_TONE = {
   M: "text-warning",
@@ -79,8 +99,10 @@ function ActionButton({
 }
 
 export function SourceControlView() {
-  const active = useWorkbench(selectActiveWorkspace);
+  const platform = useOSPlatform();
+  const active = useWorkbench(selectContextWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
+  const branchRenamePref = useProjectSettingsStore((s) => s.data?.preferences?.branchRename);
   const scm = useSourceControl(active?.worktreePath ?? null);
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -88,6 +110,23 @@ export function SourceControlView() {
   const [remote, setRemote] = useState<RemoteInfo | null>(null);
   const [busy, setBusy] = useState<Busy>("none");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
+
+  const credProvider = credentialProviderFor(remote?.provider);
+
+  const refreshAuth = useCallback(async (provider: CredentialProvider | null) => {
+    if (!provider) {
+      setConnected(false);
+      return;
+    }
+    try {
+      const status = await gitCredentialStatus(provider);
+      setConnected(status.connected);
+    } catch {
+      setConnected(false);
+    }
+  }, []);
 
   const onOpenDiff = (relPath: string) => {
     if (!active?.worktreePath) return;
@@ -116,6 +155,10 @@ export function SourceControlView() {
     setMessage("");
     void refreshFiles();
   }, [refreshFiles]);
+
+  useEffect(() => {
+    void refreshAuth(credProvider);
+  }, [credProvider, refreshAuth]);
 
   if (!active) {
     return (
@@ -170,6 +213,22 @@ export function SourceControlView() {
       setMessage("");
       await refreshFiles();
       await scm.refresh();
+      // "Let AI name it later": once there's a commit to name from, rename the
+      // branch from its diff and drop the pending flag. Best-effort — a failed
+      // rename never undoes the commit.
+      const wb = useWorkbench.getState();
+      if (wb.pendingAiRename.includes(active.id)) {
+        const newBranch = await renameWorkspaceBranchWithAI({
+          worktreePath: active.worktreePath,
+          instructions: branchRenamePref,
+        });
+        wb.clearPendingAiRename(active.id);
+        if (newBranch) {
+          wb.updateWorkspace(active.id, { branch: newBranch });
+          await scm.refresh({ remote: "never" });
+          return { tone: "info", text: `Committed ${sha.slice(0, 7)} · branch → ${newBranch}` };
+        }
+      }
       return { tone: "info", text: `Committed ${sha.slice(0, 7)}` };
     });
 
@@ -220,9 +279,25 @@ export function SourceControlView() {
         {scm.behind > 0 && (
           <span className="text-[10px] text-warning" data-testid="scm-behind">↓{scm.behind}</span>
         )}
-        <span className="ml-auto text-[10px] text-muted-foreground" data-testid="scm-provider">
-          {PROVIDER_LABEL[remote?.provider ?? "unknown"]}
-        </span>
+        {credProvider ? (
+          <button
+            type="button"
+            onClick={() => setConnectOpen(true)}
+            data-testid="scm-connect"
+            title={connected ? `${PROVIDER_LABEL[credProvider]} connected` : `Connect ${PROVIDER_LABEL[credProvider]}`}
+            className={cn(
+              "ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors duration-100 hover:bg-sidebar-hover",
+              connected ? "text-success" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {connected ? <Check className="h-3 w-3" /> : <Plug className="h-3 w-3" />}
+            {connected ? PROVIDER_LABEL[credProvider] : `Connect ${PROVIDER_LABEL[credProvider]}`}
+          </button>
+        ) : (
+          <span className="ml-auto text-[10px] text-muted-foreground" data-testid="scm-provider">
+            {PROVIDER_LABEL[remote?.provider ?? "unknown"]}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -243,7 +318,7 @@ export function SourceControlView() {
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Commit message (⌘⏎ to commit)"
+            placeholder={`Commit message (${formatKeybinding("$mod+Enter", platform)} to commit)`}
             rows={3}
             data-testid="scm-message"
             className="resize-none pr-8 font-mono text-[11px]"
@@ -301,26 +376,39 @@ export function SourceControlView() {
           />
         </div>
         {feedback && (
-          <p
-            data-testid="scm-feedback"
-            className={cn(
-              "truncate text-[11px]",
-              feedback.tone === "error" ? "text-destructive" : "text-muted-foreground"
-            )}
-          >
-            {feedback.text}{" "}
-            {feedback.url && (
-              <a
-                href={feedback.url}
-                target="_blank"
-                rel="noreferrer"
-                data-testid="scm-pr-link"
-                className="text-info underline"
+          <div className="flex items-center gap-2">
+            <p
+              data-testid="scm-feedback"
+              className={cn(
+                "min-w-0 flex-1 truncate text-[11px]",
+                feedback.tone === "error" ? "text-destructive" : "text-muted-foreground"
+              )}
+            >
+              {feedback.text}{" "}
+              {feedback.url && (
+                <a
+                  href={feedback.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="scm-pr-link"
+                  className="text-info underline"
+                >
+                  {feedback.url}
+                </a>
+              )}
+            </p>
+            {feedback.tone === "error" && credProvider && looksLikeAuthError(feedback.text) && (
+              <button
+                type="button"
+                onClick={() => setConnectOpen(true)}
+                data-testid="scm-feedback-connect"
+                className="flex shrink-0 items-center gap-1 rounded-sm bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-foreground transition-colors duration-100 hover:bg-accent/30"
               >
-                {feedback.url}
-              </a>
+                <Plug className="h-3 w-3" />
+                Connect {PROVIDER_LABEL[credProvider]}
+              </button>
             )}
-          </p>
+          </div>
         )}
       </div>
 
@@ -391,6 +479,13 @@ export function SourceControlView() {
           </ul>
         </ScrollArea>
       )}
+
+      <ConnectHostDialog
+        open={connectOpen}
+        onOpenChange={setConnectOpen}
+        defaultProvider={credProvider ?? "github"}
+        onChanged={() => void refreshAuth(credProvider)}
+      />
     </div>
   );
 }

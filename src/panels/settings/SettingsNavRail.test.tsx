@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "@/test/utils";
-import { SettingsNavRail, NAV_GROUPS } from "./SettingsNavRail";
+import { SettingsNavRail } from "./SettingsNavRail";
+import { NAV_GROUPS } from "./settings-nav";
 
 const noop = () => {};
 

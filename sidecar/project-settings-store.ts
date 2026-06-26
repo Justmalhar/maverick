@@ -12,7 +12,7 @@ export class ProjectSettingsStore {
     if (!existsSync(path)) {
       return applyDefaults(ProjectSettingsSchema.parse({}), projectPath);
     }
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    const raw = asObject(JSON.parse(readFileSync(path, "utf8")));
     const projectRaw = (raw.project as object | undefined) ?? {};
     return applyDefaults(ProjectSettingsSchema.parse(projectRaw), projectPath);
   }
@@ -21,7 +21,7 @@ export class ProjectSettingsStore {
     this.validateFilesToCopy(patch);
     const path = this.configPath(projectPath);
     const existing: Record<string, unknown> = existsSync(path)
-      ? JSON.parse(readFileSync(path, "utf8"))
+      ? asObject(JSON.parse(readFileSync(path, "utf8")), { version: 1, backends: { default: "claude", available: [] } })
       : { version: 1, backends: { default: "claude", available: [] } };
 
     const currentProject = (existing.project as object | undefined) ?? {};
@@ -50,6 +50,15 @@ export class ProjectSettingsStore {
       }
     }
   }
+}
+
+// A hand-edited or partially-written maverick.json can be valid JSON that is not
+// an object (e.g. `null`, an array). Reading `.project` off that throws a cryptic
+// TypeError before the schema defaults can apply, so coerce to a safe object.
+function asObject(value: unknown, fallback: Record<string, unknown> = {}): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : fallback;
 }
 
 function deepMerge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {

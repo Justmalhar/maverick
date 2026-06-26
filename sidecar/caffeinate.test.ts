@@ -48,10 +48,19 @@ describe("Caffeinate", () => {
     expect(c.start()).toEqual({ started: false });
   });
 
-  test("start on win32 returns started:false", () => {
-    const c = new Caffeinate({ spawn: () => fakeProc(), platform: "win32" });
-    expect(c.start()).toEqual({ started: false });
-    expect(c.active()).toBe(false);
+  test("start on win32 holds the execution state via a long-lived PowerShell process (#35)", () => {
+    const calls: string[][] = [];
+    const c = new Caffeinate({
+      spawn: (cmd) => {
+        calls.push(cmd);
+        return fakeProc();
+      },
+      platform: "win32",
+    });
+    expect(c.start()).toEqual({ started: true });
+    expect(c.active()).toBe(true);
+    expect(calls[0][0]).toBe("powershell");
+    expect(calls[0].join(" ")).toContain("SetThreadExecutionState");
   });
 
   test("stop kills and clears proc", () => {
@@ -66,6 +75,22 @@ describe("Caffeinate", () => {
   test("stop is no-op when not started", () => {
     const c = new Caffeinate({ spawn: () => fakeProc(), platform: "darwin" });
     expect(c.stop()).toEqual({ stopped: false });
+  });
+
+  test("active() becomes false when the keep-awake process exits on its own (#40k)", async () => {
+    let resolveExit!: (n: number) => void;
+    const proc = {
+      exitCode: null,
+      exited: new Promise<number>((r) => (resolveExit = r)),
+      kill() {},
+    } as unknown as ManagedProc;
+    const c = new Caffeinate({ spawn: () => proc, platform: "darwin" });
+    c.start();
+    expect(c.active()).toBe(true);
+    resolveExit(0); // the process dies without stop() being called
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(c.active()).toBe(false);
   });
 
   test("default constructor builds without DI", () => {

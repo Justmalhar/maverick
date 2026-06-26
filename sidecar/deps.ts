@@ -19,6 +19,11 @@ export function emit(notifier: Notifier, method: string, params: unknown): void 
 // GIT_TERMINAL_PROMPT/GIT_ASKPASS/SSH_ASKPASS suppress interactive credential
 // prompts (which would otherwise hang a headless sidecar forever); LC_ALL=C
 // forces stable, parseable English git output regardless of the user's locale.
+// GCM_INTERACTIVE=Never keeps Git Credential Manager non-interactive.
+// We deliberately do NOT set GCM_PROVIDER: an empty value makes GCM emit
+// "warning: a host provider override was used" and breaks provider
+// auto-detection, so `git push` (and PR creation) fail with stored creds on
+// Windows. Letting GCM auto-detect uses the user's existing credentials.
 // CLAUDE.md rule 5: we never read or store keys — a network op that needs
 // credentials fails fast and surfaces as a typed auth error upstream.
 export const HARDENED_ENV: Record<string, string> = {
@@ -27,7 +32,6 @@ export const HARDENED_ENV: Record<string, string> = {
   SSH_ASKPASS: "",
   GIT_OPTIONAL_LOCKS: "0",
   GCM_INTERACTIVE: "Never",
-  GCM_PROVIDER: "",
   LC_ALL: "C",
 };
 
@@ -68,6 +72,23 @@ export function repairToolPath(): void {
   if (augmented !== undefined) process.env.PATH = augmented;
 }
 
+/**
+ * argv that runs a shell command STRING on the host's default shell. Windows
+ * has no `/bin/sh`, so user-authored scripts (setup/run/archive, automation
+ * shell steps) go through PowerShell there; POSIX uses `/bin/sh -c`.
+ */
+export function shellCommandArgs(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  // Windows: PowerShell -Command. Always present; treats newlines as statement
+  // separators (multi-line scripts) and aliases cp/ls/mv/rm/cat to cmdlets, so
+  // POSIX-style setup/archive scripts mostly work. POSIX uses /bin/sh -c.
+  return platform === "win32"
+    ? ["powershell", "-NoProfile", "-Command", command]
+    : ["/bin/sh", "-c", command];
+}
+
 function hardenedEnv(): Record<string, string | undefined> {
   return { ...process.env, ...HARDENED_ENV, PATH: toolAugmentedPath() };
 }
@@ -83,7 +104,7 @@ export const defaultShell: Shell = {
     }
     return out;
   },
-  async run(cmd, cwd, stdin) {
+  async run(cmd, cwd, stdin, opts) {
     const proc = Bun.spawn(cmd, {
       cwd,
       stdout: "pipe",
@@ -96,9 +117,37 @@ export const defaultShell: Shell = {
       writer.write(stdin);
       writer.end();
     }
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
-    await proc.exited;
-    return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+    // Drain stdout and stderr concurrently: reading them sequentially can
+    // deadlock a child that fills the ~64KB stderr pipe before stdout closes.
+    const collect = (async () => {
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      await proc.exited;
+      return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+    })();
+
+    if (!opts?.timeoutMs || opts.timeoutMs <= 0) return collect;
+
+    // Race the read against the budget and RETURN on expiry rather than waiting
+    // for the kill to close the pipes (which it doesn't always do promptly on
+    // Windows). kill() is best-effort reaping so the child can't outlive us.
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+      timer = setTimeout(() => {
+        try {
+          proc.kill();
+        } catch {
+          // already exited
+        }
+        resolve({ stdout: "", stderr: `timed out after ${opts.timeoutMs}ms`, exitCode: 124 });
+      }, opts.timeoutMs);
+    });
+    try {
+      return await Promise.race([collect, timeout]);
+    } finally {
+      clearTimeout(timer!);
+    }
   },
 };

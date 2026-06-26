@@ -25,3 +25,39 @@ pub async fn automation_run(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn automation_activate_triggers(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    project_path: String,
+    worktree_path: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "automation.activateTriggers",
+            json!({
+                "workspaceId": workspace_id,
+                "projectPath": project_path,
+                "worktreePath": worktree_path,
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn automation_deactivate_triggers(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "automation.deactivateTriggers",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}

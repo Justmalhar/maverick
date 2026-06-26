@@ -1,5 +1,6 @@
 // pdfjs-dist — page navigation, zoom, text layer.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
@@ -30,12 +31,14 @@ export default function PDFPreview({ filePath }: Props) {
   const [page, setPage] = useState(1);
   const [scale, setScale] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  // pdf.js fetches the URL itself, so it must be the asset URL, not a raw OS path.
+  const url = useMemo(() => convertFileSrc(filePath), [filePath]);
 
   useEffect(() => {
     let cancelled = false;
     let cleanupDoc: pdfjsLib.PDFDocumentProxy | null = null;
     pdfjsLib
-      .getDocument({ url: filePath })
+      .getDocument({ url })
       .promise.then((d) => {
         if (cancelled) {
           d.destroy();
@@ -53,7 +56,7 @@ export default function PDFPreview({ filePath }: Props) {
       cancelled = true;
       cleanupDoc?.destroy();
     };
-  }, [filePath]);
+  }, [url]);
 
   const render = useCallback(async () => {
     if (!doc || !canvasRef.current) return;

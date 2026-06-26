@@ -6,7 +6,7 @@ mod menu;
 mod pty_sink_tauri;
 mod state;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -36,25 +36,82 @@ fn dev_sidecar_command() -> (String, Vec<String>, Option<PathBuf>) {
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest_dir.clone());
     let entry = repo_root.join("sidecar").join("main.ts");
-    (
-        "bun".to_string(),
-        vec!["run".to_string(), entry.to_string_lossy().into_owned()],
-        Some(repo_root),
-    )
+    let (program, mut args) = bun_launcher();
+    args.push("run".to_string());
+    args.push(entry.to_string_lossy().into_owned());
+    (program, args, Some(repo_root))
 }
 
-fn release_sidecar_command(handle: &AppHandle) -> (String, Vec<String>, Option<PathBuf>) {
-    // Tauri's externalBin resolver puts the sidecar next to the main binary
-    // with the same name as configured in tauri.conf.json `externalBin`.
-    // On macOS that's Contents/MacOS/<name>; on Linux/Windows it's beside the binary.
-    let exe_dir = handle
-        .path()
-        .resource_dir()
+#[cfg(windows)]
+fn bun_launcher() -> (String, Vec<String>) {
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("USERPROFILE").ok();
+    resolve_bun(&path_var, home.as_deref(), |p| p.exists())
+}
+
+#[cfg(not(windows))]
+fn bun_launcher() -> (String, Vec<String>) {
+    ("bun".to_string(), Vec::new())
+}
+
+/// Locate the `bun` launcher on Windows. npm installs bun as a `bun.cmd` shim
+/// (plus an extensionless script) rather than a real `bun.exe`, and
+/// `CreateProcessW` only appends `.exe` — it never consults `PATHEXT` — so a
+/// bare `Command::new("bun")` reports "program not found". We search `PATH`
+/// (then `~/.bun/bin`) for a concrete launcher: a `.exe` runs directly, while a
+/// `.cmd`/`.bat` must be invoked through `cmd.exe /C` because batch files are
+/// not executables. Falling back to `"bun"` preserves the original error path.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn resolve_bun(
+    path_var: &str,
+    home: Option<&str>,
+    exists: impl Fn(&Path) -> bool,
+) -> (String, Vec<String>) {
+    const CANDIDATES: [&str; 3] = ["bun.exe", "bun.cmd", "bun.bat"];
+    let mut dirs: Vec<PathBuf> = path_var
+        .split(';')
+        .filter(|seg| !seg.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    if let Some(home) = home {
+        dirs.push(Path::new(home).join(".bun").join("bin"));
+    }
+    for dir in &dirs {
+        for name in CANDIDATES {
+            let candidate = dir.join(name);
+            if exists(&candidate) {
+                let full = candidate.to_string_lossy().into_owned();
+                return if name.ends_with(".exe") {
+                    (full, Vec::new())
+                } else {
+                    ("cmd.exe".to_string(), vec!["/C".to_string(), full])
+                };
+            }
+        }
+    }
+    ("bun".to_string(), Vec::new())
+}
+
+/// Join the bundled sidecar binary onto the directory that holds the main
+/// executable. Tauri's `externalBin` resolver copies the sidecar next to the
+/// main binary (stripping the target triple), so it lives in the *exe* dir on
+/// every platform — Windows/Linux install root, macOS `Contents/MacOS`.
+fn sidecar_binary_path(exe_dir: &Path) -> PathBuf {
+    let ext = if cfg!(windows) { ".exe" } else { "" };
+    exe_dir.join(format!("maverick-sidecar{ext}"))
+}
+
+fn release_sidecar_command() -> (String, Vec<String>, Option<PathBuf>) {
+    // Anchor on `current_exe().parent()`, NOT `resource_dir()`: on Windows/Linux
+    // `resource_dir()` IS the exe dir (so `.parent()` would walk one level above
+    // the install root to a path that doesn't exist), and on macOS it points at
+    // `Contents/Resources` while the sidecar sits in `Contents/MacOS`. The exe
+    // dir is the correct externalBin anchor on all three.
+    let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."));
-    let ext = if cfg!(windows) { ".exe" } else { "" };
-    let binary = exe_dir.join(format!("maverick-sidecar{ext}"));
+    let binary = sidecar_binary_path(&exe_dir);
     (binary.to_string_lossy().into_owned(), vec![], None)
 }
 
@@ -80,6 +137,15 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
+
+            // Windows/Linux render their own window chrome (WindowControls), so
+            // hide the native frame — otherwise the OS title bar and our custom
+            // controls both show. macOS keeps its native traffic lights via
+            // titleBarStyle "Overlay", so leave its decorations untouched.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_decorations(false);
+            }
 
             // macOS: replace the default menu so ⌘W closes the focused tab (via the
             // webview) instead of the whole window. See menu.rs.
@@ -120,7 +186,7 @@ pub fn run() {
             let (cmd, args, cwd) = if cfg!(debug_assertions) {
                 dev_sidecar_command()
             } else {
-                release_sidecar_command(&handle)
+                release_sidecar_command()
             };
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
@@ -186,7 +252,7 @@ pub fn run() {
             pty_resize,
             pty_kill,
             pty_close_all,
-            default_shell,
+            wsl_available,
             config_load,
             config_save,
             messages_list,
@@ -219,6 +285,12 @@ pub fn run() {
             file_read_at_ref,
             git_discard_file,
             ai_commit_message,
+            ai_branch_name,
+            ai_branch_name_from_diff,
+            git_rename_branch,
+            git_credential_status,
+            git_credential_connect,
+            git_credential_disconnect,
             file_tree,
             file_read,
             file_write,
@@ -229,6 +301,7 @@ pub fn run() {
             fs_watch_stop,
             kanban_list,
             kanban_upsert,
+            kanban_delete,
             preset_list,
             preset_launch,
             preset_save_current,
@@ -242,6 +315,8 @@ pub fn run() {
             usage_summary,
             attachment_create,
             automation_run,
+            automation_activate_triggers,
+            automation_deactivate_triggers,
             notify_send,
             notify_list,
             notify_mark_read,
@@ -252,6 +327,9 @@ pub fn run() {
             caffeinate_status,
             instructions_resolve,
             pr_create,
+            checks_get,
+            agent_run,
+            agent_kill,
             browser_open,
             browser_navigate,
             browser_set_bounds,
@@ -298,4 +376,98 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_bun, sidecar_binary_path};
+    use std::collections::HashSet;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn sidecar_resolves_inside_the_exe_dir_not_above_it() {
+        let exe_dir = if cfg!(windows) {
+            PathBuf::from(r"C:\Program Files\Maverick")
+        } else {
+            PathBuf::from("/opt/maverick")
+        };
+        let resolved = sidecar_binary_path(&exe_dir);
+        // Regression for the `.parent()` bug: the sidecar must live IN the exe
+        // dir, never one level above it (which is where every install failed).
+        assert_eq!(resolved.parent(), Some(exe_dir.as_path()));
+        let name = if cfg!(windows) {
+            "maverick-sidecar.exe"
+        } else {
+            "maverick-sidecar"
+        };
+        assert_eq!(resolved.file_name().unwrap().to_str().unwrap(), name);
+    }
+
+    fn exists_in(present: &[&str]) -> impl Fn(&Path) -> bool {
+        let set: HashSet<PathBuf> = present.iter().map(PathBuf::from).collect();
+        move |p: &Path| set.contains(p)
+    }
+
+    #[test]
+    fn prefers_a_real_exe_and_runs_it_directly() {
+        let (program, args) = resolve_bun(
+            r"C:\bin;C:\tools",
+            None,
+            exists_in(&[r"C:\tools\bun.exe"]),
+        );
+        assert_eq!(program, r"C:\tools\bun.exe");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn wraps_a_cmd_shim_through_cmd_exe() {
+        let (program, args) = resolve_bun(
+            r"C:\npm",
+            None,
+            exists_in(&[r"C:\npm\bun.cmd"]),
+        );
+        assert_eq!(program, "cmd.exe");
+        assert_eq!(args, vec!["/C".to_string(), r"C:\npm\bun.cmd".to_string()]);
+    }
+
+    #[test]
+    fn wraps_a_bat_shim_through_cmd_exe() {
+        let (program, args) = resolve_bun(r"C:\npm", None, exists_in(&[r"C:\npm\bun.bat"]));
+        assert_eq!(program, "cmd.exe");
+        assert_eq!(args, vec!["/C".to_string(), r"C:\npm\bun.bat".to_string()]);
+    }
+
+    #[test]
+    fn exe_on_path_wins_over_later_cmd_shim() {
+        let (program, _) = resolve_bun(
+            r"C:\real;C:\npm",
+            None,
+            exists_in(&[r"C:\real\bun.exe", r"C:\npm\bun.cmd"]),
+        );
+        assert_eq!(program, r"C:\real\bun.exe");
+    }
+
+    #[test]
+    fn falls_back_to_home_bun_bin_when_not_on_path() {
+        let (program, args) = resolve_bun(
+            r"C:\bin",
+            Some(r"C:\Users\me"),
+            exists_in(&[r"C:\Users\me\.bun\bin\bun.exe"]),
+        );
+        assert_eq!(program, r"C:\Users\me\.bun\bin\bun.exe");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn falls_back_to_bare_bun_when_nothing_found() {
+        let (program, args) = resolve_bun(r"C:\bin", Some(r"C:\Users\me"), exists_in(&[]));
+        assert_eq!(program, "bun");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn ignores_empty_path_segments() {
+        let (program, _) = resolve_bun(r";;C:\npm;", None, exists_in(&[r"C:\npm\bun.cmd"]));
+        assert_eq!(program, "cmd.exe");
+    }
 }

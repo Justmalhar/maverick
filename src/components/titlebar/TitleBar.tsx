@@ -3,8 +3,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkbench } from "@/state/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOSPlatform } from "@/hooks/useOSPlatform";
+import { formatKeybinding } from "@/shortcuts/format";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { WindowControls } from "./WindowControls";
+import { Breadcrumb } from "./Breadcrumb";
+import { TrafficLights } from "./TrafficLights";
 
 async function startDrag() {
   try {
@@ -16,7 +19,7 @@ async function startDrag() {
 
 // Warp-style single-row chrome: traffic lights / window controls sit in the
 // OS title bar (Overlay mode), our search pill is centered inside that same
-// strip. No separate label row, no "Maverick" text.
+// strip. The left gutter carries the project > branch > backend breadcrumb.
 // Drag is handled via Tauri's startDragging() — more reliable than CSS
 // -webkit-app-region in WKWebView.
 export function TitleBar() {
@@ -58,12 +61,13 @@ export function TitleBar() {
       className="mv-titlebar drag select-none relative z-titlebar grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-titlebar"
       style={{ height: "38px" }}
     >
-      {/* Left gutter — traffic lights space + PrimarySideBar toggle */}
+      {/* Left gutter — macOS traffic-light hint + PrimarySideBar toggle + breadcrumb */}
       <div
         data-tauri-drag-region
-        className="drag flex h-full items-center gap-1 pl-2"
-        style={{ paddingLeft: isMac ? "76px" : "8px" }}
+        className="drag flex h-full min-w-0 items-center gap-1"
+        style={{ paddingLeft: isMac ? "0px" : "8px" }}
       >
+        {isMac && <TrafficLights />}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -71,7 +75,7 @@ export function TitleBar() {
               onClick={handleTogglePrimarySideBar}
               data-testid="titlebar-toggle-primarysidebar"
               aria-pressed={primarySideBarVisible && !collapsed}
-              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              className="no-drag flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
             >
               <PanelLeft className="h-3.5 w-3.5" />
             </button>
@@ -80,6 +84,7 @@ export function TitleBar() {
             {primarySideBarVisible && !collapsed ? "Hide" : "Show"} Primary Side Bar
           </TooltipContent>
         </Tooltip>
+        <Breadcrumb className="ml-1 min-w-0" />
       </div>
 
       <div data-tauri-drag-region className="drag flex h-full items-center justify-center">
@@ -95,11 +100,11 @@ export function TitleBar() {
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1 text-left">Search files, commands, projects…</span>
               <kbd className="rounded-md bg-background/60 px-1.5 py-px text-[10px] tracking-wide text-muted-foreground">
-                ⌘P
+                {formatKeybinding("$mod+p", platform)}
               </kbd>
             </button>
           </TooltipTrigger>
-          <TooltipContent>Quick open ⌘P</TooltipContent>
+          <TooltipContent>Quick open {formatKeybinding("$mod+p", platform)}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -147,7 +152,7 @@ export function TitleBar() {
               <Settings className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Settings ⌘,</TooltipContent>
+          <TooltipContent side="bottom">Settings {formatKeybinding("$mod+,", platform)}</TooltipContent>
         </Tooltip>
         {!isMac && <WindowControls className="ml-1" />}
       </div>

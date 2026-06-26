@@ -40,6 +40,29 @@ describe("buildLaunchCommandLine", () => {
       buildLaunchCommandLine({ command: "codex", args: ["--flag", "two words"] })
     ).toBe(`codex --flag 'two words'` + CR);
   });
+
+  it("PowerShell: runs a bare command verbatim", () => {
+    expect(buildLaunchCommandLine({ command: "claude", args: ["--continue"] }, "powershell")).toBe(
+      "claude --continue" + CR
+    );
+  });
+
+  it("PowerShell: invokes a quoted path with the call operator", () => {
+    // A quoted path is a string expression in PowerShell — without `&` it is
+    // echoed, not executed (the bug this fixes).
+    expect(
+      buildLaunchCommandLine(
+        { command: "C:\\Users\\m\\AppData\\Roaming\\npm\\claude.cmd", args: ["--continue"] },
+        "powershell"
+      )
+    ).toBe("& 'C:\\Users\\m\\AppData\\Roaming\\npm\\claude.cmd' --continue" + CR);
+  });
+
+  it("cmd: double-quotes a path and runs it directly (no call operator)", () => {
+    expect(
+      buildLaunchCommandLine({ command: "C:\\npm\\claude.cmd", args: [] }, "cmd")
+    ).toBe(`"C:\\npm\\claude.cmd"` + CR);
+  });
 });
 
 describe("wrapBracketedPaste", () => {

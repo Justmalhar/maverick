@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +21,48 @@ pub trait BackendProbe: Send + Sync {
 
 pub struct SystemProbe;
 
+/// Build the `<tool> --version` probe command for a located path.
+///
+/// On Windows the AI CLIs are usually npm shims (`claude.cmd` / `claude.ps1`)
+/// and `CreateProcessW` can only execute real `.exe`s (it never consults a
+/// shell), so a `.cmd`/`.bat` is run through `cmd.exe /C` and a `.ps1` through
+/// `powershell -File` — otherwise `version` is always null for installed tools.
+/// `CREATE_NO_WINDOW` keeps the console-subsystem child from flashing a window.
+fn version_command(path: &std::path::Path) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let p = path.to_string_lossy().into_owned();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase());
+        let mut cmd = match ext.as_deref() {
+            Some("cmd") | Some("bat") => {
+                let mut c = std::process::Command::new("cmd.exe");
+                c.args(["/C", &p]);
+                c
+            }
+            Some("ps1") => {
+                let mut c = std::process::Command::new("powershell.exe");
+                c.args(["-NoProfile", "-NonInteractive", "-File", &p]);
+                c
+            }
+            _ => std::process::Command::new(path),
+        };
+        cmd.arg("--version");
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        let mut cmd = std::process::Command::new(path);
+        cmd.arg("--version");
+        cmd
+    }
+}
+
 /// Common locations outside of $PATH where AI CLIs are known to install.
 /// `which` searches PATH first; this is the fallback so we still find tools
 /// that installers dropped into well-known dirs but never added to the
@@ -35,6 +78,11 @@ fn fallback_search_paths(command: &str, home: Option<&PathBuf>) -> Vec<PathBuf> 
         roots.push(h.join(".npm-global/bin"));
         roots.push(h.join(".bun/bin"));
         roots.push(h.join(".cargo/bin"));
+        // On Windows, npm global installs its CLI shims under %APPDATA%\npm
+        // (claude.cmd / claude.ps1) — not ~/.npm-global. Without this, a
+        // backend not on PATH is never found by the fallback.
+        #[cfg(windows)]
+        roots.push(h.join("AppData").join("Roaming").join("npm"));
         match command {
             "claude" => roots.push(h.join(".claude/local/claude")),
             "codex" => roots.push(h.join(".codex/bin/codex")),
@@ -76,26 +124,37 @@ impl BackendProbe for SystemProbe {
     }
 
     fn version(&self, _command: &str, path: &PathBuf) -> Option<String> {
-        // 2s timeout via std::process::Command + thread spawn.
-        let path_clone = path.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let out = std::process::Command::new(&path_clone)
-                .arg("--version")
-                .output();
-            let _ = tx.send(out);
-        });
-        match rx.recv_timeout(Duration::from_secs(2)) {
-            Ok(Ok(out)) if out.status.success() => {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                Some(if s.is_empty() {
-                    String::from_utf8_lossy(&out.stderr).trim().to_string()
-                } else {
-                    s
-                })
+        let mut cmd = version_command(path);
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = cmd.spawn().ok()?;
+        // Poll for completion and KILL the child if it outlives its 2s budget, so
+        // a hung `--version` can't leak the child process (the old thread+output()
+        // approach left both the worker thread and the child running forever).
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(_) => return None,
             }
-            _ => None,
         }
+        let out = child.wait_with_output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        Some(if s.is_empty() {
+            String::from_utf8_lossy(&out.stderr).trim().to_string()
+        } else {
+            s
+        })
     }
 }
 
@@ -228,5 +287,33 @@ mod tests {
     fn fallback_search_includes_ollama_app_bundle() {
         let paths = fallback_search_paths("ollama", None);
         assert!(paths.iter().any(|p| p.to_string_lossy().contains("Ollama.app")));
+    }
+
+    #[test]
+    fn version_command_runs_a_plain_path_directly() {
+        let cmd = version_command(std::path::Path::new("/usr/local/bin/claude"));
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.contains(&"--version".to_string()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn version_command_wraps_a_cmd_shim_through_cmd_exe() {
+        let cmd = version_command(std::path::Path::new(r"C:\npm\claude.cmd"));
+        assert_eq!(cmd.get_program(), "cmd.exe");
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.contains(&"/C".to_string()));
+        assert!(args.iter().any(|a| a.contains("claude.cmd")));
+        assert!(args.contains(&"--version".to_string()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn version_command_wraps_a_ps1_shim_through_powershell() {
+        let cmd = version_command(std::path::Path::new(r"C:\npm\claude.ps1"));
+        assert_eq!(cmd.get_program(), "powershell.exe");
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.contains(&"-File".to_string()));
+        assert!(args.iter().any(|a| a.contains("claude.ps1")));
     }
 }

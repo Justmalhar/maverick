@@ -5,6 +5,7 @@ import { useShortcuts } from "./useShortcuts";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
+import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/leaf-registry";
 
 const initial = useWorkbench.getState();
 
@@ -130,6 +131,26 @@ describe("useShortcuts", () => {
     expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
   });
 
+  it("diff.nextHunk / diff.prevHunk dispatch hunk-nav events when no field is focused", () => {
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("] c"));
+    act(() => fire("[ c"));
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:nextHunk" }));
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:prevHunk" }));
+  });
+
+  it("diff.nextHunk is suppressed while a text field is focused", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    renderHook(() => useShortcuts());
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    act(() => fire("] c"));
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "maverick:diff:nextHunk" }));
+    input.remove();
+  });
+
   it("terminal.splitH dispatches maverick:terminal:splitH", () => {
     renderHook(() => useShortcuts());
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
@@ -225,7 +246,7 @@ describe("useShortcuts", () => {
     renderHook(() => useShortcuts());
     act(() => fire("$mod+b"));
     expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(false);
-    act(() => fire("$mod+Shift+."));
+    act(() => fire("$mod+Shift+Period"));
     expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(false);
     act(() => fire("$mod+j"));
     expect(useWorkbench.getState().layout.panelVisible).toBe(true);
@@ -246,7 +267,7 @@ describe("useShortcuts", () => {
     expect(useWorkbench.getState().presetLauncherOpen).toBe(true);
     act(() => fire("$mod+,"));
     expect(useWorkbench.getState().settingsOpen).toBe(true);
-    act(() => fire("$mod+Shift+/"));
+    act(() => fire("$mod+Shift+Slash"));
     expect(useWorkbench.getState().keybindingHelpOpen).toBe(true);
   });
 
@@ -266,7 +287,7 @@ describe("useShortcuts", () => {
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "ws1", projectId: "p1" })]);
     useWorkbench.getState().setActiveWorkspace("ws1");
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+Shift+,"));
+    act(() => fire("$mod+Shift+Comma"));
     const { projectSettings } = useWorkbench.getState();
     expect(projectSettings.open).toBe(true);
     expect(projectSettings.projectId).toBe("p1");
@@ -274,7 +295,7 @@ describe("useShortcuts", () => {
 
   it("project-settings.open is a no-op when no active workspace", () => {
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+Shift+,"));
+    act(() => fire("$mod+Shift+Comma"));
     expect(useWorkbench.getState().projectSettings.open).toBe(false);
   });
 
@@ -302,6 +323,8 @@ describe("useShortcuts", () => {
     });
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w1", worktreePath: "/wt" })]);
     useWorkbench.getState().setActiveWorkspace("w1");
+    // Agent runs in the primary leaf; seed its live PTY id so the review sends.
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
     renderHook(() => useShortcuts());
     act(() => fire("$mod+Shift+r"));
     await waitFor(() => expect(useWorkbench.getState().activeWorkspaceId).toBe("w1"));

@@ -13,6 +13,15 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "general.restoreSession": true,
   // JSON-encoded Record<string,string> of global env vars merged into every PTY.
   "general.env": "{}",
+  // Command auto-run in each new workspace terminal (e.g. "claude
+  // --dangerously-skip-permissions"). Blank → use the default backend's command.
+  "general.startupCommand": "",
+  // Use the agent CLI to name task branches (feature-name in the scheme) instead
+  // of a title slug. Falls back to the slug if the CLI is slow/unavailable.
+  "general.aiBranchNames": true,
+  // Where a task/workspace agent runs: "headless" (background, streamed to the
+  // Agent Output panel — the default) or "terminal" (typed into an interactive PTY).
+  "general.agentLaunchMode": "headless",
 
   // Appearance
   "appearance.theme": "",
@@ -53,6 +62,8 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "terminal.codex.command": "codex",
   "terminal.gemini.command": "gemini",
   "terminal.pi.command": "pi",
+  // Default shell new terminals launch under (Windows: powershell | cmd | wsl).
+  "terminal.defaultShell": "powershell",
 
   // Advanced
   "advanced.largeTextThreshold": 5000,

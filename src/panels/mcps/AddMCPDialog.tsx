@@ -54,9 +54,11 @@ export default function AddMCPDialog({ open, onOpenChange, onAdded, workspaceId 
   }, [open]);
 
   const addArg = () => {
-    const t = argInput.trim();
-    if (!t) return;
-    setArgs([...args, t]);
+    // The placeholder shows a comma-separated example; honor it by splitting so
+    // pasting "-y, @scope/pkg" yields two args instead of one malformed token.
+    const tokens = argInput.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!tokens.length) return;
+    setArgs([...args, ...tokens]);
     setArgInput("");
   };
 
@@ -196,7 +198,7 @@ export default function AddMCPDialog({ open, onOpenChange, onAdded, workspaceId 
                     className="cursor-pointer"
                     onClick={() => setEnv(env.filter((_, j) => j !== i))}
                   >
-                    {p.key}=•••
+                    {p.key}={p.value ? "•••" : "(empty)"}
                   </Badge>
                 ))}
               </div>

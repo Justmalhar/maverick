@@ -1,28 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useWorkbench } from "@/state/store";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 vi.mock("@/lib/tauri", () => ({
   ptySpawn: vi.fn(async () => ({ ptyId: "pty-xyz" })),
   ptyKill: vi.fn(async () => undefined),
-  defaultShell: vi.fn(async () => "/bin/zsh"),
 }));
 
 import * as tauri from "@/lib/tauri";
-import { useTerminalTab, __resetTerminalShellCacheForTests } from "./useTerminalTab";
+import { useTerminalTab } from "./useTerminalTab";
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
-  __resetTerminalShellCacheForTests();
   vi.mocked(tauri.ptySpawn).mockReset().mockResolvedValue({ ptyId: "pty-xyz" });
   vi.mocked(tauri.ptyKill).mockReset().mockResolvedValue(undefined);
-  vi.mocked(tauri.defaultShell).mockReset().mockResolvedValue("/bin/zsh");
   useWorkbench.setState({ ...initial, terminalTabs: [], activeTerminalTabId: null });
+  useSettingsStore.setState({ values: {} });
 });
 
 describe("useTerminalTab", () => {
-  it("open spawns a PTY at the given cwd, adds a tab, and activates it", async () => {
+  it("open spawns the platform-default shell, adds a tab, and activates it", async () => {
+    // jsdom is detected as non-Windows, so the default resolves to login zsh.
     const { result } = renderHook(() => useTerminalTab());
     let tabId = "";
     await act(async () => {
@@ -30,8 +30,7 @@ describe("useTerminalTab", () => {
       tabId = tab.id;
     });
 
-    expect(tauri.defaultShell).toHaveBeenCalled();
-    expect(tauri.ptySpawn).toHaveBeenCalledWith("/bin/zsh", ["-l"], "/Users/me/Desktop");
+    expect(tauri.ptySpawn).toHaveBeenCalledWith("/bin/zsh", ["-l"], "/Users/me/Desktop", {});
 
     const state = useWorkbench.getState();
     expect(state.terminalTabs).toHaveLength(1);
@@ -39,6 +38,46 @@ describe("useTerminalTab", () => {
     expect(state.terminalTabs[0].title).toBe("Desktop");
     expect(state.terminalTabs[0].ptyId).toBe("pty-xyz");
     expect(state.activeTerminalTabId).toBe(tabId);
+  });
+
+  it("derives the tab title from a Windows backslash path (not the full path)", async () => {
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("C:\\Users\\me\\my-proj");
+    });
+    expect(useWorkbench.getState().terminalTabs[0].title).toBe("my-proj");
+  });
+
+  it.each([
+    ["powershell", "powershell.exe", ["-NoLogo"]],
+    ["cmd", "cmd.exe", []],
+    ["wsl", "wsl.exe", []],
+  ] as const)("open with kind %s spawns %s", async (kind, shell, args) => {
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("/work", kind);
+    });
+    expect(tauri.ptySpawn).toHaveBeenCalledWith(shell, args, "/work", {});
+  });
+
+  it("uses the persisted default shell kind when no kind is passed", async () => {
+    useSettingsStore.setState({ values: { "terminal.defaultShell": "cmd" } });
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("/work");
+    });
+    expect(tauri.ptySpawn).toHaveBeenCalledWith("cmd.exe", [], "/work", {});
+  });
+
+  it("forwards the persisted global env to the spawn", async () => {
+    useSettingsStore.setState({
+      values: { "general.env": JSON.stringify({ FOO: "bar" }) },
+    });
+    const { result } = renderHook(() => useTerminalTab());
+    await act(async () => {
+      await result.current.open("/work");
+    });
+    expect(tauri.ptySpawn).toHaveBeenCalledWith("/bin/zsh", ["-l"], "/work", { FOO: "bar" });
   });
 
   it("adds the tab optimistically (empty ptyId) before the spawn resolves, then binds it", async () => {
@@ -52,8 +91,6 @@ describe("useTerminalTab", () => {
     let openPromise!: Promise<unknown>;
     await act(async () => {
       openPromise = result.current.open("/work");
-      // Let the synchronous optimistic add + the cached-shell microtask settle,
-      // but NOT the (still-pending) spawn.
       await Promise.resolve();
     });
 
@@ -83,40 +120,6 @@ describe("useTerminalTab", () => {
     expect((err as Error).message).toBe("spawn boom");
     expect(useWorkbench.getState().terminalTabs).toHaveLength(0);
     expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
-  });
-
-  it("caches the shell across opens (defaultShell resolved once)", async () => {
-    const { result } = renderHook(() => useTerminalTab());
-    await act(async () => {
-      await result.current.open("/a");
-    });
-    await act(async () => {
-      await result.current.open("/b");
-    });
-    expect(tauri.defaultShell).toHaveBeenCalledTimes(1);
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(2);
-  });
-
-  it("re-resolves the shell after a failed lookup", async () => {
-    vi.mocked(tauri.defaultShell).mockRejectedValueOnce(new Error("no shell"));
-    const { result } = renderHook(() => useTerminalTab());
-    let err: unknown;
-    await act(async () => {
-      try {
-        await result.current.open("/a");
-      } catch (e) {
-        err = e;
-      }
-    });
-    expect((err as Error).message).toBe("no shell");
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(0);
-
-    // The cache cleared on failure, so the next open resolves the shell again.
-    await act(async () => {
-      await result.current.open("/b");
-    });
-    expect(tauri.defaultShell).toHaveBeenCalledTimes(2);
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(1);
   });
 
   it("close kills the PTY and removes the tab", async () => {

@@ -54,7 +54,7 @@ describe("ProjectsView", () => {
     errSpy.mockRestore();
   });
 
-  it("onAddWorkspace creates workspace with the project path forwarded", async () => {
+  it("New workspace → 'AI name later' creates with an undefined branch (sidecar callsign)", async () => {
     useWorkbench.setState({
       ...initial,
       projects: [makeProject({ id: "p1", name: "demo", path: "/tmp/demo" })],
@@ -63,7 +63,7 @@ describe("ProjectsView", () => {
     vi.mocked(invoke).mockResolvedValueOnce({ id: "w-new", projectId: "p1", branch: "viper", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s", title: "Viper" } as never);
     renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
-    // branch stays undefined so the sidecar generates a unique callsign.
+    await userEvent.click(await screen.findByTestId("branch-ai-later"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", {
       projectId: "p1",
       projectPath: "/tmp/demo",
@@ -73,6 +73,28 @@ describe("ProjectsView", () => {
     }));
     // Creation queues the setup script to stream in the Panel's Setup tab.
     expect(useWorkbench.getState().pendingSetupIds).toContain("w-new");
+    // "AI name later" marks the workspace for an AI rename after its first commit.
+    await waitFor(() => expect(useWorkbench.getState().pendingAiRename).toContain("w-new"));
+  });
+
+  it("New workspace → typed name creates the composed feature/<slug> branch", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "demo", path: "/tmp/demo" })],
+      backends: [makeBackend({ id: "claude", name: "claude" })],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({ id: "w-named", projectId: "p1", branch: "feature/login-page", agentBackend: "claude-code", worktreePath: "", status: "active", sessionId: "s" } as never);
+    renderWithProviders(<ProjectsView />);
+    await userEvent.click(screen.getByLabelText("New workspace"));
+    await userEvent.type(await screen.findByTestId("branch-name-input"), "Login Page");
+    await userEvent.click(screen.getByTestId("branch-create"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workspace_create", {
+      projectId: "p1",
+      projectPath: "/tmp/demo",
+      branch: "feature/login-page",
+      backend: "claude-code",
+      baseBranch: undefined,
+    }));
   });
 
   it("Create from opens the branch picker and creates from the chosen branch", async () => {
@@ -116,6 +138,7 @@ describe("ProjectsView", () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("fail"));
     renderWithProviders(<ProjectsView />);
     await userEvent.click(screen.getByLabelText("New workspace"));
+    await userEvent.click(await screen.findByTestId("branch-ai-later"));
     await waitFor(() => expect(errSpy).toHaveBeenCalled());
     errSpy.mockRestore();
   });

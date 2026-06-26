@@ -4,6 +4,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { RpcHandlers } from "./rpc-handlers";
 import { SQLiteStore, defaultMigrationsDir } from "./sqlite-store";
+
+// Handlers compute config/instructions paths via path.join → native '\' on
+// Windows; the fake fs maps are keyed by forward-slash POSIX paths. Normalize at
+// the fake-fs boundary so the seeded keys match either way (no-op on POSIX).
+const norm = (p: string) => p.split(/[\\/]/).join("/");
 import { ProcessManager } from "./process-manager";
 import { WorktreeManager } from "./worktree-manager";
 import { ConfigLoader } from "./config-loader";
@@ -21,7 +26,8 @@ import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
-import type { KanbanTask, Shell } from "./types";
+import type { ChecksModule } from "./checks-module";
+import type { ChecksReport, KanbanTask, Shell } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
 function fakeShell(steps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []): {
@@ -64,8 +70,6 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
   const proc = new ProcessManager({
     spawn: (() => fakeProc()) as Spawner,
-    notifier: { write: () => {} },
-    ids,
   });
   const worktree = new WorktreeManager({ shell, ids });
   const config = new ConfigLoader({
@@ -145,6 +149,49 @@ describe("RpcHandlers", () => {
     expect(list.find((p) => p.id === added.id)).toBeDefined();
   });
 
+  test("checks.get forwards worktreePath to the checks module", async () => {
+    const calls: Array<{ worktreePath: string }> = [];
+    const report: ChecksReport = {
+      git: { branch: "feat", ahead: 0, behind: 0, changedFiles: 0, conflicts: 0 },
+      pr: null,
+      ghAvailable: false,
+      checks: [],
+      merge: { ready: false, blockers: ["no pull request open"] },
+    };
+    const checks = {
+      async get(p: { worktreePath: string }) {
+        calls.push(p);
+        return report;
+      },
+    } as unknown as ChecksModule;
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, checks });
+    const got = (await handlers.dispatch("checks.get", { worktreePath: "/wt" })) as ChecksReport;
+    expect(calls).toEqual([{ worktreePath: "/wt" }]);
+    expect(got).toBe(report);
+  });
+
+  test("agent.run / agent.kill dispatch to the AgentRunner", async () => {
+    const runCalls: unknown[] = [];
+    const killCalls: unknown[] = [];
+    const agentRunner = {
+      run(p: unknown) { runCalls.push(p); return { agentId: "agent_x" }; },
+      kill(p: unknown) { killCalls.push(p); return { ok: true as const }; },
+      killWorkspace() {},
+    } as unknown as import("./agent-runner").AgentRunner;
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, agentRunner });
+    const run = (await handlers.dispatch("agent.run", {
+      workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt",
+    })) as { agentId: string };
+    expect(run.agentId).toBe("agent_x");
+    expect(runCalls).toEqual([
+      { workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt", resumeSessionId: undefined, permissionMode: undefined, env: undefined },
+    ]);
+    await handlers.dispatch("agent.kill", { agentId: "agent_x" });
+    expect(killCalls).toEqual([{ agentId: "agent_x" }]);
+  });
+
   test("workspace.create + list + destroy", async () => {
     const proj = (await h.dispatch("project.add", { path: "/tmp/ws" })) as { id: string };
     const ws = (await h.dispatch("workspace.create", {
@@ -192,59 +239,6 @@ describe("RpcHandlers", () => {
       toolCallsJson: null,
     })) as { id: string };
     expect(r.id).toBeDefined();
-  });
-
-  test("pty.spawn/write/resize/kill", async () => {
-    const { ptyId } = (await h.dispatch("pty.spawn", {
-      workspaceId: "ws",
-      command: "echo",
-      args: ["hi"],
-    })) as { ptyId: string };
-    await h.dispatch("pty.write", { ptyId, data: "x" });
-    await h.dispatch("pty.resize", { ptyId, cols: 80, rows: 24 });
-    await h.dispatch("pty.kill", { ptyId });
-    expect(h.process.has(ptyId)).toBe(false);
-  });
-
-  test("pty.spawn defaults cwd to the workspace worktree path", async () => {
-    const spawnCalls: Array<{ cmd: string[]; cwd?: string }> = [];
-    const ids = (() => {
-      let n = 0;
-      return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
-    })();
-    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
-    const proc = new ProcessManager({
-      spawn: ((cmd, opts) => {
-        spawnCalls.push({ cmd, cwd: opts.cwd });
-        return fakeProc();
-      }) as Spawner,
-      notifier: { write: () => {} },
-      ids,
-    });
-    const handlers = new RpcHandlers({ store, process: proc });
-    const proj = (await handlers.dispatch("project.add", { path: "/tmp/wt-cwd" })) as { id: string };
-    store.workspaceCreate({
-      id: "ws-cwd",
-      projectId: proj.id,
-      branch: "main",
-      agentBackend: "claude",
-      worktreePath: "/tmp/wt-cwd/.maverick/worktrees/ws-cwd",
-    });
-
-    await handlers.dispatch("pty.spawn", {
-      workspaceId: "ws-cwd",
-      command: "/bin/zsh",
-      args: ["-l"],
-    });
-    expect(spawnCalls[0].cwd).toBe("/tmp/wt-cwd/.maverick/worktrees/ws-cwd");
-
-    await handlers.dispatch("pty.spawn", {
-      workspaceId: "ws-cwd",
-      command: "/bin/zsh",
-      args: ["-l"],
-      cwd: "/explicit/cwd",
-    });
-    expect(spawnCalls[1].cwd).toBe("/explicit/cwd");
   });
 
   test("config.load and skills.list/run", async () => {
@@ -755,7 +749,7 @@ describe("RpcHandlers", () => {
     const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir(), ids });
     const instructions = new InstructionsResolver({
       home: "/home/test",
-      exists: (p: string) => p === "/wt/MAVERICK.md",
+      exists: (p: string) => norm(p) === "/wt/MAVERICK.md",
       readFile: () => "project rules",
     });
     const handlers = new RpcHandlers({ store, instructions });
@@ -810,10 +804,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -836,10 +830,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: existing, command: c, args: [] }\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -863,10 +857,10 @@ describe("RpcHandlers", () => {
         "version: 1\nbackends:\n  default: claude\n  available: []\nmcps:\n  - { name: fs, command: old, args: [] }\n",
     };
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const handlers = new RpcHandlers({ config, notifier: { write: () => {} } });
@@ -896,15 +890,15 @@ describe("RpcHandlers", () => {
   test("mcp.add resolves projectPath from workspaceId", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mvk-mcpadd-"));
     const files: Record<string, string> = {
-      [join(dir, "maverick.yaml")]:
+      [norm(join(dir, "maverick.yaml"))]:
         "version: 1\nbackends:\n  default: claude\n  available: []\n",
     };
     const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
     const config = new ConfigLoader({
-      read: (p) => files[p] ?? "",
-      exists: (p) => p in files,
+      read: (p) => files[norm(p)] ?? "",
+      exists: (p) => norm(p) in files,
       write: (p, c) => {
-        files[p] = c;
+        files[norm(p)] = c;
       },
     });
     const fakeWorktree = {
@@ -967,7 +961,9 @@ describe("RpcHandlers", () => {
   it("project.settings.openFile returns the absolute path", async () => {
     const { handlers, dir, projectId } = makeWithTempProject();
     const res = (await handlers.dispatch("project.settings.openFile", { projectId })) as { path: string };
-    expect(res.path).toBe(`${dir}/maverick.json`);
+    // join (not a literal '/') so the separator is correct on Windows too.
+    const { join } = await import("path");
+    expect(res.path).toBe(join(dir, "maverick.json"));
   });
 
   it("workspace.create does NOT run scripts.setup (the Setup tab streams it)", async () => {
@@ -1049,9 +1045,15 @@ describe("RpcHandlers", () => {
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
 
+    // PowerShell `>` redirection writes UTF-16LE + BOM, so the read would be
+    // garbled; WriteAllText writes exact UTF-8. Use a platform-native command.
+    const archive =
+      process.platform === "win32"
+        ? `[System.IO.File]::WriteAllText('${markerPath}', 'archived')`
+        : `printf archived > ${markerPath}`;
     await h.dispatch("project.settings.update", {
       projectId,
-      patch: { scripts: { setup: "", run: "", archive: `echo archived > ${markerPath}` } },
+      patch: { scripts: { setup: "", run: "", archive } },
     });
     const ws = (await h.dispatch("workspace.create", {
       projectId, projectPath: dir, branch: "feat/archive", backend: "claude",
@@ -1060,7 +1062,8 @@ describe("RpcHandlers", () => {
     await h.dispatch("workspace.destroy", { workspaceId: ws.id });
 
     expect(existsSync(markerPath)).toBe(true);
-    expect(readFileSync(markerPath, "utf8").trim()).toBe("archived");
+    // Tolerate a leading BOM in case a shell wrote one (escape, not a literal).
+    expect(readFileSync(markerPath, "utf8").replace(/^﻿/, "").trim()).toBe("archived");
   });
 
   it("workspace.destroy skips archive when scripts.archive is empty", async () => {
@@ -1312,6 +1315,7 @@ describe("RpcHandlers", () => {
     const fakeProcess = {
       async spawnOnce() { return { code: 0 }; },
       spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({
@@ -1362,6 +1366,7 @@ describe("RpcHandlers", () => {
     const fakeProcess = {
       async spawnOnce() { return { code: 0 }; },
       spawnOnceHandle() { return { proc: hungProc, exited: hungProc.exited }; },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({
@@ -1406,6 +1411,7 @@ describe("RpcHandlers", () => {
       spawnOnceHandle() {
         return { proc: { kill() {} }, exited: Promise.reject(new Error("archive boom")) };
       },
+      killWorkspace() { return { ok: true as const }; },
     };
     const { RpcHandlers } = await import("./rpc-handlers");
     const h = new RpcHandlers({
@@ -1488,5 +1494,20 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     const handlers = new RpcHandlers({ store, git: git as never, notifier: { write: () => {} } });
     const res = await handlers.dispatch("git.discard_file", { worktreePath: "/wt", filePath: "a.ts" });
     expect(res).toEqual({ ok: true });
+  });
+
+  test("automation.activateTriggers / deactivateTriggers delegate to TriggerManager", async () => {
+    const calls: string[] = [];
+    const triggers = {
+      activate: (p: { workspaceId: string }) => calls.push(`activate:${p.workspaceId}`),
+      deactivate: (id: string) => calls.push(`deactivate:${id}`),
+    };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, triggers: triggers as never, notifier: { write: () => {} } });
+    await handlers.dispatch("automation.activateTriggers", {
+      workspaceId: "w1", projectPath: "/p", worktreePath: "/wt",
+    });
+    await handlers.dispatch("automation.deactivateTriggers", { workspaceId: "w1" });
+    expect(calls).toEqual(["activate:w1", "deactivate:w1"]);
   });
 });

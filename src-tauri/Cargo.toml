@@ -64,7 +64,7 @@ tauri-build = { version = "2", features = [] }
 # the sidecar JSON-RPC client. Shared with the headless daemon (maverick-hostd).
 maverick-core = { path = "core" }
 # `unstable` enables embedded child webviews (Window::add_child) used by the Browser panel.
-tauri = { version = "2", features = ["unstable"] }
+tauri = { version = "2", features = ["unstable", "protocol-asset"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"

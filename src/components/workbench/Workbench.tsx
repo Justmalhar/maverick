@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAgentNotifications } from "@/hooks/useAgentNotifications";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { onProjectSettingsChanged } from "@/lib/tauri";
@@ -16,6 +17,7 @@ import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
 import { QuickOpen } from "@/components/quickopen/QuickOpen";
 import { CommandPalette } from "@/components/quickopen/CommandPalette";
+import { KeybindingHelp } from "@/components/quickopen/KeybindingHelp";
 import { Toaster } from "@/components/notifications/Toaster";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
@@ -45,6 +47,8 @@ export function Workbench() {
   });
   const loadProjectSettings = useProjectSettingsStore((s) => s.load);
   const { refreshProjects, refreshWorkspaces, refreshBackends } = useWorkspace();
+  // Raise OS/in-app notifications when any agent finishes or needs input.
+  useAgentNotifications();
   // Collapse the PrimarySideBar to icon-only below the responsive breakpoint.
   const { collapsed } = useResponsiveLayout();
 
@@ -83,31 +87,36 @@ export function Workbench() {
       <div className="flex flex-1 overflow-hidden" style={{ borderTop: "1px solid hsl(var(--border))" }}>
         <ResizablePanelGroup
           direction="horizontal"
+          autoSaveId="mv-workbench-layout"
           className="h-full flex-1"
         >
           {layout.primarySideBarVisible && !collapsed && (
             <>
               <ResizablePanel
+                id="primary-sidebar"
+                order={1}
                 defaultSize={15}
                 minSize={11}
-                maxSize={30}
+                maxSize={40}
                 data-testid="primarysidebar-panel"
                 className="bg-sidebar"
               >
                 <PrimarySideBar />
               </ResizablePanel>
-              <ResizableHandle />
+              <ResizableHandle withHandle />
             </>
           )}
 
-          <ResizablePanel defaultSize={layout.auxiliaryBarVisible ? 63 : 85} className="bg-editor" style={{ borderLeft: "1px solid hsl(var(--border))" }}>
+          <ResizablePanel id="editor-area" order={2} defaultSize={layout.auxiliaryBarVisible ? 63 : 85} className="bg-editor" style={{ borderLeft: "1px solid hsl(var(--border))" }}>
             <EditorArea />
           </ResizablePanel>
 
           {layout.auxiliaryBarVisible && (
             <>
-              <ResizableHandle />
+              <ResizableHandle withHandle />
               <ResizablePanel
+                id="auxiliary-bar"
+                order={3}
                 defaultSize={22}
                 minSize={14}
                 maxSize={36}
@@ -126,6 +135,7 @@ export function Workbench() {
 
       <QuickOpen />
       <CommandPalette />
+      <KeybindingHelp />
 
       <Suspense fallback={<OverlayFallback />}>
         <PresetPicker

@@ -76,11 +76,11 @@ describe("tauri command wrappers", () => {
     expect(revoked).toBe(true);
   });
 
-  it("defaultShell forwards to the default_shell command", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce("/bin/zsh" as never);
-    const shell = await api.defaultShell();
-    expect(invoke).toHaveBeenLastCalledWith("default_shell");
-    expect(shell).toBe("/bin/zsh");
+  it("wslAvailable forwards to the wsl_available command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(true as never);
+    const ok = await api.wslAvailable();
+    expect(invoke).toHaveBeenLastCalledWith("wsl_available");
+    expect(ok).toBe(true);
   });
 
   it("config and messages", async () => {

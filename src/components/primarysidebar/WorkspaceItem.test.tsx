@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { WorkspaceItem } from "./WorkspaceItem";
@@ -89,5 +90,15 @@ describe("WorkspaceItem", () => {
     screen.getByTestId("workspace-item-w1").focus();
     await userEvent.keyboard("{Enter}");
     expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
+  });
+
+  it("activates on Space and prevents the default page scroll", () => {
+    const ws = makeWorkspace({ id: "w2", title: "Vega" });
+    useWorkbench.setState({ ...initial, workspaces: [ws], activeWorkspaceId: null });
+    renderWithProviders(<WorkspaceItem workspace={ws} />);
+    // fireEvent returns false when a handler called preventDefault on the event.
+    const notCancelled = fireEvent.keyDown(screen.getByTestId("workspace-item-w2"), { key: " " });
+    expect(notCancelled).toBe(false);
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("w2");
   });
 });

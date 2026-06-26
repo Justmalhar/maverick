@@ -59,6 +59,9 @@ fn parses_notification() {
 fn dotted_methods_become_colon_events() {
     assert_eq!(jsonrpc_event_name("pty.data"), "pty:data");
     assert_eq!(jsonrpc_event_name("workspace.status"), "workspace:status");
+    // Headless agent stream events forward with no extra Rust code.
+    assert_eq!(jsonrpc_event_name("agent.data"), "agent:data");
+    assert_eq!(jsonrpc_event_name("agent.exit"), "agent:exit");
 }
 
 #[test]

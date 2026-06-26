@@ -31,8 +31,12 @@ describe("PDFPreview", () => {
   });
 
   it("loads the document, paginates, and zooms", async () => {
+    const pdfjs = await import("pdfjs-dist");
+    vi.mocked(pdfjs.getDocument).mockClear();
     renderWithProviders(<PDFPreview filePath="/a.pdf" />);
     await waitFor(() => expect(screen.getByTestId("pdf-canvas")).toBeInTheDocument());
+    // pdf.js must fetch the asset-converted URL, not the raw OS path.
+    expect(pdfjs.getDocument).toHaveBeenCalledWith({ url: "asset:///a.pdf" });
     await userEvent.click(screen.getByTestId("pdf-next"));
     await userEvent.click(screen.getByTestId("pdf-prev"));
     await userEvent.click(screen.getByTestId("pdf-zoom-in"));

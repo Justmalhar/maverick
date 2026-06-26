@@ -6,7 +6,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectItem } from "./ProjectItem";
 import { CreateFromDialog } from "./CreateFromDialog";
+import { NameWorkspaceDialog } from "./NameWorkspaceDialog";
 import { pickProjectFolder } from "@/lib/dialog";
+import { resolveStartupLaunch } from "@/lib/launch";
 
 const DEFAULT_BACKEND = "claude-code";
 
@@ -15,6 +17,7 @@ export function ProjectsView() {
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
   const { addProjectFromPath, create } = useWorkspace();
   const [createFromProjectId, setCreateFromProjectId] = useState<string | null>(null);
+  const [nameWorkspaceProjectId, setNameWorkspaceProjectId] = useState<string | null>(null);
 
   async function onAddProject() {
     const path = await pickProjectFolder();
@@ -26,11 +29,20 @@ export function ProjectsView() {
     }
   }
 
-  // Branch name and base branch are resolved by the sidecar (generated
-  // callsign, branched from project settings' branchFrom).
-  async function onAddWorkspace(projectId: string, baseBranch?: string) {
+  // Creates the workspace and stages a launch spec so the default agent CLI
+  // (e.g. `claude`) auto-starts. `branch` undefined → the sidecar generates a
+  // temporary callsign (the "let AI name it later" path); a provided branch
+  // (e.g. "feature/login-page") is used verbatim.
+  async function onAddWorkspace(
+    projectId: string,
+    opts: { baseBranch?: string; branch?: string; aiLater?: boolean } = {}
+  ) {
     try {
-      await create(projectId, undefined, DEFAULT_BACKEND, baseBranch);
+      const ws = await create(projectId, opts.branch, DEFAULT_BACKEND, opts.baseBranch);
+      const { command, args } = resolveStartupLaunch(DEFAULT_BACKEND);
+      useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
+      // "Let AI name it later": mark for an AI rename from the diff after first commit.
+      if (opts.aiLater) useWorkbench.getState().markPendingAiRename(ws.id);
     } catch (e) {
       console.error("addWorkspace failed", e);
     }
@@ -79,7 +91,7 @@ export function ProjectsView() {
               <ProjectItem
                 key={p.id}
                 project={p}
-                onAddWorkspace={(projectId) => void onAddWorkspace(projectId)}
+                onAddWorkspace={(projectId) => setNameWorkspaceProjectId(projectId)}
                 onSettings={(projectId) => openProjectSettings({ projectId })}
                 onCreateFrom={(projectId) => setCreateFromProjectId(projectId)}
               />
@@ -95,7 +107,20 @@ export function ProjectsView() {
         }}
         projectPath={createFromProject?.path ?? null}
         onSelect={(baseBranch) => {
-          if (createFromProjectId) void onAddWorkspace(createFromProjectId, baseBranch);
+          if (createFromProjectId) void onAddWorkspace(createFromProjectId, { baseBranch });
+        }}
+      />
+
+      <NameWorkspaceDialog
+        open={nameWorkspaceProjectId !== null}
+        onOpenChange={(open) => {
+          if (!open) setNameWorkspaceProjectId(null);
+        }}
+        onCreate={(branch) => {
+          if (nameWorkspaceProjectId) void onAddWorkspace(nameWorkspaceProjectId, { branch });
+        }}
+        onAiLater={() => {
+          if (nameWorkspaceProjectId) void onAddWorkspace(nameWorkspaceProjectId, { aiLater: true });
         }}
       />
     </div>

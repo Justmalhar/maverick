@@ -2,6 +2,11 @@ import { describe, test, expect } from "bun:test";
 import { FileTree } from "./file-tree";
 import type { Shell } from "./types";
 
+// Production walks with path.join, which emits native '\' on Windows; the fake
+// fs is keyed by forward-slash POSIX paths. Normalize the incoming path so the
+// fixture matches regardless of separator (no-op on POSIX).
+const norm = (p: string) => p.split(/[\\/]/).join("/");
+
 interface FakeFs {
   dirs: Set<string>;
   files: Map<string, string>;
@@ -31,7 +36,8 @@ function makeTree(fs: FakeFs, status = ""): FileTree {
   };
   return new FileTree({
     shell,
-    readdir(p) {
+    readdir(rawP) {
+      const p = norm(rawP);
       const entries: string[] = [];
       for (const d of fs.dirs) {
         if (d !== p && d.startsWith(p + "/") && !d.slice(p.length + 1).includes("/")) {
@@ -45,8 +51,8 @@ function makeTree(fs: FakeFs, status = ""): FileTree {
       }
       return entries;
     },
-    stat(p) {
-      return { isDirectory: fs.dirs.has(p) };
+    stat(rawP) {
+      return { isDirectory: fs.dirs.has(norm(rawP)) };
     },
   });
 }
@@ -155,7 +161,7 @@ describe("FileTree", () => {
         return ["a", "b"];
       },
       stat(p) {
-        if (p.endsWith("/a")) throw new Error("perm");
+        if (norm(p).endsWith("/a")) throw new Error("perm");
         return { isDirectory: false };
       },
     });

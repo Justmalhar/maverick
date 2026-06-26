@@ -24,4 +24,9 @@ describe("ImagePreview", () => {
     const wheelTarget = screen.getByTestId("image-preview-img").parentElement!;
     fireEvent.mouseMove(wheelTarget);
   });
+
+  it("loads the image via the asset-converted src, not the raw path", () => {
+    renderWithProviders(<ImagePreview filePath="/a.png" />);
+    expect(screen.getByTestId("image-preview-img")).toHaveAttribute("src", "asset:///a.png");
+  });
 });

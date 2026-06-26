@@ -104,5 +104,18 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
     };
   }, [tab.path, tab.worktreePath, onDirtyChange, registerActions]);
 
+  // Hunk navigation (]c / [c) — driven by the global shortcut handler, which
+  // dispatches these window events only when no text field is focused.
+  useEffect(() => {
+    const next = () => editorRef.current?.goToDiff("next");
+    const prev = () => editorRef.current?.goToDiff("previous");
+    window.addEventListener("maverick:diff:nextHunk", next);
+    window.addEventListener("maverick:diff:prevHunk", prev);
+    return () => {
+      window.removeEventListener("maverick:diff:nextHunk", next);
+      window.removeEventListener("maverick:diff:prevHunk", prev);
+    };
+  }, []);
+
   return <div ref={hostRef} data-testid="diff-viewer-editor" className="h-full w-full" />;
 }

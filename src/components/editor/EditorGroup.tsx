@@ -5,6 +5,7 @@ import { EditorTabs } from "./EditorTabs";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
 import { TerminalPane } from "./terminal/TerminalPane";
+import { DashboardView } from "@/components/primarysidebar/DashboardView";
 import { cn } from "@/lib/utils";
 
 const FileTabPane = lazy(() => import("@/components/viewers/FileTabPane"));
@@ -16,12 +17,15 @@ const AutomationsPanel = lazy(() => import("@/panels/automations/AutomationsPane
 const MCPsPanel = lazy(() => import("@/panels/mcps/MCPsPanel"));
 const SkillsPanel = lazy(() => import("@/panels/skills/SkillsPanel"));
 const SkillEditorPanel = lazy(() => import("@/panels/skills/SkillEditorPanel"));
+const GitPanel = lazy(() => import("@/panels/git/GitPanel"));
 
 // The browser is keep-alive mounted separately (see below) so its page/URL/
 // history survive a tab switch — switching to it here would unmount it.
 function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
   switch (id) {
     case "dashboard":
+      return <DashboardView />;
+    case "usage":
       return <UsagePanel />;
     case "kanban":
       return <KanbanBoard />;
@@ -33,6 +37,8 @@ function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
       return <SkillsPanel />;
     case "skill-editor":
       return <SkillEditorPanel />;
+    case "git":
+      return <GitPanel />;
   }
 }
 

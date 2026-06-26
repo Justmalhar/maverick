@@ -1,16 +1,41 @@
 import { readFileSync, statSync } from "fs";
 
+/**
+ * Text encoding detected from a leading BOM. Recorded on a read so an editor can
+ * round-trip the file's original encoding on save instead of forcing UTF-8.
+ */
+export type TextEncoding = "utf8" | "utf8-bom" | "utf16le" | "utf16be";
+
 export interface ReadResult {
-  /** UTF-8 text content, or empty string when binary/too-large/unreadable. */
+  /** Decoded text content, or empty string when binary/too-large/unreadable. */
   content: string;
   /** Size in bytes of the file on disk. */
   size: number;
-  /** True when the file looks binary (NUL byte) or exceeds the size cap. */
+  /** True when the file looks binary (NUL byte, no recognized text BOM) or exceeds the cap. */
   binary: boolean;
   /** True when the file could not be read at all (missing/permission). */
   unreadable: boolean;
   /** mtimeMs at read time; 0 when unreadable. */
   mtime: number;
+  /** Source encoding (from a BOM); echo back to file_write to preserve it. */
+  encoding: TextEncoding;
+}
+
+/** A leading BOM identifying a UTF-16/UTF-8-with-BOM text file, or null. */
+export function detectBomEncoding(buf: Buffer): Exclude<TextEncoding, "utf8"> | null {
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return "utf8-bom";
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return "utf16le";
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return "utf16be";
+  return null;
+}
+
+function decodeWithBom(buf: Buffer, encoding: Exclude<TextEncoding, "utf8">): string {
+  if (encoding === "utf8-bom") return buf.subarray(3).toString("utf8");
+  if (encoding === "utf16le") return buf.subarray(2).toString("utf16le");
+  // UTF-16BE: Node has no utf16be decoder — byte-swap a COPY to LE then decode.
+  const be = Buffer.from(buf.subarray(2));
+  if (be.length % 2 !== 0) return be.toString("utf8");
+  return be.swap16().toString("utf16le");
 }
 
 // Above this size we refuse to slurp text into the preview pane: large files
@@ -43,20 +68,27 @@ export class FileReader {
       size = st.size;
       mtime = st.mtimeMs;
     } catch {
-      return { content: "", size: 0, binary: false, unreadable: true, mtime: 0 };
+      return { content: "", size: 0, binary: false, unreadable: true, mtime: 0, encoding: "utf8" };
     }
     if (size > this.maxBytes) {
-      return { content: "", size, binary: true, unreadable: false, mtime };
+      return { content: "", size, binary: true, unreadable: false, mtime, encoding: "utf8" };
     }
     let buf: Buffer;
     try {
       buf = this.readFile(params.filePath);
     } catch {
-      return { content: "", size, binary: false, unreadable: true, mtime: 0 };
+      return { content: "", size, binary: false, unreadable: true, mtime: 0, encoding: "utf8" };
+    }
+    // A recognized text BOM wins over the NUL heuristic: UTF-16 encodes ASCII
+    // with a 0x00 high byte (so every UTF-16 file "contains NUL"), and Windows
+    // tools (Notepad "Unicode", PowerShell Out-File) emit these routinely.
+    const bom = detectBomEncoding(buf);
+    if (bom) {
+      return { content: decodeWithBom(buf, bom), size, binary: false, unreadable: false, mtime, encoding: bom };
     }
     if (buf.includes(0)) {
-      return { content: "", size, binary: true, unreadable: false, mtime };
+      return { content: "", size, binary: true, unreadable: false, mtime, encoding: "utf8" };
     }
-    return { content: buf.toString("utf8"), size, binary: false, unreadable: false, mtime };
+    return { content: buf.toString("utf8"), size, binary: false, unreadable: false, mtime, encoding: "utf8" };
   }
 }

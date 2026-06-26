@@ -5,6 +5,10 @@ import type { Shell } from "./types";
 // the patch is enough signal for a one-line conventional commit message.
 const MAX_DIFF_CHARS = 6_000;
 
+// Reap a hung `claude -p` before the Rust transport's 180s budget for
+// ai.commit_message expires, so the child never outlives the request.
+const CLAUDE_TIMEOUT_MS = 150_000;
+
 const PROMPT_HEADER =
   "Write a conventional commit message (type(scope): summary, <=72 chars first line) " +
   "for the following git changes. Reply with the commit message only — no quotes, " +
@@ -34,7 +38,8 @@ export class CommitMessageGenerator {
     const { stdout, stderr, exitCode } = await this.shell.run(
       ["claude", "-p", "--output-format", "text"],
       params.worktreePath,
-      prompt
+      prompt,
+      { timeoutMs: CLAUDE_TIMEOUT_MS }
     );
     if (exitCode !== 0) {
       throw new Error(stderr.trim() || "claude CLI failed — is it installed and logged in?");

@@ -2,10 +2,8 @@ import { describe, test, expect } from "bun:test";
 import { PresetLauncher } from "./preset-launcher";
 import { ConfigLoader } from "./config-loader";
 import { WorktreeManager } from "./worktree-manager";
-import { ProcessManager } from "./process-manager";
 import { SQLiteStore, defaultMigrationsDir } from "./sqlite-store";
 import type { PresetNode, Shell } from "./types";
-import type { ManagedProc, Spawner } from "./process-manager";
 
 function makeStore(): SQLiteStore {
   let counter = 0;
@@ -20,15 +18,6 @@ function fakeShell(): Shell {
   return {
     async text() { return ""; },
     async run() { return { stdout: "", stderr: "", exitCode: 0 }; },
-  };
-}
-
-function fakeProc(): ManagedProc {
-  return {
-    exitCode: null,
-    exited: Promise.resolve(0),
-    kill() {},
-    stdin: { write() { return Promise.resolve(); } },
   };
 }
 
@@ -73,13 +62,7 @@ function makeLauncher(opts?: { loadFails?: boolean; presets?: unknown[]; store?:
     shell: fakeShell(),
     ids: { uuid: () => "ws_x", now: () => 1 },
   });
-  const spawner: Spawner = () => fakeProc();
-  const process = new ProcessManager({
-    spawn: spawner,
-    notifier: { write: () => {} },
-    ids: { uuid: (p) => `${p}_n`, now: () => 1 },
-  });
-  return new PresetLauncher({ loader, worktree, process, store: opts?.store });
+  return new PresetLauncher({ loader, worktree, store: opts?.store });
 }
 
 describe("PresetLauncher", () => {
@@ -99,43 +82,90 @@ describe("PresetLauncher", () => {
     expect(launcher.list({ projectPath: "/r" })).toEqual([]);
   });
 
-  test("launch with single terminal node spawns one pty", async () => {
+  test("launch returns a layout descriptor (no pre-spawning) with cwd resolved", async () => {
     const launcher = makeLauncher();
     const r = await launcher.launch({
       preset: { name: "x", layout: TERMINAL_LAYOUT },
       projectPath: "/r",
     });
     expect(r.workspaceId).toBe("ws_x");
-    expect(r.ptyIds).toHaveLength(1);
+    // No ptyIds — the frontend spawns terminals via Rust ConPTY from this layout.
+    expect(r.layout.type).toBe("terminal");
+    // {{workspace_root}} is expanded to the real worktree path.
+    if (r.layout.type === "terminal") expect(r.layout.cwd).toBe(r.worktreePath);
   });
 
-  test("launch with top/bottom split spawns two ptys", async () => {
+  test("launch persists the workspace row and returns the created branch (#2, #4)", async () => {
+    const store = makeStore();
+    const project = store.projectAdd({ path: "/r" });
+    const launcher = makeLauncher({ store });
+    const r = await launcher.launch({
+      preset: { name: "feat", layout: TERMINAL_LAYOUT },
+      projectPath: "/r",
+      projectId: project.id,
+    });
+    // Persisted with the REAL worktree path + branch (no more in-memory-only row
+    // with worktreePath:"" that leaked the worktree on close).
+    const ws = store.workspaceGet(r.workspaceId);
+    expect(ws).not.toBeNull();
+    expect(ws?.worktreePath).toBe(r.worktreePath);
+    expect(ws?.branch).toBe(r.branch);
+    expect(r.branch).toContain("feat-");
+  });
+
+  test("launch resolves the base branch via the worktree manager (#5)", async () => {
+    const candidates: Array<string | undefined>[] = [];
+    const worktree = {
+      resolveBaseBranch: async (_p: string, c: Array<string | undefined>) => {
+        candidates.push(c);
+        return "master";
+      },
+      create: async () => ({ workspaceId: "ws_r", worktreePath: "/wt/r" }),
+    };
+    const launcher = new PresetLauncher({
+      loader: new ConfigLoader({ read: () => "{}", exists: () => true }),
+      worktree: worktree as never,
+    });
+    await launcher.launch({ preset: { name: "p", layout: { type: "browser" } }, projectPath: "/r", baseBranch: "dev" });
+    // The preset/explicit base lead the candidate list, ending in main/master fallbacks.
+    expect(candidates[0]).toContain("dev");
+    expect(candidates[0]).toContain("master");
+  });
+
+  test("launch preserves a top/bottom split in the returned layout", async () => {
     const launcher = makeLauncher();
     const r = await launcher.launch({
       preset: { name: "tb", layout: SPLIT_TOP_BOTTOM },
       projectPath: "/r",
     });
-    expect(r.ptyIds).toHaveLength(2);
+    expect(r.layout.type).toBe("split");
+    if (r.layout.type === "split" && "top" in r.layout) {
+      expect(r.layout.top.type).toBe("terminal");
+      expect(r.layout.bottom.type).toBe("terminal");
+      if (r.layout.top.type === "terminal") expect(r.layout.top.cwd).toBe(r.worktreePath);
+    }
   });
 
-  test("launch with left/right split spawns terminals and reports browser panes", async () => {
+  test("launch keeps a browser node in the layout (frontend decides placement)", async () => {
     const launcher = makeLauncher();
     const r = await launcher.launch({
       preset: { name: "lr", layout: SPLIT_LEFT_RIGHT },
       projectPath: "/r",
     });
-    expect(r.ptyIds).toHaveLength(1);
-    expect(r.browserPanes).toEqual([{ url: "https://x" }]);
+    expect(r.layout.type).toBe("split");
+    if (r.layout.type === "split" && "left" in r.layout) {
+      expect(r.layout.left.type).toBe("terminal");
+      expect(r.layout.right.type).toBe("browser");
+    }
   });
 
-  test("launch reports a browser pane with no url", async () => {
+  test("launch returns a bare browser node layout unchanged", async () => {
     const launcher = makeLauncher();
     const r = await launcher.launch({
       preset: { name: "b", layout: { type: "browser" } },
       projectPath: "/r",
     });
-    expect(r.ptyIds).toHaveLength(0);
-    expect(r.browserPanes).toEqual([{ url: undefined }]);
+    expect(r.layout).toEqual({ type: "browser" });
   });
 
   test("launch resolves baseBranch from preset, params, or default", async () => {

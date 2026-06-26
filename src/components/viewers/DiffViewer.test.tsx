@@ -53,6 +53,22 @@ describe("DiffViewer", () => {
     expect(monaco.editor.createDiffEditor).toHaveBeenCalled();
   });
 
+  it("navigates hunks via the diff-nav window events (goToDiff)", async () => {
+    const tab = diffTab();
+    let ready = false;
+    render(
+      <DiffViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={() => { ready = true; }} />
+    );
+    await waitFor(() => expect(ready).toBe(true));
+    const monaco = (globalThis as unknown as Record<string, { editor: { createDiffEditor: ReturnType<typeof vi.fn> } }>).__monaco;
+    const diffEditor = monaco.editor.createDiffEditor.mock.results.at(-1)?.value as { goToDiff: ReturnType<typeof vi.fn> };
+
+    act(() => { window.dispatchEvent(new Event("maverick:diff:nextHunk")); });
+    expect(diffEditor.goToDiff).toHaveBeenCalledWith("next");
+    act(() => { window.dispatchEvent(new Event("maverick:diff:prevHunk")); });
+    expect(diffEditor.goToDiff).toHaveBeenCalledWith("previous");
+  });
+
   it("registers discardChanges which calls git_discard_file then reloads", async () => {
     const tab = diffTab();
     let actions: { discardChanges?: () => Promise<void> } = {};

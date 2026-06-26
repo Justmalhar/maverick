@@ -7,6 +7,7 @@ import {
   _resetSettingsStoreForTests,
   parseEnvMap,
   getGlobalEnv,
+  getDefaultShellKind,
   useGlobalEnv,
 } from "./settings";
 
@@ -169,6 +170,17 @@ describe("getGlobalEnv", () => {
 
   it("returns {} when unset", () => {
     expect(getGlobalEnv()).toEqual({});
+  });
+});
+
+describe("getDefaultShellKind", () => {
+  it("reads the persisted shell kind from the store", () => {
+    useSettingsStore.setState({ values: { "terminal.defaultShell": "cmd" } });
+    expect(getDefaultShellKind()).toBe("cmd");
+  });
+
+  it("returns undefined when unset", () => {
+    expect(getDefaultShellKind()).toBeUndefined();
   });
 });
 

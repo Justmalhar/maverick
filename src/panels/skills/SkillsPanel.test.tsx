@@ -57,13 +57,23 @@ describe("SkillsPanel", () => {
     errSpy.mockRestore();
   });
 
-  it("New Skill button opens the skill-editor system tab", async () => {
+  it("New Skill button opens the editor in create mode (clears any draft)", async () => {
     vi.mocked(invoke).mockResolvedValue([]);
+    useWorkbench.setState({ editingSkill: { name: "old", description: "d", prompt: "p" } });
     renderWithProviders(<SkillsPanel />);
     await waitFor(() => expect(screen.getByTestId("skills-panel-new")).toBeInTheDocument());
     await userEvent.click(screen.getByTestId("skills-panel-new"));
-    await waitFor(() =>
-      expect(useWorkbench.getState().systemTabs).toContain("skill-editor")
-    );
+    await waitFor(() => expect(useWorkbench.getState().systemTabs).toContain("skill-editor"));
+    expect(useWorkbench.getState().editingSkill).toBeNull();
+  });
+
+  it("clicking a skill row loads it into the editor", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { name: "refactor", description: "Refactors code", prompt: "do it", backend: "claude-code" },
+    ]);
+    renderWithProviders(<SkillsPanel />);
+    await userEvent.click(await screen.findByTestId("skills-panel-row-refactor"));
+    await waitFor(() => expect(useWorkbench.getState().systemTabs).toContain("skill-editor"));
+    expect(useWorkbench.getState().editingSkill?.name).toBe("refactor");
   });
 });

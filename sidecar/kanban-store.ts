@@ -56,8 +56,12 @@ export class KanbanStore {
     const agentBackend = task.agentBackend ?? "";
     const branch = task.branch ?? "";
 
-    this.store.db
-      .query(
+    type Bind = [
+      string, string, string, string | null, string, number,
+      string | null, string, number | null, number, string, string, string,
+    ];
+    const row = this.store.db
+      .query<KanbanRow, Bind>(
         `INSERT INTO kanban_tasks
            (id, project_id, title, description, status, column_order, workspace_id,
             labels_json, due_date, created_at, agent_backend, branch, attachments)
@@ -65,17 +69,21 @@ export class KanbanStore {
          ON CONFLICT(id) DO UPDATE SET
            project_id    = excluded.project_id,
            title         = excluded.title,
-           description   = excluded.description,
+           -- A partial upsert (a status-only move, a dialog edit that doesn't
+           -- carry workspace_id) must NOT null these out; keep the stored value
+           -- when the incoming one is NULL. Clearing uses an explicit value.
+           description   = COALESCE(excluded.description, kanban_tasks.description),
            status        = excluded.status,
            column_order  = excluded.column_order,
-           workspace_id  = excluded.workspace_id,
+           workspace_id  = COALESCE(excluded.workspace_id, kanban_tasks.workspace_id),
            labels_json   = excluded.labels_json,
            due_date      = excluded.due_date,
            agent_backend = excluded.agent_backend,
            branch        = excluded.branch,
-           attachments   = excluded.attachments`
+           attachments   = excluded.attachments
+         RETURNING *`
       )
-      .run(
+      .get(
         id,
         task.projectId,
         task.title,
@@ -91,21 +99,10 @@ export class KanbanStore {
         attachments
       );
 
-    return {
-      id,
-      projectId: task.projectId,
-      title: task.title,
-      description: task.description,
-      status: status as KanbanTask["status"],
-      columnOrder,
-      workspaceId: task.workspaceId,
-      labels: task.labels ?? [],
-      dueDate: task.dueDate,
-      createdAt,
-      agentBackend,
-      branch,
-      attachments: task.attachments ?? [],
-    };
+    // RETURNING gives the row the DB actually persisted (post-COALESCE), so the
+    // caller never sees a fabricated value — e.g. created_at on an update, or a
+    // description/workspace_id the merge preserved.
+    return KanbanStore.fromRow(row!);
   }
 
   delete(id: string): { ok: true } {

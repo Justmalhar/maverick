@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
@@ -215,22 +215,31 @@ impl Sidecar {
         let (tx, rx) = oneshot::channel();
         self.pending.insert(id, tx);
 
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0",
-            id,
-            method,
-            params,
-        };
-        let mut buf = serde_json::to_vec(&req)?;
-        buf.push(b'\n');
-
-        {
+        // Serialize + write can fail (serde error, closed/None stdin in degraded
+        // mode, broken pipe). Those early returns happen BEFORE the recv/timeout
+        // block that owns cleanup, so each one must drop the pending entry itself
+        // — otherwise every failed send (e.g. every call against `placeholder()`)
+        // strands a sender and the map grows unbounded.
+        let send = async {
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0",
+                id,
+                method,
+                params,
+            };
+            let mut buf = serde_json::to_vec(&req)?;
+            buf.push(b'\n');
             let mut guard = self.stdin.lock().await;
-            let stdin = guard
-                .as_mut()
-                .ok_or(SidecarError::TransportClosed)?;
+            let stdin = guard.as_mut().ok_or(SidecarError::TransportClosed)?;
             stdin.write_all(&buf).await?;
             stdin.flush().await?;
+            Ok::<(), SidecarError>(())
+        }
+        .await;
+
+        if let Err(e) = send {
+            self.pending.remove(&id);
+            return Err(e);
         }
 
         match timeout(request_timeout, rx).await {
@@ -299,6 +308,22 @@ pub fn jsonrpc_event_name(method: &str) -> String {
     method.replace('.', ":")
 }
 
-pub fn forward_request_payload(method: &str, params: Value) -> Value {
-    json!({ "jsonrpc": "2.0", "method": method, "params": params })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn degraded_request_does_not_strand_a_pending_sender() {
+        let sc = Sidecar::placeholder();
+        let res = sc.request("git.status", json!({})).await;
+        assert!(matches!(res, Err(SidecarError::TransportClosed)));
+        // The send fails fast on `stdin == None`; the entry must be removed on
+        // that early-return path so degraded mode doesn't leak the map.
+        assert_eq!(sc.pending.len(), 0);
+
+        // A second call reuses the same code path and must also stay clean.
+        let _ = sc.request("usage.poll", json!({ "x": 1 })).await;
+        assert_eq!(sc.pending.len(), 0);
+    }
 }

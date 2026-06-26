@@ -1,5 +1,5 @@
 import { readdirSync, statSync } from "fs";
-import { join, relative, basename } from "path";
+import { join, relative, basename, sep } from "path";
 import { defaultShell } from "./deps";
 import type { FileEntry, Shell } from "./types";
 
@@ -63,7 +63,10 @@ export class FileTree {
       } catch {
         continue;
       }
-      const rel = relative(root, full);
+      // Normalize to forward slashes: git --porcelain keys statusMap with "/"
+      // paths, and the frontend keys/opens files by "/" too. On Windows
+      // relative() yields "\" which would miss every status lookup. No-op on POSIX.
+      const rel = relative(root, full).split(sep).join("/");
       const entry: FileEntry = {
         path: rel,
         name: basename(full),

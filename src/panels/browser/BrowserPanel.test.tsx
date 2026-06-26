@@ -293,6 +293,25 @@ describe("BrowserPanel — native engine (default)", () => {
     );
   });
 
+  it("re-enables the inspector after a native navigation", async () => {
+    useNativeEngine();
+    renderWithProviders(<BrowserPanel />);
+    const enableCalls = () =>
+      vi.mocked(invoke).mock.calls.filter(
+        (c) => c[0] === "browser_eval" && String((c[1] as { script?: string })?.script).includes("enable()")
+      ).length;
+    await userEvent.click(screen.getByTestId("browser-inspect"));
+    await waitFor(() => expect(enableCalls()).toBeGreaterThanOrEqual(1));
+    const before = enableCalls();
+    fireEvent.change(screen.getByTestId("browser-url"), { target: { value: "example.com" } });
+    fireEvent.keyDown(screen.getByTestId("browser-url"), { key: "Enter" });
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("browser_navigate", { url: "https://example.com" })
+    );
+    // The post-navigation re-enable must fire (else the inspector is silently dead).
+    await waitFor(() => expect(enableCalls()).toBeGreaterThan(before));
+  });
+
   it("hides the webview while a modal overlay is open and shows it again after", async () => {
     useNativeEngine();
     renderWithProviders(<BrowserPanel />);

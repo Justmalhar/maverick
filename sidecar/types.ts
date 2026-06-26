@@ -96,6 +96,8 @@ export type PresetNode =
 export interface Automation {
   name: string;
   trigger: "manual" | "schedule" | "on-file-change";
+  // Cadence for `trigger: "schedule"` — simple interval like "30m" / "2h" / "1d".
+  interval?: string;
   steps: AutomationStep[];
 }
 
@@ -221,6 +223,36 @@ export interface DiffStat {
   removed: number;
 }
 
+export type CheckStatus = "pass" | "fail" | "pending" | "neutral";
+
+export interface CheckItem {
+  name: string;
+  status: CheckStatus;
+  detail?: string;
+}
+
+export interface PrInfo {
+  number: number;
+  url: string;
+  state: string;
+  title: string;
+  mergeable: string;
+}
+
+export interface ChecksReport {
+  git: {
+    branch: string;
+    ahead: number;
+    behind: number;
+    changedFiles: number;
+    conflicts: number;
+  };
+  pr: PrInfo | null;
+  ghAvailable: boolean;
+  checks: CheckItem[];
+  merge: { ready: boolean; blockers: string[] };
+}
+
 export interface KanbanTask {
   id: string;
   projectId: string;
@@ -296,7 +328,10 @@ export interface Shell {
   run(
     cmd: string[],
     cwd?: string,
-    stdin?: string
+    stdin?: string,
+    // `timeoutMs` kills the child once the budget elapses (exitCode 124), so a
+    // hung CLI (`claude -p`, `gh`) can't orphan a subprocess or stall the sidecar.
+    opts?: { timeoutMs?: number }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 

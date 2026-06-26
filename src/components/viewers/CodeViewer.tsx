@@ -4,6 +4,7 @@ import type * as MonacoApi from "monaco-editor/esm/vs/editor/editor.api";
 import { getMonaco } from "@/lib/viewers/monaco/loader";
 import { getOrCreateModel, releaseModel } from "@/lib/viewers/monaco/model-cache";
 import { fileRead, fileWrite, onFsChanged } from "@/lib/tauri";
+import type { TextEncoding } from "@/lib/ipc";
 import type { ViewerProps } from "@/lib/viewers/types";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +15,9 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
   // The content the disk had when we last loaded/saved; dirty = model differs.
   const baselineRef = useRef("");
   const mtimeRef = useRef(0);
+  // The file's on-disk encoding (from a BOM) so a save round-trips it instead of
+  // silently rewriting a UTF-16 file as UTF-8.
+  const encodingRef = useRef<TextEncoding>("utf8");
   const [conflict, setConflict] = useState(false);
   const reducedMotion = useReducedMotion();
   void reducedMotion; // no animations in the editor surface itself
@@ -27,6 +31,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
       if (disposed || !hostRef.current) return;
       baselineRef.current = res.content;
       mtimeRef.current = res.mtime;
+      encodingRef.current = res.encoding;
       const model = await getOrCreateModel(tab.path, res.content);
       if (disposed) {
         releaseModel(tab.path);
@@ -54,7 +59,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
       const save = async () => {
         const content = model.getValue();
         try {
-          const { mtime } = await fileWrite(tab.path, content, mtimeRef.current);
+          const { mtime } = await fileWrite(tab.path, content, mtimeRef.current, encodingRef.current);
           baselineRef.current = content;
           mtimeRef.current = mtime;
           setConflict(false);
@@ -87,6 +92,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
           if (model.getValue() === baselineRef.current) {
             baselineRef.current = fresh.content;
             mtimeRef.current = fresh.mtime;
+            encodingRef.current = fresh.encoding;
             model.setValue(fresh.content);
             onDirtyChange(false);
           } else {
@@ -120,6 +126,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
     if (!modelRef.current) return; // unmounted during the await
     baselineRef.current = fresh.content;
     mtimeRef.current = fresh.mtime;
+    encodingRef.current = fresh.encoding;
     modelRef.current.setValue(fresh.content);
     setConflict(false);
     onDirtyChange(false);
@@ -131,7 +138,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
     const model = modelRef.current;
     if (!model) return;
     const content = model.getValue();
-    const { mtime } = await fileWrite(tab.path, content);
+    const { mtime } = await fileWrite(tab.path, content, undefined, encodingRef.current);
     if (!modelRef.current) return; // unmounted during the await
     baselineRef.current = content;
     mtimeRef.current = mtime;

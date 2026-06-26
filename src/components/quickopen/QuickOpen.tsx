@@ -18,12 +18,6 @@ import {
 // without firing a sidecar walk on every keystroke.
 const SEARCH_DEBOUNCE_MS = 120;
 
-function basename(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i >= 0 ? path.slice(i + 1) : path;
-}
-
-
 export function QuickOpen() {
   const open = useWorkbench((s) => s.quickOpenOpen);
   const setOpen = useWorkbench((s) => s.setQuickOpenOpen);
@@ -121,5 +115,3 @@ export function QuickOpen() {
     </Dialog>
   );
 }
-
-export { basename };

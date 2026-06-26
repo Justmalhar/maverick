@@ -7,7 +7,23 @@ import {
   HARDENED_ENV,
   toolAugmentedPath,
   repairToolPath,
+  shellCommandArgs,
 } from "./deps";
+
+describe("shellCommandArgs", () => {
+  test("uses PowerShell on Windows", () => {
+    expect(shellCommandArgs("echo hi", "win32")).toEqual([
+      "powershell",
+      "-NoProfile",
+      "-Command",
+      "echo hi",
+    ]);
+  });
+  test("uses /bin/sh on POSIX", () => {
+    expect(shellCommandArgs("echo hi", "linux")).toEqual(["/bin/sh", "-c", "echo hi"]);
+    expect(shellCommandArgs("echo hi", "darwin")).toEqual(["/bin/sh", "-c", "echo hi"]);
+  });
+});
 
 describe("defaultIds", () => {
   test("uuid returns prefixed unique string", () => {
@@ -85,7 +101,13 @@ describe("repairToolPath", () => {
       process.env.PATH = "/usr/bin:/bin";
       repairToolPath();
       const first = process.env.PATH;
-      expect(first!.split(":")).toContain("/opt/homebrew/bin");
+      if (process.platform === "win32") {
+        // win32 is a no-op by design: the Unix tool dirs don't exist there, so
+        // toolAugmentedPath returns PATH unchanged.
+        expect(first).toBe("/usr/bin:/bin");
+      } else {
+        expect(first!.split(":")).toContain("/opt/homebrew/bin");
+      }
       repairToolPath();
       // Re-running does not grow the PATH with duplicates.
       expect(process.env.PATH).toBe(first);
@@ -123,6 +145,27 @@ describe("defaultShell", () => {
   test("run without stdin still works (stdin ignored)", async () => {
     const r = await defaultShell.run(["echo", "no-stdin"]);
     expect(r.stdout.trim()).toBe("no-stdin");
+  });
+
+  test("run kills a child that exceeds its timeout budget (exit 124, no orphan)", async () => {
+    const start = Date.now();
+    const r = await defaultShell.run(
+      ["bun", "-e", "await Bun.sleep(10000)"],
+      undefined,
+      undefined,
+      { timeoutMs: 200 }
+    );
+    const elapsed = Date.now() - start;
+    expect(r.exitCode).toBe(124);
+    expect(r.stderr).toContain("timed out");
+    // Reaped near the 200ms budget — nowhere near the 10s the child would sleep.
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  test("run leaves a fast command untouched when a generous timeout is set", async () => {
+    const r = await defaultShell.run(["echo", "quick"], undefined, undefined, { timeoutMs: 30_000 });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.trim()).toBe("quick");
   });
 
   test("hardened env disables interactive git prompts and pins the locale", async () => {

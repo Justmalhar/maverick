@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
-import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2 } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useEffect, useMemo, useState } from "react";
+import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2, MessagesSquare, Wrench } from "lucide-react";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { useReviewComments } from "@/lib/stores/review-comments";
+import { ReviewComments } from "./ReviewComments";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
-import { runAiReview } from "@/lib/ai-review";
+import { runAiReview, sendReviewComments } from "@/lib/ai-review";
+import { buildCreatePrPrompt, buildFixErrorsPrompt, canDispatchAgentAction, sendAgentPrompt, type AgentTarget } from "@/lib/ai-actions";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -43,10 +47,19 @@ function EmptyState({
 }
 
 export function DiffView() {
-  const active = useWorkbench(selectActiveWorkspace);
+  const active = useWorkbench(selectContextWorkspace);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);
+  const createPrPref = useProjectSettingsStore((s) => s.data?.preferences?.createPr);
+  const fixErrorsPref = useProjectSettingsStore((s) => s.data?.preferences?.fixErrors);
+  const allComments = useReviewComments((s) => s.comments);
+  const clearComments = useReviewComments((s) => s.clearForWorkspace);
+  const agentStatus = useAgentStatus(active?.id ?? "");
+  const comments = useMemo(
+    () => allComments.filter((c) => c.workspaceId === active?.id),
+    [allComments, active?.id]
+  );
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [prStatus, setPrStatus] = useState<PrStatus>({ kind: "idle" });
 
@@ -78,17 +91,61 @@ export function DiffView() {
     };
   }, [active?.worktreePath]);
 
+  const agentTarget: AgentTarget | null = active
+    ? { workspaceId: active.id, backend: active.agentBackend, cwd: active.worktreePath }
+    : null;
+
   async function onReview() {
-    if (!active) return;
+    if (!active || !agentTarget) return;
     try {
       await runAiReview({
-        workspaceId: active.id,
+        target: agentTarget,
         worktreePath: active.worktreePath,
         reviewPref,
         onAgentFocus: () => setActiveWorkspace(active.id),
       });
     } catch (e) {
       console.error("AI review failed", e);
+    }
+  }
+
+  async function onDraftPr() {
+    if (!active || !agentTarget || !diff) return;
+    try {
+      await sendAgentPrompt({
+        target: agentTarget,
+        prompt: buildCreatePrPrompt(diff, createPrPref),
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+    } catch (e) {
+      console.error("Draft PR failed", e);
+    }
+  }
+
+  async function onFixErrors() {
+    if (!active || !agentTarget) return;
+    try {
+      await sendAgentPrompt({
+        target: agentTarget,
+        prompt: buildFixErrorsPrompt(fixErrorsPref),
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+    } catch (e) {
+      console.error("Fix errors failed", e);
+    }
+  }
+
+  async function onSendComments() {
+    if (!active || !agentTarget || comments.length === 0) return;
+    try {
+      const res = await sendReviewComments({
+        target: agentTarget,
+        comments,
+        onAgentFocus: () => setActiveWorkspace(active.id),
+      });
+      if (res.ran) clearComments(active.id);
+    } catch (e) {
+      console.error("Send review comments failed", e);
     }
   }
 
@@ -114,6 +171,14 @@ export function DiffView() {
     );
   }
 
+  // Whether the agent is reachable at all (live PTY or headless backend) — gate
+  // the AI actions so they don't present as enabled-but-inert.
+  const canAct = canDispatchAgentAction({
+    workspaceId: active.id,
+    backend: active.agentBackend,
+    cwd: active.worktreePath,
+  });
+
   const files = diff?.files ?? [];
   if (files.length === 0) {
     return (
@@ -134,8 +199,10 @@ export function DiffView() {
           <button
             type="button"
             onClick={onReview}
+            disabled={!canAct}
             data-testid="diff-ai-review"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted"
+            title={canAct ? "Run an AI review of the diff" : "No agent available for this workspace"}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
           >
             <Bot className="h-3.5 w-3.5" />
             AI Code Review
@@ -155,6 +222,49 @@ export function DiffView() {
             Create PR
           </button>
         </div>
+        {/* Agent actions driven by project preferences (createPr / fixErrors).
+            Disabled while the agent is mid-task so we don't interleave prompts. */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onDraftPr}
+            disabled={agentStatus === "working" || !canAct}
+            data-testid="diff-draft-pr"
+            title="Ask the agent to open a PR following your Create PR preference"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
+          >
+            <GitPullRequest className="h-3.5 w-3.5" />
+            Draft PR
+          </button>
+          <button
+            type="button"
+            onClick={onFixErrors}
+            disabled={agentStatus === "working" || !canAct}
+            data-testid="diff-fix-errors"
+            title="Ask the agent to run checks and fix errors following your Fix errors preference"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-sidebar-hover px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors duration-100 hover:bg-muted disabled:opacity-60"
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            Fix errors
+          </button>
+        </div>
+        {comments.length > 0 && (
+          <button
+            type="button"
+            onClick={onSendComments}
+            disabled={agentStatus === "working" || !canAct}
+            data-testid="diff-send-comments"
+            title={
+              agentStatus === "working"
+                ? "Agent is working — wait until it's idle to send comments"
+                : "Send your inline review comments to the agent"
+            }
+            className="flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent/90 disabled:opacity-50"
+          >
+            <MessagesSquare className="h-3.5 w-3.5" />
+            Send {comments.length} comment{comments.length === 1 ? "" : "s"} to agent
+          </button>
+        )}
         {prStatus.kind === "done" && (
           <a
             href={prStatus.url}
@@ -203,6 +313,8 @@ export function DiffView() {
           ))}
         </ul>
       </ScrollArea>
+
+      <ReviewComments workspaceId={active.id} files={files.map((f) => f.path)} />
     </div>
   );
 }

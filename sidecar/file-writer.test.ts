@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { FileWriter, FileWriteConflictError } from "./file-writer";
+import { FileWriter, FileWriteConflictError, encodeContent } from "./file-writer";
+import { FileReader } from "./file-reader";
 
 function tmpFile(content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "mv-fw-"));
@@ -18,6 +19,23 @@ describe("FileWriter", () => {
     const res = w.write({ filePath: p, content: "new" });
     expect(readFileSync(p, "utf8")).toBe("new");
     expect(res.mtime).toBe(statSync(p).mtimeMs);
+  });
+
+  test("encodeContent re-attaches the BOM for each encoding (#27)", () => {
+    expect([...encodeContent("Hi", "utf16le")]).toEqual([0xff, 0xfe, 0x48, 0x00, 0x69, 0x00]);
+    expect([...encodeContent("Hi", "utf16be")]).toEqual([0xfe, 0xff, 0x00, 0x48, 0x00, 0x69]);
+    expect([...encodeContent("hi", "utf8-bom")]).toEqual([0xef, 0xbb, 0xbf, 0x68, 0x69]);
+    expect([...encodeContent("hi")]).toEqual([0x68, 0x69]); // plain utf8, no BOM
+  });
+
+  test("write + read round-trips a UTF-16LE file's encoding (#27)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mv-fw-"));
+    const p = join(dir, "u16.txt");
+    new FileWriter().write({ filePath: p, content: "héllo", encoding: "utf16le" });
+    const res = new FileReader().read({ filePath: p });
+    expect(res.encoding).toBe("utf16le");
+    expect(res.content).toBe("héllo");
+    expect(res.binary).toBe(false);
   });
 
   test("creates a new file when the path does not exist", () => {

@@ -6,7 +6,8 @@ import {
   type PooledTerminalHandle,
   type PtyBridge,
 } from "@/lib/terminal-provider";
-import { useThemeContext } from "@/themes/theme-provider";
+import { useThemeContext } from "@/themes/theme-context";
+import { useSettings } from "@/lib/stores/settings";
 import { usePty } from "@/hooks/usePty";
 import { setLeafFocused } from "@/lib/providers/terminal-session";
 import { registerFileDropTarget, shellEscapePaths } from "@/lib/file-drop";
@@ -58,12 +59,20 @@ export function TerminalPane({
   const handleRef = useRef<TerminalHandle | null>(null);
   const pooledRef = useRef<PooledTerminalHandle | null>(null);
   const [dropActive, setDropActive] = useState(false);
+  // Appearance settings (applied when a terminal slot is acquired) — previously
+  // these were hardcoded, so the Settings controls were inert.
+  const [terminalFontSize] = useSettings("appearance.terminalFontSize", 13);
+  const [ligatures] = useSettings("appearance.ligatures", true);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
   const onOutputRef = useRef(onOutput);
   onOutputRef.current = onOutput;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  // Latest-focus ref: the mount effect (and its clear listener) is keyed on
+  // ptyId/paneId, so a plain closure over isFocused would go stale.
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
   const { theme } = useThemeContext();
   // Pooled path routes pty:data through the session (slot or dormant ring). We
   // also tee output to onOutput (status detection) and exit to onExit, while
@@ -83,10 +92,10 @@ export function TerminalPane({
     const provider = TerminalRegistry.get();
     const options = {
       theme: theme.terminal,
-      fontSize: 13,
+      fontSize: terminalFontSize,
       fontFamily: MONO_FONT_STACK,
       lineHeight: 1.2,
-      ligatures: false,
+      ligatures,
       scrollback: 5000,
     };
 
@@ -131,6 +140,9 @@ export function TerminalPane({
     }
 
     const onClear = () => {
+      // Clear only the focused pane — the event is broadcast to every mounted
+      // pane (incl. keep-alive-hidden workspaces and other split leaves).
+      if (!isFocusedRef.current) return;
       if (pooledRef.current) pooledRef.current.feed("\x1b[2J\x1b[H");
       else handleRef.current?.write("\x1b[2J\x1b[H");
     };

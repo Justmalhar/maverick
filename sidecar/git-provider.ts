@@ -63,8 +63,15 @@ export function prWebUrl(info: RemoteInfo, branch: string, base?: string): strin
     }
     default: {
       // GitHub compare URL also works for unknown hosts running GitHub Enterprise.
-      const baseRef = base ?? "main";
-      return `${info.webUrl}/compare/${encodeURIComponent(baseRef)}...${encodeURIComponent(branch)}?expand=1`;
+      // Refs live in the URL PATH and GitHub routes them by literal `/` segments,
+      // so encode each segment but KEEP the slashes (encoding `feature/x` whole as
+      // `feature%2Fx` 404s). With no explicit base, GitHub's single-ref compare
+      // form auto-resolves the repo's default branch — don't hardcode `main`,
+      // which 404s on master/develop/trunk repos.
+      const enc = (ref: string) => ref.split("/").map(encodeURIComponent).join("/");
+      return base
+        ? `${info.webUrl}/compare/${enc(base)}...${enc(branch)}?expand=1`
+        : `${info.webUrl}/compare/${enc(branch)}?expand=1`;
     }
   }
 }

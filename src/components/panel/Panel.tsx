@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
+import { stripAnsi } from "@/lib/strip-ansi";
 import { PanelTabs, type BottomPanelTab } from "./PanelTabs";
 
 interface EmptyProps {
@@ -42,7 +43,7 @@ function ScriptPane({ kind }: { kind: "setup" | "run" }) {
   const clearPendingSetup = useWorkbench((s) => s.clearPendingSetup);
 
   const script = useMemo(() => settings?.scripts?.[kind] ?? "", [settings, kind]);
-  const runner = useScriptRunner(activeWs?.id ?? null, activeWs?.worktreePath ?? null, script);
+  const runner = useScriptRunner(activeWs?.id ?? null, activeWs?.worktreePath ?? null, script, kind);
 
   // Auto-run setup for freshly created workspaces. Wait until the loaded
   // settings belong to THIS workspace's project so a stale store can't run the
@@ -103,7 +104,7 @@ function ScriptPane({ kind }: { kind: "setup" | "run" }) {
           runner.state === "exited" && runner.exitCode !== 0 && "text-destructive"
         )}
       >
-        {runner.output || (runner.state === "idle" ? "Click Run to start." : "")}
+        {stripAnsi(runner.output) || (runner.state === "idle" ? "Click Run to start." : "")}
       </pre>
       {runner.state === "exited" && runner.exitCode !== 0 && (
         <div className="border-t border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">

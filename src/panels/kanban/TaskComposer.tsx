@@ -207,7 +207,14 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         onPaste={handlePaste}
-        onKeyDown={(e) => e.key === "Enter" && e.metaKey && handleSend()}
+        onKeyDown={(e) => {
+          // Windows-first: accept Ctrl+Enter as well as Cmd+Enter (metaKey-only
+          // would never fire on Windows/Linux). Mirrors SourceControlView.
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void handleSend();
+          }
+        }}
         placeholder="What needs to be done?"
         rows={2}
         className="w-full resize-none rounded-md border border-border/50 bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

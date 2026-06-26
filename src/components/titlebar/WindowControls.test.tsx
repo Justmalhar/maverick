@@ -5,9 +5,11 @@ import { renderWithProviders, screen } from "@/test/utils";
 const minimize = vi.fn().mockResolvedValue(undefined);
 const toggleMaximize = vi.fn().mockResolvedValue(undefined);
 const close = vi.fn().mockResolvedValue(undefined);
+const isMaximized = vi.fn().mockResolvedValue(false);
+const onResized = vi.fn().mockResolvedValue(() => {});
 
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ minimize, toggleMaximize, close }),
+  getCurrentWindow: () => ({ minimize, toggleMaximize, close, isMaximized, onResized }),
 }));
 
 import { WindowControls } from "./WindowControls";
@@ -22,6 +24,13 @@ describe("WindowControls", () => {
     expect(minimize).toHaveBeenCalled();
     expect(toggleMaximize).toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
+  });
+
+  it("shows a restore glyph + label when the window is maximized", async () => {
+    isMaximized.mockResolvedValue(true);
+    renderWithProviders(<WindowControls />);
+    expect(await screen.findByLabelText("restore")).toBeInTheDocument();
+    isMaximized.mockResolvedValue(false);
   });
 
   it("silently swallows errors from the Tauri APIs", async () => {

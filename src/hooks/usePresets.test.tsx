@@ -4,11 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   usePresets,
   splitTreeToPresetNode,
+  presetNodeToSplitTree,
   buildWorkspaceLayout,
 } from "./usePresets";
 import { useWorkbench } from "@/state/store";
 import { makePreset, makeWorkspace } from "@/test/fixtures";
-import type { SplitNode } from "@/lib/ipc";
+import type { PresetNode, SplitNode } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
 
@@ -108,6 +109,55 @@ describe("splitTreeToPresetNode", () => {
     } else {
       throw new Error("expected a left/right split");
     }
+  });
+});
+
+describe("presetNodeToSplitTree", () => {
+  const term = (agent: string, over: Partial<PresetNode> = {}): PresetNode =>
+    ({ type: "terminal", agent, cwd: "{{workspace_root}}", mode: "terminal", ...over }) as PresetNode;
+
+  it("maps a terminal node to a primary leaf that spawns its resolved command (#3)", () => {
+    const tree = presetNodeToSplitTree(term("claude-code", { cwd: "/wt", startup: "hi" }), "ws");
+    expect(tree).toMatchObject({
+      type: "terminal",
+      id: "ws-1", // 1-based, primary first — keeps killWorkspaceLeaves matching
+      backend: "claude-code",
+      command: "claude", // resolved via BACKEND_COMMAND_FALLBACK
+      cwd: "/wt",
+      startup: "hi",
+    });
+  });
+
+  it("a shell/empty agent leaf carries NO command (spawns the default shell)", () => {
+    const tree = presetNodeToSplitTree(term("shell"), "ws");
+    expect(tree.type === "terminal" && tree.command).toBeUndefined();
+    // {{workspace_root}} cwd is dropped — TerminalLeaf defaults cwd to the worktree.
+    expect(tree.type === "terminal" && tree.cwd).toBeUndefined();
+  });
+
+  it("sequences leaf ids 1-based across a split (primary first)", () => {
+    const layout: PresetNode = {
+      type: "split", direction: "v", ratio: 0.5, top: term("claude-code"), bottom: term("shell"),
+    };
+    const tree = presetNodeToSplitTree(layout, "ws");
+    expect(tree.type).toBe("split");
+    if (tree.type === "split") {
+      expect((tree.left as { id: string }).id).toBe("ws-1");
+      expect((tree.right as { id: string }).id).toBe("ws-2");
+    }
+  });
+
+  it("collapses a split whose other side is a browser node to the terminal sibling", () => {
+    const layout: PresetNode = {
+      type: "split", direction: "h", ratio: 0.5, left: term("claude-code"), right: { type: "browser", url: "x" },
+    };
+    const tree = presetNodeToSplitTree(layout, "ws");
+    expect(tree).toMatchObject({ type: "terminal", id: "ws-1" });
+  });
+
+  it("falls back to a single shell leaf when the layout is a bare browser node", () => {
+    const tree = presetNodeToSplitTree({ type: "browser" }, "ws");
+    expect(tree).toEqual({ type: "terminal", id: "ws-1", backend: "shell", ptyId: "" });
   });
 });
 

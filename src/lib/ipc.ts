@@ -91,7 +91,19 @@ export interface Skill {
 
 export type KeybindingMap = Record<string, string>;
 
-export type SplitLeaf = { type: "terminal"; id: string; backend: string; ptyId: string };
+export type SplitLeaf = {
+  type: "terminal";
+  id: string;
+  backend: string;
+  ptyId: string;
+  // Optional per-node launch (set by a preset layout): spawn this command in
+  // this cwd via Rust ConPTY and type `startup` into it once. Absent = the
+  // default login shell scoped to the workspace worktree (normal tabs).
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  startup?: string;
+};
 
 export type SplitNode =
   | SplitLeaf
@@ -206,6 +218,16 @@ export type PresetNode =
   | { type: "split"; direction: "h" | "v"; ratio: number; top: PresetNode; bottom: PresetNode }
   | { type: "split"; direction: "h" | "v"; ratio: number; left: PresetNode; right: PresetNode };
 
+export interface PresetLaunchResult {
+  workspaceId: string;
+  /** Real on-disk worktree path — the frontend must use this, not "". */
+  worktreePath: string;
+  /** Actual branch the worktree was created on (`<preset>-<ts>`). */
+  branch: string;
+  /** Preset layout with cwds resolved; the frontend builds its SplitGrid + PTYs from it. */
+  layout: PresetNode;
+}
+
 export interface DiffResult {
   files: DiffFile[];
 }
@@ -294,7 +316,66 @@ export interface MaverickConfig {
   project?: ProjectSettings;
 }
 
-export type AuxiliaryView = "files" | "diff" | "scm" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "checks" | "agent" | "none";
+
+export interface AgentRunSpec {
+  workspaceId: string;
+  backend: string;
+  prompt: string;
+  cwd?: string;
+  resumeSessionId?: string;
+  permissionMode?: string;
+  env?: Record<string, string>;
+}
+
+export interface AgentStreamEvent {
+  agentId: string;
+  workspaceId: string;
+  stream: "stdout" | "stderr";
+  data: string;
+}
+
+export interface AgentExitEvent {
+  agentId: string;
+  workspaceId: string;
+  code: number;
+}
+
+export interface AgentErrorEvent {
+  agentId: string;
+  workspaceId: string;
+  message: string;
+}
+
+export type CheckStatus = "pass" | "fail" | "pending" | "neutral";
+
+export interface CheckItem {
+  name: string;
+  status: CheckStatus;
+  detail?: string;
+}
+
+export interface PrInfo {
+  number: number;
+  url: string;
+  state: string;
+  title: string;
+  mergeable: string;
+}
+
+export interface ChecksReport {
+  git: {
+    branch: string;
+    ahead: number;
+    behind: number;
+    changedFiles: number;
+    conflicts: number;
+  };
+  pr: PrInfo | null;
+  ghAvailable: boolean;
+  checks: CheckItem[];
+  merge: { ready: boolean; blockers: string[] };
+}
 
 export type GitProvider = "github" | "bitbucket" | "gitlab" | "unknown";
 
@@ -305,6 +386,16 @@ export interface RemoteInfo {
   repo: string;
   webUrl: string;
   remoteUrl: string;
+}
+
+// Git hosts Maverick can authenticate against (a subset of GitProvider — the
+// "unknown" remote has no credential flow).
+export type CredentialProvider = "github" | "bitbucket" | "gitlab";
+
+export interface CredentialStatus {
+  provider: CredentialProvider;
+  connected: boolean;
+  username?: string;
 }
 
 // ---------- Companion (remote) server — Rust-owned types ----------
@@ -337,6 +428,8 @@ export interface PairedDevice {
   paired_at: number;
 }
 
+export type TextEncoding = "utf8" | "utf8-bom" | "utf16le" | "utf16be";
+
 export interface FileReadResult {
   content: string;
   size: number;
@@ -344,6 +437,8 @@ export interface FileReadResult {
   unreadable: boolean;
   /** mtimeMs at read time; echo back to file_write as expectedMtime. */
   mtime: number;
+  /** Source encoding (from a BOM); echo back to file_write to preserve it. */
+  encoding: TextEncoding;
 }
 
 export interface FileWriteResult {
@@ -382,6 +477,9 @@ export type SettingsKey =
   | "general.namingScheme"
   | "general.restoreSession"
   | "general.env"
+  | "general.startupCommand"
+  | "general.aiBranchNames"
+  | "general.agentLaunchMode"
   | "appearance.theme"
   | "appearance.uiFontSize"
   | "appearance.terminalFontSize"
@@ -412,6 +510,7 @@ export type SettingsKey =
   | "terminal.codex.command"
   | "terminal.gemini.command"
   | "terminal.pi.command"
+  | "terminal.defaultShell"
   | "advanced.largeTextThreshold"
   | "advanced.lruLimit"
   | "advanced.caffeinate"

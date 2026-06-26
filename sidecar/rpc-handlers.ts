@@ -3,34 +3,41 @@ import { watch } from "fs";
 import { basename, join } from "path";
 import { ProcessManager } from "./process-manager";
 import { WorktreeManager, defaultWorktreeRoot } from "./worktree-manager";
-import { generateWorkspaceName, slugify, titleize } from "./name-generator";
+import { generateWorkspaceName, titleize, branchToDirSlug } from "./name-generator";
 import { CommitMessageGenerator } from "./commit-message";
+import { BranchNameGenerator } from "./branch-name-generator";
 import { SQLiteStore } from "./sqlite-store";
 import { ConfigLoader } from "./config-loader";
 import { SkillsEngine } from "./skills-engine";
 import { SkillsStore } from "./skills-store";
 import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
+import { GitCredentials } from "./git-credentials";
+import { ChecksModule } from "./checks-module";
+import { AgentRunner } from "./agent-runner";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
 import { AutomationRunner } from "./automation-runner";
+import { TriggerManager } from "./trigger-manager";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
-import { FsWatcher } from "./fs-watcher";
+import { FsWatcher, SKIP_DIRS } from "./fs-watcher";
+import { watch as fsWatch } from "fs";
 import { FileSearch } from "./file-search";
 import { FileReader } from "./file-reader";
 import { FileWriter } from "./file-writer";
 import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
-import { stdoutNotifier } from "./deps";
+import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
+const CredentialProviderSchema = z.enum(["github", "bitbucket", "gitlab"]);
 const StringParam = z.object({}).passthrough();
 
 // Rust forwards omitted optional command args as JSON `null` (serde serializes
@@ -57,16 +64,6 @@ const Schemas = {
   }),
   workspaceDestroy: z.object({ workspaceId: z.string() }),
   workspaceList: z.object({ projectId: nullishOptional(z.string()) }),
-  ptySpawn: z.object({
-    workspaceId: z.string(),
-    command: z.string(),
-    args: z.array(z.string()).default([]),
-    cwd: nullishOptional(z.string()),
-    env: nullishOptional(z.record(z.string(), z.string())),
-  }),
-  ptyWrite: z.object({ ptyId: z.string(), data: z.string() }),
-  ptyResize: z.object({ ptyId: z.string(), cols: z.number(), rows: z.number() }),
-  ptyKill: z.object({ ptyId: z.string() }),
   configLoad: z.object({ projectPath: z.string() }),
   messagesList: z.object({
     sessionId: z.string(),
@@ -91,6 +88,7 @@ const Schemas = {
     description: z.string(),
     prompt: nullishOptional(z.string()),
     backend: nullishOptional(z.string()),
+    overwrite: nullishOptional(z.boolean()),
   }),
   diffGet: z.object({
     worktreePath: z.string(),
@@ -133,6 +131,7 @@ const Schemas = {
     filePath: z.string(),
     content: z.string(),
     expectedMtime: nullishOptional(z.number()),
+    encoding: nullishOptional(z.enum(["utf8", "utf8-bom", "utf16le", "utf16be"])),
   }),
   fileReadAtRef: z.object({ worktreePath: z.string(), filePath: z.string(), ref: z.string() }),
   gitDiscardFile: z.object({ worktreePath: z.string(), filePath: z.string() }),
@@ -171,6 +170,7 @@ const Schemas = {
       )
     ),
   }),
+  kanbanDelete: z.object({ id: z.string().min(1) }),
   presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
@@ -217,6 +217,12 @@ const Schemas = {
     worktreePath: nullishOptional(z.string()),
     vars: nullishOptional(z.record(z.string(), z.string())),
   }),
+  automationActivateTriggers: z.object({
+    workspaceId: z.string(),
+    projectPath: z.string(),
+    worktreePath: z.string(),
+  }),
+  automationDeactivateTriggers: z.object({ workspaceId: z.string() }),
   notifySend: z.object({
     title: z.string(),
     body: z.string(),
@@ -236,11 +242,42 @@ const Schemas = {
     base: nullishOptional(z.string()),
     remote: nullishOptional(z.string()),
   }),
+  checksGet: z.object({ worktreePath: z.string() }),
+  agentRun: z.object({
+    workspaceId: z.string(),
+    backend: z.string(),
+    prompt: z.string(),
+    cwd: nullishOptional(z.string()),
+    resumeSessionId: nullishOptional(z.string()),
+    permissionMode: nullishOptional(z.string()),
+    env: nullishOptional(z.record(z.string(), z.string())),
+  }),
+  agentKill: z.object({ agentId: z.string() }),
   gitRemoteInfo: z.object({
     worktreePath: z.string(),
     remote: nullishOptional(z.string()),
   }),
   aiCommitMessage: z.object({ worktreePath: z.string() }),
+  aiBranchName: z.object({
+    prompt: z.string(),
+    cwd: nullishOptional(z.string()),
+    instructions: nullishOptional(z.string()),
+  }),
+  aiBranchNameFromDiff: z.object({
+    cwd: z.string(),
+    instructions: nullishOptional(z.string()),
+  }),
+  gitRenameBranch: z.object({ worktreePath: z.string(), newBranch: z.string() }),
+  credentialProvider: z.object({ provider: CredentialProviderSchema }),
+  credentialConnect: z.object({
+    provider: CredentialProviderSchema,
+    username: z.string(),
+    password: z.string(),
+  }),
+  credentialDisconnect: z.object({
+    provider: CredentialProviderSchema,
+    username: nullishOptional(z.string()),
+  }),
 };
 
 export interface RpcHandlersOptions {
@@ -252,10 +289,13 @@ export interface RpcHandlersOptions {
   skillsStore?: SkillsStore;
   diff?: DiffReader;
   git?: GitModule;
+  checks?: ChecksModule;
+  agentRunner?: AgentRunner;
   presets?: PresetLauncher;
   kanban?: KanbanStore;
   automations?: AutomationRunner;
   mcp?: MCPManager;
+  triggers?: TriggerManager;
   notifications?: NotificationService;
   context?: ContextTracker;
   usage?: UsageTracker;
@@ -269,7 +309,33 @@ export interface RpcHandlersOptions {
   caffeinate?: Caffeinate;
   instructions?: InstructionsResolver;
   commitMessage?: CommitMessageGenerator;
+  branchName?: BranchNameGenerator;
+  credentials?: GitCredentials;
   notifier?: Notifier;
+}
+
+// Recursively watch a worktree, firing onChange for non-noise paths. fs.watch
+// `recursive` is supported on the desktop targets (Windows + macOS); returns an
+// unwatch fn. TriggerManager debounces on top of this.
+function watchWorktree(worktreePath: string, onChange: () => void): () => void {
+  try {
+    const w = fsWatch(worktreePath, { recursive: true }, (_event, filename) => {
+      if (filename) {
+        const segs = filename.toString().split(/[/\\]/);
+        if (segs.some((s) => SKIP_DIRS.has(s))) return;
+      }
+      onChange();
+    });
+    return () => {
+      try {
+        w.close();
+      } catch {
+        /* already closed */
+      }
+    };
+  } catch {
+    return () => {};
+  }
 }
 
 export class RpcHandlers {
@@ -281,9 +347,12 @@ export class RpcHandlers {
   readonly skillsStore: SkillsStore;
   readonly diff: DiffReader;
   readonly git: GitModule;
+  readonly checks: ChecksModule;
+  readonly agentRunner: AgentRunner;
   readonly presets: PresetLauncher;
   readonly kanban: KanbanStore;
   readonly automations: AutomationRunner;
+  readonly triggers: TriggerManager;
   readonly mcp: MCPManager;
   readonly notifications: NotificationService;
   readonly context: ContextTracker;
@@ -298,6 +367,8 @@ export class RpcHandlers {
   readonly caffeinate: Caffeinate;
   readonly instructions: InstructionsResolver;
   readonly commitMessage: CommitMessageGenerator;
+  readonly branchName: BranchNameGenerator;
+  readonly credentials: GitCredentials;
   readonly notifier: Notifier;
 
   private watchedProjects = new Set<string>();
@@ -311,6 +382,8 @@ export class RpcHandlers {
     this.skillsStore = opts.skillsStore ?? new SkillsStore();
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
+    this.checks = opts.checks ?? new ChecksModule();
+    this.agentRunner = opts.agentRunner ?? new AgentRunner();
     this.presets =
       opts.presets ??
       new PresetLauncher({
@@ -322,6 +395,13 @@ export class RpcHandlers {
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
     this.automations =
       opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
+    this.triggers =
+      opts.triggers ??
+      new TriggerManager({
+        loadAutomations: (projectPath) => this.config.load(projectPath).automations ?? [],
+        runAutomation: (p) => this.automations.run(p),
+        watch: watchWorktree,
+      });
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
     this.notifications =
       opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
@@ -338,6 +418,8 @@ export class RpcHandlers {
     this.caffeinate = opts.caffeinate ?? new Caffeinate();
     this.instructions = opts.instructions ?? new InstructionsResolver();
     this.commitMessage = opts.commitMessage ?? new CommitMessageGenerator();
+    this.branchName = opts.branchName ?? new BranchNameGenerator();
+    this.credentials = opts.credentials ?? new GitCredentials();
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -425,7 +507,7 @@ export class RpcHandlers {
         const p = Schemas.projectSettingsOpenFile.parse(params);
         const project = this.store.projectGet(p.projectId);
         if (!project) throw new Error(`project ${p.projectId} not found`);
-        return { path: `${project.path}/maverick.json` };
+        return { path: join(project.path, "maverick.json") };
       }
       case "workspace.create": {
         const p = Schemas.workspaceCreate.parse(params);
@@ -463,7 +545,9 @@ export class RpcHandlers {
           baseBranch,
           filesToCopy: settings?.workspaces.filesToCopy,
           base: settings?.workspaces.basePath ?? defaultWorktreeRoot(projectName),
-          dirName: slugify(branch),
+          // branchToDirSlug, not slugify: slugify deletes "/" and would flatten
+          // "feature/login" → "featurelogin"; we want "feature-login".
+          dirName: branchToDirSlug(branch),
         });
         // scripts.setup is intentionally NOT run here: the frontend streams it
         // through the Setup tab PTY so creation returns immediately and the
@@ -481,14 +565,20 @@ export class RpcHandlers {
         const p = Schemas.workspaceDestroy.parse(params);
         const ws = this.store.workspaceGet(p.workspaceId);
         if (!ws) return { ok: true };
+        // A headless agent must not outlive its workspace. (Preset/terminal PTYs
+        // are Rust-owned and reaped by the frontend's killWorkspaceLeaves on
+        // removeWorkspace — the sidecar no longer spawns any.)
+        this.agentRunner.killWorkspace(p.workspaceId);
         const project = this.store.projectGet(ws.projectId);
         if (project) {
           const settings = this.projectSettings.read(project.path);
           if (settings.scripts.archive.trim() !== "") {
+            // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
+            const [archiveCmd, ...archiveArgs] = shellCommandArgs(settings.scripts.archive);
             const { proc, exited } = this.process.spawnOnceHandle({
               cwd: ws.worktreePath,
-              command: "/bin/sh",
-              args: ["-c", settings.scripts.archive],
+              command: archiveCmd,
+              args: archiveArgs,
             });
             const archive = exited
               .then((code) => ({ code }))
@@ -527,26 +617,6 @@ export class RpcHandlers {
         const p = Schemas.workspaceList.parse(params);
         return this.store.workspaceList(p.projectId);
       }
-      case "pty.spawn": {
-        const p = Schemas.ptySpawn.parse(params);
-        if (!p.cwd) {
-          const ws = this.store.workspaceGet(p.workspaceId);
-          if (ws) p.cwd = ws.worktreePath;
-        }
-        return this.process.spawn(p);
-      }
-      case "pty.write": {
-        const p = Schemas.ptyWrite.parse(params);
-        return this.process.write(p);
-      }
-      case "pty.resize": {
-        const p = Schemas.ptyResize.parse(params);
-        return this.process.resize(p);
-      }
-      case "pty.kill": {
-        const p = Schemas.ptyKill.parse(params);
-        return this.process.kill(p);
-      }
       case "config.load": {
         const p = Schemas.configLoad.parse(params);
         return this.config.load(p.projectPath);
@@ -576,7 +646,7 @@ export class RpcHandlers {
         return this.skillsStore.list();
       case "skills.createGlobal": {
         const p = Schemas.skillsCreateGlobal.parse(params);
-        const filePath = this.skillsStore.create(p.name, p.description, p.prompt ?? "", p.backend);
+        const filePath = this.skillsStore.create(p.name, p.description, p.prompt ?? "", p.backend ?? undefined, p.overwrite ?? false);
         return { ok: true, filePath };
       }
       case "diff.get": {
@@ -663,6 +733,26 @@ export class RpcHandlers {
         const p = Schemas.prCreate.parse(params);
         return this.git.prCreate(p);
       }
+      case "checks.get": {
+        const p = Schemas.checksGet.parse(params);
+        return this.checks.get(p);
+      }
+      case "agent.run": {
+        const p = Schemas.agentRun.parse(params);
+        return this.agentRunner.run({
+          workspaceId: p.workspaceId,
+          backend: p.backend,
+          prompt: p.prompt,
+          cwd: p.cwd ?? undefined,
+          resumeSessionId: p.resumeSessionId ?? undefined,
+          permissionMode: p.permissionMode ?? undefined,
+          env: p.env ?? undefined,
+        });
+      }
+      case "agent.kill": {
+        const p = Schemas.agentKill.parse(params);
+        return this.agentRunner.kill(p);
+      }
       case "git.remote_info": {
         const p = Schemas.gitRemoteInfo.parse(params);
         return this.git.remoteInfo(p);
@@ -670,6 +760,34 @@ export class RpcHandlers {
       case "ai.commit_message": {
         const p = Schemas.aiCommitMessage.parse(params);
         return this.commitMessage.generate(p);
+      }
+      case "ai.branch_name": {
+        const p = Schemas.aiBranchName.parse(params);
+        return this.branchName.generate({
+          prompt: p.prompt,
+          cwd: p.cwd ?? undefined,
+          instructions: p.instructions ?? undefined,
+        });
+      }
+      case "ai.branch_name_from_diff": {
+        const p = Schemas.aiBranchNameFromDiff.parse(params);
+        return this.branchName.generateFromDiff({ cwd: p.cwd, instructions: p.instructions ?? undefined });
+      }
+      case "git.rename_branch": {
+        const p = Schemas.gitRenameBranch.parse(params);
+        return this.git.renameBranch(p);
+      }
+      case "git.credential_status": {
+        const p = Schemas.credentialProvider.parse(params);
+        return this.credentials.status(p.provider);
+      }
+      case "git.credential_connect": {
+        const p = Schemas.credentialConnect.parse(params);
+        return this.credentials.connect(p);
+      }
+      case "git.credential_disconnect": {
+        const p = Schemas.credentialDisconnect.parse(params);
+        return this.credentials.disconnect({ provider: p.provider, username: p.username ?? undefined });
       }
       case "file.tree": {
         const p = Schemas.fileTree.parse(params);
@@ -681,7 +799,12 @@ export class RpcHandlers {
       }
       case "file.write": {
         const p = Schemas.fileWrite.parse(params);
-        return this.fileWriter.write({ filePath: p.filePath, content: p.content, expectedMtime: p.expectedMtime });
+        return this.fileWriter.write({
+          filePath: p.filePath,
+          content: p.content,
+          expectedMtime: p.expectedMtime,
+          encoding: p.encoding ?? undefined,
+        });
       }
       case "file.readAtRef": {
         const p = Schemas.fileReadAtRef.parse(params);
@@ -722,6 +845,10 @@ export class RpcHandlers {
         const task = Schemas.kanbanUpsert.parse(params.task ?? params);
         return this.kanban.upsert(task);
       }
+      case "kanban.delete": {
+        const p = Schemas.kanbanDelete.parse(params);
+        return this.kanban.delete(p.id);
+      }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);
         const projectId = p.projectPath
@@ -731,10 +858,12 @@ export class RpcHandlers {
       }
       case "preset.launch": {
         const p = Schemas.presetLaunch.parse(params);
+        const projectId = this.store.projectByPath(p.projectPath)?.id;
         return this.presets.launch({
           preset: p.preset as never,
           projectPath: p.projectPath,
           baseBranch: p.branch,
+          projectId,
         });
       }
       case "preset.save_current": {
@@ -807,6 +936,16 @@ export class RpcHandlers {
           worktreePath,
           vars: p.vars,
         });
+      }
+      case "automation.activateTriggers": {
+        const p = Schemas.automationActivateTriggers.parse(params);
+        this.triggers.activate(p);
+        return { ok: true };
+      }
+      case "automation.deactivateTriggers": {
+        const p = Schemas.automationDeactivateTriggers.parse(params);
+        this.triggers.deactivate(p.workspaceId);
+        return { ok: true };
       }
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);

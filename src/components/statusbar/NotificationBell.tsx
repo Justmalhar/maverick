@@ -26,7 +26,12 @@ export function NotificationBell() {
     notifyList(MAX_LIST)
       .then((list) => {
         if (cancelled) return;
-        setItems(list);
+        // Merge, don't replace: a live notification can arrive (and be prepended
+        // below) before this initial fetch resolves — replacing would drop it.
+        setItems((prev) => {
+          const extras = prev.filter((p) => !list.some((f) => f.id === p.id));
+          return [...extras, ...list].slice(0, MAX_LIST);
+        });
         setLoaded(true);
       })
       .catch(() => {
@@ -157,7 +162,7 @@ export function NotificationBell() {
                       onClick={() => markRead(n.id)}
                       aria-label="Mark as read"
                       data-testid={`notification-mark-${n.id}`}
-                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
                     >
                       <Check className="h-3 w-3" />
                     </button>

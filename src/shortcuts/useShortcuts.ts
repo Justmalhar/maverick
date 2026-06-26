@@ -16,6 +16,20 @@ function requestCloseActiveTab(): void {
   window.dispatchEvent(new CustomEvent("maverick:closeActiveTab"));
 }
 
+// Unmodified bracket sequences (]c/[c) must not steal keystrokes while the user
+// is typing into an input, textarea, select, or contenteditable.
+function isTextEntryFocused(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    (el as HTMLElement).isContentEditable === true
+  );
+}
+
 export function useShortcuts() {
   const store = useWorkbench();
 
@@ -56,11 +70,19 @@ export function useShortcuts() {
         if (!ws) return;
         const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
         void runAiReview({
-          workspaceId: ws.id,
+          target: { workspaceId: ws.id, backend: ws.agentBackend, cwd: ws.worktreePath },
           worktreePath: ws.worktreePath,
           reviewPref,
           onAgentFocus: () => setActiveWorkspace(ws.id),
         }).catch((e) => console.error("AI review failed", e));
+      },
+      "diff.nextHunk": () => {
+        if (isTextEntryFocused()) return;
+        window.dispatchEvent(new CustomEvent("maverick:diff:nextHunk"));
+      },
+      "diff.prevHunk": () => {
+        if (isTextEntryFocused()) return;
+        window.dispatchEvent(new CustomEvent("maverick:diff:prevHunk"));
       },
       // preview.open and preview.toggleMarkdown have been removed — the
       // AuxiliaryBar preview tab is gone; files now open as editor file tabs.

@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useWorkspace } from "./useWorkspace";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeProject } from "@/test/fixtures";
-import { __testing__ as leafTesting } from "@/components/editor/terminal/TerminalLeaf";
+import { __testing__ as leafTesting } from "@/components/editor/terminal/leaf-registry";
 import type { DetectedBackend, BootstrapStatus } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
@@ -154,13 +154,14 @@ describe("useWorkspace", () => {
     expect(backends.find((b) => b.id === "claude-code")).toMatchObject({
       id: "claude-code",
       name: "Claude Code",
-      command: "/usr/local/bin/claude",
+      // Bare command (not the resolved path) so it runs when typed into a shell.
+      command: "claude",
       active: false,
     });
     expect(backends.find((b) => b.id === "gemini")).toMatchObject({
       id: "gemini",
       name: "Gemini CLI",
-      command: "/usr/local/bin/gemini",
+      command: "gemini",
       active: true,
     });
   });

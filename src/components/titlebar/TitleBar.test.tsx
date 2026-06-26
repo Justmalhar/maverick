@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "@/test/utils";
 import { TitleBar } from "./TitleBar";
 import { useWorkbench } from "@/state/store";
+import { makeWorkspace, makeProject } from "@/test/fixtures";
 
 const startDragging = vi.fn().mockResolvedValue(undefined);
 vi.mock("@tauri-apps/api/window", () => ({
@@ -93,6 +94,29 @@ describe("TitleBar", () => {
     renderWithProviders(<TitleBar />);
     expect(screen.queryByTestId("workspace-badges")).not.toBeInTheDocument();
     expect(screen.queryByTestId("workspace-badge-ws-x")).not.toBeInTheDocument();
+  });
+
+  it("renders the empty breadcrumb when no workspace is active", () => {
+    renderWithProviders(<TitleBar />);
+    expect(screen.getByTestId("breadcrumb-empty")).toHaveTextContent("Maverick");
+  });
+
+  it("renders a project > branch > backend breadcrumb for the active workspace", () => {
+    useWorkbench.setState({
+      projects: [makeProject({ id: "p", name: "Alpha" })],
+      workspaces: [makeWorkspace({ id: "ws", projectId: "p", branch: "feature/x", agentBackend: "codex" })],
+      activeWorkspaceId: "ws",
+    });
+    renderWithProviders(<TitleBar />);
+    const bc = screen.getByTestId("breadcrumb");
+    expect(bc).toHaveTextContent("Alpha");
+    expect(bc).toHaveTextContent("feature/x");
+    expect(bc).toHaveTextContent("codex");
+  });
+
+  it("does not render the macOS traffic-light hint on non-mac (jsdom)", () => {
+    renderWithProviders(<TitleBar />);
+    expect(screen.queryByTestId("traffic-lights")).not.toBeInTheDocument();
   });
 
   describe("below the responsive breakpoint", () => {

@@ -104,8 +104,14 @@ describe("EditorGroup", () => {
     expect(screen.queryByTestId("workspace-editor-w2")).not.toBeInTheDocument();
   });
 
-  it("renders dashboard system tab (UsagePanel)", async () => {
+  it("renders dashboard system tab (Agents Dashboard)", async () => {
     useWorkbench.setState({ ...initial, systemTabs: ["dashboard"], activeSystemTab: "dashboard", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("dashboard-view")).toBeInTheDocument());
+  });
+
+  it("renders usage system tab (UsagePanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["usage"], activeSystemTab: "usage", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);
     await waitFor(() => expect(screen.getByTestId("usage-panel")).toBeInTheDocument());
   });
@@ -119,7 +125,9 @@ describe("EditorGroup", () => {
   it("renders kanban system tab (KanbanBoard)", async () => {
     useWorkbench.setState({ ...initial, systemTabs: ["kanban"], activeSystemTab: "kanban", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);
-    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // KanbanBoard is a lazy() chunk (dnd + react-window); the first cold import
+    // can exceed waitFor's 1000ms default under coverage instrumentation.
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument(), { timeout: 5000 });
   });
 
   it("renders automations system tab (AutomationsPanel)", async () => {
@@ -146,6 +154,13 @@ describe("EditorGroup", () => {
     await waitFor(() => expect(screen.getByTestId("skill-editor-panel")).toBeInTheDocument());
   });
 
+  it("renders git system tab (GitPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["git"], activeSystemTab: "git", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    // No active workspace → GitPanel shows its empty state.
+    await waitFor(() => expect(screen.getByTestId("git-panel-empty")).toBeInTheDocument());
+  });
+
   it("keeps the browser mounted (hidden) when another system tab is active", async () => {
     useWorkbench.setState({
       ...initial,
@@ -154,8 +169,8 @@ describe("EditorGroup", () => {
       activeWorkspaceId: null,
     });
     renderWithProviders(<EditorGroup />);
-    // The active kanban tab renders…
-    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    // The active kanban tab renders… (lazy chunk; allow cold-import headroom)
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument(), { timeout: 5000 });
     // …while the browser stays in the DOM (keep-alive), just hidden.
     const browser = await screen.findByTestId("browser-panel");
     expect(browser).toBeInTheDocument();

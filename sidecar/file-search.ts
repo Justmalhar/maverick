@@ -1,5 +1,5 @@
 import { readdirSync, statSync } from "fs";
-import { join, relative, basename } from "path";
+import { join, relative, basename, sep } from "path";
 import { defaultShell } from "./deps";
 import { SKIP_DIRS } from "./fs-watcher";
 import type { Shell } from "./types";
@@ -168,7 +168,9 @@ export class FileSearch {
       if (info.isDirectory) {
         if (this.walk(root, full, q, out, counter)) return true;
       } else {
-        const rel = relative(root, full);
+        // Normalize to "/" so walk-fallback results match git ls-files output
+        // and the frontend's "/" paths. On Windows relative() yields "\". No-op on POSIX.
+        const rel = relative(root, full).split(sep).join("/");
         if (rel.toLowerCase().includes(q)) out.push(rel);
       }
     }

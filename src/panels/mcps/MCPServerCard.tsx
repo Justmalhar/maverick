@@ -36,6 +36,7 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [logsOpen, setLogsOpen] = useState(false);
   const [logText, setLogText] = useState("");
+  const [dropped, setDropped] = useState(0);
   const offsetRef = useRef(0);
 
   const start = async () => {
@@ -85,6 +86,8 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
       const page = await mcpLogs(server.name, offsetRef.current);
       offsetRef.current = page.nextOffset;
       if (page.data) setLogText((prev) => (prev + page.data).slice(-64_000));
+      // page.dropped is a running total of bytes evicted by the bounded ring.
+      if (page.dropped) setDropped(page.dropped);
     } catch (e) {
       setError(String(e));
     }
@@ -145,7 +148,8 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
         <Button
           size="icon-sm"
           variant="ghost"
-          disabled={busy || server.status === "running"}
+          disabled={busy || server.status === "running" || !workspaceId}
+          title={!workspaceId ? "Open a project first" : undefined}
           onClick={start}
           data-testid="mcp-start"
         >
@@ -163,7 +167,8 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
         <Button
           size="icon-sm"
           variant="ghost"
-          disabled={busy}
+          disabled={busy || !workspaceId}
+          title={!workspaceId ? "Open a project first" : undefined}
           onClick={restart}
           data-testid="mcp-restart"
         >
@@ -184,6 +189,11 @@ export default function MCPServerCard({ server, onChange, workspaceId }: Props) 
           className="max-h-40 rounded-sm border border-border bg-background"
           data-testid="mcp-logs"
         >
+          {dropped > 0 && (
+            <div data-testid="mcp-logs-dropped" className="px-2 pt-1 font-mono text-[10px] text-warning">
+              …{dropped} earlier bytes dropped (log buffer overflowed)
+            </div>
+          )}
           {logText ? (
             <pre className="whitespace-pre-wrap p-2 font-mono text-[10px] text-muted-foreground">
               {logText}

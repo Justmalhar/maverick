@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { KEYBINDINGS } from "@/shortcuts/registry";
+import { formatKeybinding } from "@/shortcuts/format";
+import { useOSPlatform } from "@/hooks/useOSPlatform";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Command,
@@ -36,6 +38,7 @@ interface CommandEntry {
 }
 
 export function CommandPalette() {
+  const platform = useOSPlatform();
   const open = useWorkbench((s) => s.commandPaletteOpen);
   const setOpen = useWorkbench((s) => s.setCommandPaletteOpen);
   const showPrimarySideBar = useWorkbench((s) => s.showPrimarySideBar);
@@ -80,6 +83,15 @@ export function CommandPalette() {
           setOpen(false);
         },
         shortcutId: "view.git",
+      },
+      {
+        id: "view.gitPanel",
+        label: "View: Show Git",
+        icon: GitBranch,
+        run: () => {
+          openSystemTab("git");
+          setOpen(false);
+        },
       },
       {
         id: "view.kanban",
@@ -200,8 +212,8 @@ export function CommandPalette() {
   );
 
   const shortcutMap = useMemo(
-    () => Object.fromEntries(KEYBINDINGS.map((k) => [k.id, k.display ?? k.keys])),
-    []
+    () => Object.fromEntries(KEYBINDINGS.map((k) => [k.id, formatKeybinding(k.keys, platform)])),
+    [platform]
   );
 
   return (

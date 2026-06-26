@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { WorkspaceEditor } from "./WorkspaceEditor";
-import { __testing__ as leafTesting } from "./terminal/TerminalLeaf";
+import { __testing__ as leafTesting } from "./terminal/leaf-registry";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";

@@ -64,12 +64,16 @@ const AutomationStepSchema = z
 const AutomationSchema = z.object({
   name: z.string(),
   trigger: z.enum(["manual", "schedule", "on-file-change"]),
+  // Cadence for schedule triggers, e.g. "30m" / "2h" / "1d".
+  interval: z.string().optional(),
   steps: z.array(AutomationStepSchema),
 });
 
 const MCPSchema = z.object({
   name: z.string(),
-  command: z.string(),
+  // A blank command (hand-edited maverick.json) used to be accepted and only
+  // failed with a cryptic error at spawn time — reject it at parse.
+  command: z.string().trim().min(1, "MCP server command must not be empty"),
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).optional(),
 });

@@ -67,7 +67,7 @@ describe("TerminalPane", () => {
     TerminalRegistry.register(provider);
     const onFocus = vi.fn();
     const { unmount } = renderWithProviders(
-      <TerminalPane ptyId="p1" paneId="pane-1" isFocused={false} onFocus={onFocus} />
+      <TerminalPane ptyId="p1" paneId="pane-1" isFocused onFocus={onFocus} />
     );
     expect(screen.getByTestId("terminal-pane-pane-1")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByTestId("terminal-pane-pane-1"));
@@ -83,6 +83,31 @@ describe("TerminalPane", () => {
 
     unmount();
     expect(mountedHandle.dispose).toHaveBeenCalled();
+  });
+
+  it("ignores the clear broadcast when the pane is not focused (#bug)", () => {
+    const { provider, mountedHandle } = makeProvider();
+    TerminalRegistry.register(provider);
+    renderWithProviders(<TerminalPane ptyId="pu" paneId="pane-u" isFocused={false} onFocus={() => {}} />);
+    window.dispatchEvent(new CustomEvent("maverick:terminal:clear"));
+    expect(mountedHandle.write).not.toHaveBeenCalledWith("\x1b[2J\x1b[H");
+  });
+
+  it("applies the appearance terminalFontSize and ligatures settings, not hardcoded values (#34)", async () => {
+    const { useSettingsStore } = await import("@/lib/stores/settings");
+    useSettingsStore.setState({ values: { "appearance.terminalFontSize": 18, "appearance.ligatures": false } });
+    const handle = makeProvider().mountedHandle;
+    let mountOpts: { fontSize?: number; ligatures?: boolean } | undefined;
+    TerminalRegistry.register({
+      mount: (_c, opts) => {
+        mountOpts = opts as { fontSize?: number; ligatures?: boolean };
+        return handle;
+      },
+    });
+    renderWithProviders(<TerminalPane ptyId="pf" paneId="pane-f" isFocused={false} onFocus={() => {}} />);
+    expect(mountOpts?.fontSize).toBe(18);
+    expect(mountOpts?.ligatures).toBe(false);
+    useSettingsStore.setState({ values: {} });
   });
 
   it("pipes user keystrokes back to the PTY via pty_write and taps onData", async () => {

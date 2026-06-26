@@ -18,10 +18,12 @@ function ActionButton({
   icon: Icon,
   label,
   onClick,
+  testId,
 }: {
   icon: typeof Settings2;
   label: string;
   onClick: () => void;
+  testId?: string;
 }) {
   return (
     <Tooltip>
@@ -33,6 +35,7 @@ function ActionButton({
             onClick();
           }}
           aria-label={label}
+          data-testid={testId}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-all duration-100 group-hover/row:opacity-100 hover:bg-background/40 hover:text-foreground"
         >
           <Icon className="h-3.5 w-3.5" />
@@ -75,16 +78,19 @@ export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom 
             icon={Settings2}
             label="Project settings"
             onClick={() => onSettings?.(project.id)}
+            testId={`project-${project.id}-settings`}
           />
           <ActionButton
             icon={Link2}
             label="Create from"
             onClick={() => onCreateFrom?.(project.id)}
+            testId={`project-${project.id}-createfrom`}
           />
           <ActionButton
             icon={Plus}
             label="New workspace"
             onClick={() => onAddWorkspace?.(project.id)}
+            testId={`project-${project.id}-addworkspace`}
           />
         </div>
       </div>

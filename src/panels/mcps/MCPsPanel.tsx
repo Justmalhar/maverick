@@ -55,6 +55,8 @@ export default function MCPsPanel() {
             size="sm"
             variant="outline"
             onClick={() => setAddOpen(true)}
+            disabled={!activeWorkspaceId}
+            title={!activeWorkspaceId ? "Open a project first" : undefined}
             data-testid="mcps-add"
           >
             <Plus className="h-3 w-3" />
@@ -62,6 +64,11 @@ export default function MCPsPanel() {
           </Button>
         </div>
       </div>
+      {!activeWorkspaceId && (
+        <div data-testid="mcps-no-workspace" className="px-3 py-1.5 text-[11px] text-muted-foreground">
+          MCP servers are project-scoped — open a workspace to add, start, or restart one.
+        </div>
+      )}
       {loading && (
         <div className="px-3 py-1.5 text-[11px] text-muted-foreground">Loading…</div>
       )}

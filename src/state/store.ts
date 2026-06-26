@@ -1,6 +1,9 @@
 // Central Zustand store — single source of truth for the Workbench
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { disposeWorkspaceRunners } from "@/lib/script-runner";
+import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type {
   Project,
   Workspace,
@@ -8,6 +11,7 @@ import type {
   Skill,
   SplitNode,
   LaunchSpec,
+  AgentRunSpec,
   AuxiliaryView,
 } from "@/lib/ipc";
 
@@ -22,7 +26,7 @@ interface PanelLayout {
   auxiliaryView: AuxiliaryView;
 }
 
-export type SystemTabId = "dashboard" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor";
+export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor" | "git";
 
 export interface TerminalTab {
   id: string;
@@ -68,6 +72,8 @@ interface WorkbenchState {
   workspaces: Workspace[];
   backends: Backend[];
   skills: Skill[];
+  // The skill currently loaded into the editor (null = creating a new one).
+  editingSkill: Skill | null;
 
   // System tabs (browser, kanban etc) opened as editor tabs alongside workspaces
   systemTabs: SystemTabId[];
@@ -92,6 +98,9 @@ interface WorkbenchState {
   // workspace is opened for an agent (kanban / preset); consumed once by the
   // primary terminal leaf when its shell PTY is ready, then deleted.
   launchSpecs: Record<string, LaunchSpec>;
+  // Staged headless-agent runs (the "run in background" launch surface), consumed
+  // once by useAgentRun — the headless analogue of launchSpecs for the terminal.
+  agentLaunchSpecs: Record<string, AgentRunSpec>;
 
   // Layout
   layout: PanelLayout;
@@ -120,20 +129,29 @@ interface WorkbenchState {
   addWorkspace: (workspace: Workspace) => void;
   removeWorkspace: (id: string) => void;
   updateWorkspace: (id: string, patch: Partial<Workspace>) => void;
+  // Workspaces created via "let AI name it later" — renamed from their diff after
+  // the first commit. workspaceId list; cleared once renamed (or on destroy).
+  pendingAiRename: string[];
+  markPendingAiRename: (id: string) => void;
+  clearPendingAiRename: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
   /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
   setLaunchSpec: (workspaceId: string, spec: LaunchSpec) => void;
+  setAgentLaunchSpec: (workspaceId: string, spec: AgentRunSpec) => void;
+  consumeAgentLaunchSpec: (workspaceId: string) => AgentRunSpec | null;
   /** Return and remove a workspace's launch spec (single-shot); null if none. */
   consumeLaunchSpec: (workspaceId: string) => LaunchSpec | null;
   setBackends: (backends: Backend[]) => void;
   setSkills: (skills: Skill[]) => void;
+  setEditingSkill: (skill: Skill | null) => void;
   queueSetup: (workspaceId: string) => void;
   clearPendingSetup: (workspaceId: string) => void;
 
   // Layout actions
   showPrimarySideBar: () => void;
   openSourceControl: () => void;
+  openAgentOutput: () => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
   setActivitybarCollapsed: (collapsed: boolean) => void;
   toggleActivitybarCollapsed: () => void;
@@ -187,6 +205,7 @@ export const useWorkbench = create<WorkbenchState>()(
     workspaces: [],
     backends: [],
     skills: [],
+    editingSkill: null,
     systemTabs: [],
     activeSystemTab: null,
     terminalTabs: [],
@@ -198,6 +217,8 @@ export const useWorkbench = create<WorkbenchState>()(
     workspaceAccessOrder: [],
     splitTrees: {},
     launchSpecs: {},
+    agentLaunchSpecs: {},
+    pendingAiRename: [],
 
     layout: {
       activitybarCollapsed: false,
@@ -236,20 +257,40 @@ export const useWorkbench = create<WorkbenchState>()(
           ...s.workspaceAccessOrder.filter((wid) => wid !== workspace.id),
         ],
       })),
-    removeWorkspace: (id) =>
+    removeWorkspace: (id) => {
+      // Canonical teardown for BOTH close paths (tab X / ⌘W go through here, not
+      // just the Archive action): kill the Run/Setup processes AND every per-leaf
+      // shell PTY, so closing a tab can't orphan a dev server or a login shell.
+      disposeWorkspaceRunners(id);
+      killWorkspaceLeaves(id);
+      useAgentStatusStore.getState().clearStatus(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
+        const { [id]: _aspec, ...agentLaunchSpecs } = s.agentLaunchSpecs;
+        const { [id]: _tree, ...splitTrees } = s.splitTrees;
         return {
           workspaces: s.workspaces.filter((w) => w.id !== id),
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
           launchSpecs,
+          agentLaunchSpecs,
+          splitTrees,
+          pendingAiRename: s.pendingAiRename.filter((wid) => wid !== id),
         };
-      }),
+      });
+    },
     updateWorkspace: (id, patch) =>
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...patch } : w)),
       })),
+    markPendingAiRename: (id) =>
+      set((s) => ({
+        pendingAiRename: s.pendingAiRename.includes(id)
+          ? s.pendingAiRename
+          : [...s.pendingAiRename, id],
+      })),
+    clearPendingAiRename: (id) =>
+      set((s) => ({ pendingAiRename: s.pendingAiRename.filter((w) => w !== id) })),
     setActiveWorkspace: (id) =>
       set((s) => ({
         activeWorkspaceId: id,
@@ -277,8 +318,21 @@ export const useWorkbench = create<WorkbenchState>()(
       }
       return spec;
     },
+    setAgentLaunchSpec: (workspaceId, spec) =>
+      set((s) => ({ agentLaunchSpecs: { ...s.agentLaunchSpecs, [workspaceId]: spec } })),
+    consumeAgentLaunchSpec: (workspaceId) => {
+      const spec = get().agentLaunchSpecs[workspaceId] ?? null;
+      if (spec) {
+        set((s) => {
+          const { [workspaceId]: _removed, ...rest } = s.agentLaunchSpecs;
+          return { agentLaunchSpecs: rest };
+        });
+      }
+      return spec;
+    },
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
+    setEditingSkill: (editingSkill) => set({ editingSkill }),
     queueSetup: (workspaceId) =>
       set((s) => ({
         pendingSetupIds: s.pendingSetupIds.includes(workspaceId)
@@ -299,6 +353,10 @@ export const useWorkbench = create<WorkbenchState>()(
     openSourceControl: () =>
       set((s) => ({
         layout: { ...s.layout, auxiliaryView: "scm", auxiliaryBarVisible: true },
+      })),
+    openAgentOutput: () =>
+      set((s) => ({
+        layout: { ...s.layout, auxiliaryView: "agent", auxiliaryBarVisible: true },
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),
@@ -476,6 +534,23 @@ export const useWorkbench = create<WorkbenchState>()(
 // Selectors
 export const selectActiveWorkspace = (s: WorkbenchState): Workspace | undefined =>
   s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+
+/**
+ * The workspace whose worktree the AuxiliaryBar (Files / Changes / Source
+ * Control) operates on. Opening a file or diff tab clears `activeWorkspaceId`
+ * (the editor shows the file, not the workspace), so this falls back to the
+ * active file tab's worktree — keeping the file tree, change list, and commit
+ * UI populated while you inspect a diff instead of blanking to the empty state.
+ */
+export const selectContextWorkspace = (s: WorkbenchState): Workspace | undefined => {
+  const active = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+  if (active) return active;
+  if (s.activeFileTabId) {
+    const tab = s.fileTabs.find((t) => t.id === s.activeFileTabId);
+    if (tab) return s.workspaces.find((w) => w.worktreePath === tab.worktreePath);
+  }
+  return undefined;
+};
 
 export const selectWorkspacesForProject =
   (projectId: string) =>

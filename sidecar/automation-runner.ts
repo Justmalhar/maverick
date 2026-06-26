@@ -1,10 +1,18 @@
 import { ConfigLoader } from "./config-loader";
 import { GitModule } from "./git-module";
 import { SkillsEngine } from "./skills-engine";
+import { headlessArgv, supportsHeadless } from "./agent-runner";
 import { NotificationService } from "./notification-service";
 import { WorktreeManager } from "./worktree-manager";
-import { defaultShell, emit, stdoutNotifier } from "./deps";
+import { defaultShell, emit, stdoutNotifier, shellCommandArgs } from "./deps";
 import type { Automation, AutomationStep, Notifier, Shell } from "./types";
+
+// A skill step dispatches a headless agent and awaits it. Bound it so a runaway
+// agent can't hang the sidecar forever; long enough for a real review/fix task.
+const SKILL_AGENT_TIMEOUT_MS = 600_000;
+
+// Fallback backend when a skill declares none — the only spike-verified headless CLI.
+const DEFAULT_SKILL_BACKEND = "claude-code";
 
 interface RunParams {
   projectPath: string;
@@ -81,22 +89,50 @@ export class AutomationRunner {
     switch (step.type) {
       case "shell": {
         const command = String(step.command ?? "");
-        const { exitCode, stderr } = await this.shell.run(["sh", "-c", command], worktreePath);
+        const { exitCode, stderr } = await this.shell.run(shellCommandArgs(command), worktreePath);
         if (exitCode !== 0) throw new Error(stderr || `shell step failed (exit ${exitCode})`);
         return;
       }
       case "skill": {
         // The builder UI writes `skill`; older configs use `name`. Accept both.
         const skillName = String(step.skill ?? step.name ?? "");
-        this.skills.run({ projectPath, skillName, vars });
+        // Resolve the skill's interpolated prompt + backend, then actually RUN it
+        // headlessly in the worktree — previously the prompt was computed and
+        // thrown away, so the skill never executed.
+        const { prompt, backend } = this.skills.run({ projectPath, skillName, vars });
+        const resolved = backend || DEFAULT_SKILL_BACKEND;
+        if (!supportsHeadless(resolved)) {
+          throw new Error(
+            `skill step "${skillName}": backend "${resolved}" has no headless mode — run it from the terminal`
+          );
+        }
+        const argv = headlessArgv({ workspaceId: "automation", backend: resolved, prompt });
+        if (!argv) throw new Error(`skill step "${skillName}": no headless argv for "${resolved}"`);
+        const { exitCode, stderr } = await this.shell.run(argv, worktreePath, prompt, {
+          timeoutMs: SKILL_AGENT_TIMEOUT_MS,
+        });
+        if (exitCode !== 0) {
+          throw new Error(stderr.trim() || `skill "${skillName}" agent exited ${exitCode}`);
+        }
         return;
       }
       case "git": {
         const action = String(step.action ?? "");
         if (action === "commit") {
-          await this.git.commit({ worktreePath, message: String(step.message ?? "automation commit") });
+          // Forward an explicit file list so a configured commit scopes to it.
+          const files = Array.isArray(step.files) ? step.files.map(String) : undefined;
+          await this.git.commit({
+            worktreePath,
+            message: String(step.message ?? "automation commit"),
+            ...(files && files.length > 0 ? { files } : {}),
+          });
         } else if (action === "push") {
-          await this.git.push({ worktreePath });
+          // Honour the configured remote/branch instead of a bare `git push`.
+          await this.git.push({
+            worktreePath,
+            ...(step.remote ? { remote: String(step.remote) } : {}),
+            ...(step.branch ? { branch: String(step.branch) } : {}),
+          });
         } else if (action === "pull") {
           await this.git.pull({ worktreePath });
         } else {

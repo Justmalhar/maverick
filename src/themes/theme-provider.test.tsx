@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { ThemeProvider, useThemeContext } from "./theme-provider";
+import { ThemeProvider } from "./theme-provider";
+import { useThemeContext } from "./theme-context";
 import type { ReactNode } from "react";
 import type { ThemeDefinition } from "@/lib/ipc";
 

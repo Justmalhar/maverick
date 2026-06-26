@@ -6,7 +6,8 @@ import { viewerRegistry } from "@/lib/viewers";
 import { invoke } from "@tauri-apps/api/core";
 import type { ViewerProps } from "@/lib/viewers/types";
 import * as modelCacheModule from "@/lib/viewers/monaco/model-cache";
-import FileTabPane, { lazyViewerCache } from "./FileTabPane";
+import FileTabPane from "./FileTabPane";
+import { lazyViewerCache } from "./lazy-viewer-cache";
 
 const invokeMock = vi.mocked(invoke);
 

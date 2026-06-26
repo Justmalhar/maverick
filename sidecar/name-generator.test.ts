@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { generateWorkspaceName, slugify, titleize } from "./name-generator";
+import { generateWorkspaceName, slugify, titleize, branchToDirSlug } from "./name-generator";
 
 describe("slugify", () => {
   test("lowercases and dashes whitespace", () => {
@@ -16,6 +16,26 @@ describe("slugify", () => {
 
   test("falls back when nothing survives", () => {
     expect(slugify("!!!")).toBe("workspace");
+  });
+});
+
+describe("branchToDirSlug", () => {
+  test("preserves branch structure by mapping slash to hyphen (not deleting it)", () => {
+    expect(branchToDirSlug("feature/login-page")).toBe("feature-login-page");
+  });
+
+  test("regression: slugify would flatten the slash; branchToDirSlug keeps the boundary", () => {
+    expect(slugify("feature/dashboard")).toBe("featuredashboard");
+    expect(branchToDirSlug("feature/dashboard")).toBe("feature-dashboard");
+  });
+
+  test("collapses duplicate separators and trims", () => {
+    expect(branchToDirSlug("fix//Auth  Bug/")).toBe("fix-auth-bug");
+  });
+
+  test("caps pathological length and falls back when empty", () => {
+    expect(branchToDirSlug("a".repeat(120)).length).toBeLessThanOrEqual(60);
+    expect(branchToDirSlug("///")).toBe("workspace");
   });
 });
 

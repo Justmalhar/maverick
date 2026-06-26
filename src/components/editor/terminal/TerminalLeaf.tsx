@@ -1,46 +1,27 @@
 import { useEffect, useState } from "react";
-import { ptySpawn, ptyKill } from "@/lib/tauri";
-import { getGlobalEnv } from "@/lib/stores/settings";
-import { resolveDefaultShell } from "@/lib/terminal-shell";
+import { ptySpawn, ptyWrite } from "@/lib/tauri";
+import { getGlobalEnv, getDefaultShellKind } from "@/lib/stores/settings";
+import { resolveShell } from "@/lib/terminal-shell";
 import { useLaunchSpec } from "@/hooks/useLaunchSpec";
 import type { Workspace } from "@/lib/ipc";
 import { TerminalPane } from "./TerminalPane";
+import { leafPtyCache } from "./leaf-registry";
+
+// Leaves whose preset `startup` line has already been typed, so a keep-alive
+// remount (which reuses the cached PTY) never re-types it.
+const startupWritten = new Set<string>();
 
 // Every workspace surface is a real shell now: each split leaf owns its OWN
 // login-shell PTY scoped to the worktree. The workspace's primary leaf
 // (`${workspace.id}-1`) additionally consumes the staged launch spec to start a
 // CLI as a child of that shell (Ctrl-C returns to the prompt, not a dead pane).
+// The live-PTY registry and its kill/lookup helpers live in ./leaf-registry so
+// this file exports only the component (Fast Refresh requirement).
 
 interface SpawnState {
   status: "spawning" | "ready" | "error";
   ptyId?: string;
   error?: string;
-}
-
-// Keyed by split-leaf id so a pane's shell survives splits / remounts / tab
-// switches. The SplitNode.ptyId field is no longer the source of truth for the
-// live PTY — this cache is. Entries are evicted by killLeaf() on pane close.
-const leafPtyCache = new Map<string, string>();
-
-/** Kill and evict a terminal-mode leaf's shell PTY. Called when a pane closes. */
-export function killLeaf(leafId: string): void {
-  const ptyId = leafPtyCache.get(leafId);
-  if (!ptyId) return;
-  leafPtyCache.delete(leafId);
-  void ptyKill(ptyId).catch(() => {});
-}
-
-/** Kill every leaf shell PTY belonging to a workspace (ids are `${workspaceId}-…`). */
-export function killWorkspaceLeaves(workspaceId: string): void {
-  const prefix = `${workspaceId}-`;
-  for (const leafId of [...leafPtyCache.keys()]) {
-    if (leafId.startsWith(prefix)) killLeaf(leafId);
-  }
-}
-
-/** The live shell PTY id for a leaf, or undefined if it has not spawned yet. */
-export function getLeafPtyId(leafId: string): string | undefined {
-  return leafPtyCache.get(leafId);
 }
 
 interface Props {
@@ -51,15 +32,25 @@ interface Props {
   // False when the owning workspace editor is keep-alive-hidden — the pane
   // releases its xterm slot but keeps its shell PTY alive.
   visible?: boolean;
+  // Preset leaves carry a per-node launch: spawn `command` (in `cwd`) directly
+  // via ConPTY and type `startup` into it once. Absent = the default shell.
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  startup?: string;
 }
 
-/** A single terminal pane: a login shell scoped to the workspace worktree. */
+/** A single terminal pane: a login shell (or a preset command) scoped to the worktree. */
 export function TerminalLeaf({
   leafId,
   workspace,
   isFocused,
   onFocus,
   visible = true,
+  command,
+  args,
+  cwd,
+  startup,
 }: Props) {
   const [state, setState] = useState<SpawnState>(() => {
     const cached = leafPtyCache.get(leafId);
@@ -74,12 +65,21 @@ export function TerminalLeaf({
     }
     let cancelled = false;
     setState({ status: "spawning" });
-    const { shell, args } = resolveDefaultShell();
-    ptySpawn(shell, args, workspace.worktreePath, getGlobalEnv())
+    // A preset leaf spawns its own command/cwd; a normal leaf spawns the shell.
+    const shellRes = resolveShell(getDefaultShellKind());
+    const spawnCommand = command ?? shellRes.shell;
+    const spawnArgs = command ? args ?? [] : shellRes.args;
+    const spawnCwd = cwd ?? workspace.worktreePath;
+    ptySpawn(spawnCommand, spawnArgs, spawnCwd, getGlobalEnv())
       .then(({ ptyId }) => {
         if (cancelled) return;
         leafPtyCache.set(leafId, ptyId);
         setState({ status: "ready", ptyId });
+        // Type the preset's startup line once into the freshly-spawned command.
+        if (startup && !startupWritten.has(leafId)) {
+          startupWritten.add(leafId);
+          void ptyWrite(ptyId, `${startup}\r`).catch(() => {});
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -88,15 +88,16 @@ export function TerminalLeaf({
     return () => {
       cancelled = true;
     };
-  }, [leafId, workspace.worktreePath]);
+  }, [leafId, workspace.worktreePath, command, args, cwd, startup]);
 
   // Only the primary leaf launches the staged CLI; subsequently-split leaves are
-  // bare shells. The hook is a no-op for non-primary leaves (ready stays false).
-  const isPrimary = leafId === `${workspace.id}-1`;
+  // bare shells. A preset leaf (own `command`) must NOT also consume a launch
+  // spec, or it would type a second command into its agent.
+  const runLaunchSpec = leafId === `${workspace.id}-1` && !command;
   useLaunchSpec(
     workspace,
-    isPrimary ? state.ptyId : undefined,
-    isPrimary && state.status === "ready"
+    runLaunchSpec ? state.ptyId : undefined,
+    runLaunchSpec && state.status === "ready"
   );
 
   if (state.status === "error") {
@@ -128,8 +129,12 @@ export function TerminalLeaf({
       isFocused={isFocused}
       onFocus={onFocus}
       visible={visible}
+      // #40l: evict the dead ptyId on a natural process exit so a later
+      // keep-alive remount respawns a fresh PTY instead of binding a corpse.
+      onExit={() => {
+        leafPtyCache.delete(leafId);
+        startupWritten.delete(leafId);
+      }}
     />
   );
 }
-
-export const __testing__ = { leafPtyCache };

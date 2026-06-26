@@ -25,6 +25,13 @@ describe("GeneralSettings", () => {
     expect(toggle).not.toBeChecked();
   });
 
+  it("exposes an agent launch mode control that updates the setting", async () => {
+    renderWithProviders(<GeneralSettings />);
+    await userEvent.click(screen.getByTestId("general-agent-launch-mode"));
+    await userEvent.click(await screen.findByRole("option", { name: "Terminal" }));
+    expect(useSettingsStore.getState().values["general.agentLaunchMode"]).toBe("terminal");
+  });
+
   it("shows custom binary path input when defaultBackend is 'other'", () => {
     // @ts-expect-error - test fixture intentionally bypasses the strict Status union
     useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });
@@ -38,6 +45,26 @@ describe("GeneralSettings", () => {
     renderWithProviders(<GeneralSettings />);
     fireEvent.change(screen.getByTestId("general-default-backend-binpath"), { target: { value: "/usr/local/bin/myagent" } });
     expect(useSettingsStore.getState().values["general.defaultBackendBinPath"]).toBe("/usr/local/bin/myagent");
+  });
+
+  it("hides the shell selector on non-Windows platforms", () => {
+    renderWithProviders(<GeneralSettings />);
+    expect(screen.queryByTestId("general-default-shell")).not.toBeInTheDocument();
+  });
+
+  it("renders the Windows shell selector defaulting to PowerShell", () => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      configurable: true,
+    });
+    try {
+      renderWithProviders(<GeneralSettings />);
+      const select = screen.getByTestId("general-default-shell");
+      expect(select).toBeInTheDocument();
+      expect(select).toHaveTextContent("PowerShell");
+    } finally {
+      Reflect.deleteProperty(navigator, "userAgent");
+    }
   });
 
   it("Run setup wizard button calls reset_first_run", async () => {

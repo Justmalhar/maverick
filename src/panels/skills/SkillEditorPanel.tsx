@@ -4,6 +4,14 @@ import { Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { skillsCreateGlobal, skillsListGlobal } from "@/lib/tauri";
 import { useWorkbench } from "@/state/store";
+import type { Skill } from "@/lib/ipc";
+
+// Serialize a stored skill back into the editable frontmatter + prompt form.
+function skillToMarkdown(s: Skill): string {
+  const fm = [`name: ${s.name}`, `description: ${s.description}`];
+  if (s.backend) fm.push(`backend: ${s.backend}`);
+  return `---\n${fm.join("\n")}\n---\n\n${s.prompt}`;
+}
 
 const SKILL_TEMPLATE = `---
 name: my-skill
@@ -40,12 +48,26 @@ function parseFrontmatter(content: string): {
 }
 
 export default function SkillEditorPanel() {
-  const [content, setContent] = useState(SKILL_TEMPLATE);
+  const editingSkill = useWorkbench((s) => s.editingSkill);
+  const [content, setContent] = useState(() =>
+    editingSkill ? skillToMarkdown(editingSkill) : SKILL_TEMPLATE
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeSystemTab = useWorkbench((s) => s.closeSystemTab);
+  const openSystemTab = useWorkbench((s) => s.openSystemTab);
   const setSkills = useWorkbench((s) => s.setSkills);
+  const setEditingSkill = useWorkbench((s) => s.setEditingSkill);
   const reduce = useReducedMotion();
+  const isEditing = editingSkill !== null;
+
+  // Close the editor AND re-activate the Skills list — otherwise closeSystemTab
+  // just nulls the active tab and drops the user on a blank EditorArea.
+  const returnToSkills = () => {
+    setEditingSkill(null);
+    closeSystemTab("skill-editor");
+    openSystemTab("skills");
+  };
 
   async function save() {
     const parsed = parseFrontmatter(content);
@@ -56,10 +78,12 @@ export default function SkillEditorPanel() {
     setSaving(true);
     setError(null);
     try {
-      await skillsCreateGlobal(parsed.name, parsed.description, parsed.prompt, parsed.backend);
+      // Editing an existing skill re-saves the same slug — allow the overwrite;
+      // a brand-new skill must NOT clobber an existing one (overwrite stays false).
+      await skillsCreateGlobal(parsed.name, parsed.description, parsed.prompt, parsed.backend, isEditing);
       const updated = await skillsListGlobal();
       setSkills(updated);
-      closeSystemTab("skill-editor");
+      returnToSkills();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -77,7 +101,7 @@ export default function SkillEditorPanel() {
     >
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          New Skill — <code className="font-mono normal-case">~/.maverick/skills/</code>
+          {isEditing ? "Edit Skill" : "New Skill"} — <code className="font-mono normal-case">~/.maverick/skills/</code>
         </span>
         <div className="flex items-center gap-1.5">
           {error && (
@@ -91,7 +115,7 @@ export default function SkillEditorPanel() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => closeSystemTab("skill-editor")}
+            onClick={returnToSkills}
             data-testid="skill-editor-cancel"
           >
             <X className="h-3 w-3" />

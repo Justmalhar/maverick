@@ -57,6 +57,40 @@ describe("KanbanStore", () => {
     expect(t.labels).toEqual(["bug", "p1"]);
   });
 
+  test("partial upsert keeps an existing description and workspaceId (no NULL wipe)", () => {
+    const ws = env.store.workspaceCreate({
+      projectId: env.proj.id,
+      branch: "feat",
+      agentBackend: "claude",
+      worktreePath: "/tmp/k/wt",
+    });
+    const t = env.kanban.upsert({
+      projectId: env.proj.id,
+      title: "task",
+      description: "the original prompt",
+      workspaceId: ws.id,
+    });
+    // A status-only move that omits description/workspaceId must not clear them.
+    env.kanban.upsert({ id: t.id, projectId: env.proj.id, title: "task", status: "in_progress" });
+    const fetched = env.kanban.list(env.proj.id)[0];
+    expect(fetched.description).toBe("the original prompt");
+    expect(fetched.workspaceId).toBe(ws.id);
+    expect(fetched.status).toBe("in_progress");
+  });
+
+  test("upsert can still clear a description with an explicit empty string", () => {
+    const t = env.kanban.upsert({ projectId: env.proj.id, title: "task", description: "has text" });
+    env.kanban.upsert({ id: t.id, projectId: env.proj.id, title: "task", description: "" });
+    // "" is not NULL, so COALESCE writes it through — the description is cleared.
+    expect(env.kanban.list(env.proj.id)[0].description).toBe("");
+  });
+
+  test("upsert returns the persisted createdAt on update, not a fresh one", () => {
+    const t1 = env.kanban.upsert({ projectId: env.proj.id, title: "task" });
+    const t2 = env.kanban.upsert({ id: t1.id, projectId: env.proj.id, title: "task", status: "done" });
+    expect(t2.createdAt).toBe(t1.createdAt);
+  });
+
   test("delete removes a task", () => {
     const t = env.kanban.upsert({ projectId: env.proj.id, title: "x" });
     env.kanban.delete(t.id);

@@ -53,10 +53,16 @@ mod tests {
     use super::*;
     use crate::pty::NoopPtySink;
 
+    // Windows has no /bin/sh; cmd.exe is the always-present interactive shell.
+    #[cfg(windows)]
+    const TEST_SHELL: &str = "cmd";
+    #[cfg(not(windows))]
+    const TEST_SHELL: &str = "/bin/sh";
+
     #[test]
     fn spawn_then_subscribe_then_kill() {
         let host = ManagerPtyHost::new(Arc::new(PtyManager::new()), Arc::new(NoopPtySink));
-        let id = host.spawn("/bin/sh", None).expect("spawn");
+        let id = host.spawn(TEST_SHELL, None).expect("spawn");
         assert!(host.subscribe(&id).is_some(), "subscribe yields a ring handle");
         host.write(&id, "exit\n").expect("write");
         host.kill(&id).expect("kill");

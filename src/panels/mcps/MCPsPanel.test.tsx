@@ -4,9 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import MCPsPanel from "./MCPsPanel";
 import { makeMCPServer } from "@/test/fixtures";
+import { useWorkbench } from "@/state/store";
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  useWorkbench.setState({ activeWorkspaceId: null });
 });
 
 describe("MCPsPanel", () => {
@@ -30,10 +32,19 @@ describe("MCPsPanel", () => {
   });
 
   it("opens add dialog", async () => {
+    useWorkbench.setState({ activeWorkspaceId: "ws1" });
     vi.mocked(invoke).mockResolvedValue([] as never);
     renderWithProviders(<MCPsPanel />);
     await waitFor(() => expect(screen.getByText(/No MCP servers/)).toBeInTheDocument());
     await userEvent.click(screen.getByTestId("mcps-add"));
     expect(await screen.findByTestId("add-mcp-dialog")).toBeInTheDocument();
+  });
+
+  it("disables Add and shows a hint when no workspace is active", async () => {
+    vi.mocked(invoke).mockResolvedValue([] as never);
+    renderWithProviders(<MCPsPanel />);
+    await waitFor(() => expect(screen.getByText(/No MCP servers/)).toBeInTheDocument());
+    expect(screen.getByTestId("mcps-add")).toBeDisabled();
+    expect(screen.getByTestId("mcps-no-workspace")).toBeInTheDocument();
   });
 });

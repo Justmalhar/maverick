@@ -1,30 +1,16 @@
 import { useCallback } from "react";
 import { useWorkbench, type TerminalTab } from "@/state/store";
-import { ptySpawn, ptyKill, defaultShell } from "@/lib/tauri";
+import { ptySpawn, ptyKill } from "@/lib/tauri";
+import { resolveShell, type ShellKind } from "@/lib/terminal-shell";
+import { getDefaultShellKind, getGlobalEnv } from "@/lib/stores/settings";
 
 function basename(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  const idx = trimmed.lastIndexOf("/");
+  // Split on both separators: this is a Windows-first app and worktree/desktop
+  // paths come back backslash-style (e.g. C:\Users\me\proj), so a forward-slash-
+  // only split would render the whole path as the tab title.
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return idx === -1 ? trimmed : trimmed.slice(idx + 1);
-}
-
-// The login shell is constant for a session, so resolve it once and share the
-// in-flight promise — repeat opens skip the IPC round-trip. A failed lookup
-// clears the cache so the next open retries rather than caching the rejection.
-let shellPromise: Promise<string> | null = null;
-function resolveShell(): Promise<string> {
-  if (!shellPromise) {
-    shellPromise = defaultShell().catch((err) => {
-      shellPromise = null;
-      throw err;
-    });
-  }
-  return shellPromise;
-}
-
-/** Test-only: drop the cached shell so each test starts cold. */
-export function __resetTerminalShellCacheForTests(): void {
-  shellPromise = null;
 }
 
 export function useTerminalTab() {
@@ -34,17 +20,19 @@ export function useTerminalTab() {
   const setTerminalTabPty = useWorkbench((s) => s.setTerminalTabPty);
 
   const open = useCallback(
-    async (cwd: string): Promise<TerminalTab> => {
+    async (cwd: string, kind?: ShellKind): Promise<TerminalTab> => {
       const id = `term-${crypto.randomUUID()}`;
       // Optimistic: show + focus the tab immediately (ptyId "" = spawning) so the
-      // click feels instant. The PTY and its slow login-shell startup run in the
-      // background; the pane mounts once its ptyId lands (see EditorGroup).
+      // click feels instant. The PTY spawn runs in the background; the pane mounts
+      // once its ptyId lands (see EditorGroup).
       const tab: TerminalTab = { id, cwd, title: basename(cwd) || cwd, ptyId: "" };
       addTerminalTab(tab);
       setActiveTerminalTab(id);
       try {
-        const shell = await resolveShell();
-        const { ptyId } = await ptySpawn(shell, ["-l"], cwd);
+        // Mirror TerminalLeaf: an explicit pick wins, else the persisted default
+        // shell, else the platform default. Resolution is synchronous.
+        const { shell, args } = resolveShell(kind ?? getDefaultShellKind());
+        const { ptyId } = await ptySpawn(shell, args, cwd, getGlobalEnv());
         setTerminalTabPty(id, ptyId);
         return { ...tab, ptyId };
       } catch (err) {
