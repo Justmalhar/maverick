@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
-import { File, FileText, FolderOpen, Folder, Files, ChevronRight, ChevronDown } from "lucide-react";
+import { Folder, Files, ChevronRight, ChevronDown } from "lucide-react";
 import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { useFileTree, absPath } from "@/hooks/useFileTree";
 import type { FileEntry } from "@/lib/ipc";
+import { FileIcon } from "@/components/FileIcon";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { type FlatNode, flattenTree } from "./files-tree";
@@ -34,13 +35,6 @@ interface RowProps {
 function FileRow({ node, expanded, onToggle, onOpen }: RowProps) {
   const { entry, depth } = node;
   const isDir = entry.isDirectory;
-  const Icon = isDir
-    ? expanded
-      ? FolderOpen
-      : Folder
-    : entry.name.endsWith(".md")
-      ? FileText
-      : File;
   const Chevron = expanded ? ChevronDown : ChevronRight;
   return (
     <div
@@ -66,7 +60,7 @@ function FileRow({ node, expanded, onToggle, onOpen }: RowProps) {
       ) : (
         <span className="w-3 shrink-0" />
       )}
-      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <FileIcon name={entry.name} isDirectory={isDir} expanded={expanded} />
       <span className="flex-1 truncate">{entry.name}</span>
       {entry.status && (
         <span

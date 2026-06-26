@@ -201,4 +201,21 @@ describe("FileEditorTab (isolated)", () => {
     fireEvent.click(screen.getByTestId("file-tab-dirty-file:/wt/src/a.ts"));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("renders a file-type icon for a file tab and the compare glyph for a diff tab", () => {
+    const noop = vi.fn();
+    const { rerender, container } = renderWithProviders(
+      <FileEditorTab tab={tab} active={false} onSelect={noop} onPin={noop} onClose={noop} />
+    );
+    // File tabs use the Material file-type icon (an <img>).
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("typescript.svg");
+
+    const diffTab: FileTab = { ...tab, id: "diff:/wt/src/a.ts", kind: "diff", mode: "diff" };
+    rerender(
+      <FileEditorTab tab={diffTab} active={false} onSelect={noop} onPin={noop} onClose={noop} />
+    );
+    // Diff tabs keep the lucide compare glyph (an <svg>), not a file-type icon.
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
 });
