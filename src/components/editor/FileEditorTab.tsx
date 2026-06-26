@@ -1,5 +1,6 @@
-import { FileText, GitCompareArrows, X } from "lucide-react";
+import { GitCompareArrows, X } from "lucide-react";
 import type { FileTab } from "@/state/store";
+import { FileIcon } from "@/components/FileIcon";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,7 +13,6 @@ interface Props {
 
 export function FileEditorTab({ tab, active, onSelect, onPin, onClose }: Props) {
   const name = tab.path.split("/").pop() ?? tab.path;
-  const Icon = tab.kind === "diff" ? GitCompareArrows : FileText;
   return (
     <button
       type="button"
@@ -26,7 +26,11 @@ export function FileEditorTab({ tab, active, onSelect, onPin, onClose }: Props) 
           : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
       )}
     >
-      <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      {tab.kind === "diff" ? (
+        <GitCompareArrows className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      ) : (
+        <FileIcon name={name} />
+      )}
       <span className={cn("flex-1 truncate text-left", tab.preview && "italic")}>{name}</span>
       {tab.dirty ? (
         <span

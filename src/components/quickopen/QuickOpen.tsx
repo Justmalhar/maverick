@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { File } from "lucide-react";
 import { useWorkbench, selectActiveWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { fileSearch } from "@/lib/tauri";
 import type { SearchHit } from "@/lib/ipc";
+import { FileIcon } from "@/components/FileIcon";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Command,
@@ -96,7 +96,7 @@ export function QuickOpen() {
                   onSelect={() => onSelect(hit)}
                   data-testid={`quickopen-item-${hit.rel}`}
                 >
-                  <File className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  <FileIcon name={hit.name} className="mr-2" />
                   <span className="truncate">{hit.rel}</span>
                 </CommandItem>
               ))}

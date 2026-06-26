@@ -67,6 +67,7 @@
     "shiki": "^4.2.0",
     "tailwind-merge": "^2.5.4",
     "tinykeys": "^2.1.0",
+    "vscode-material-icons": "0.1.1",
     "xlsx": "^0.18.5",
     "zustand": "^5"
   },
