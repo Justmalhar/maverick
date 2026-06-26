@@ -4,6 +4,7 @@ import { renderWithProviders, screen } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { makeBackend } from "@/test/fixtures";
 import { brandFor } from "@/lib/backend-brand";
+import { invoke } from "@tauri-apps/api/core";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 
 const initial = useWorkbench.getState();
@@ -127,5 +128,69 @@ describe("NewWorkspaceDialog — agent select", () => {
     expect(screen.getByTestId("agent-select")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("agent-select"));
     expect(await screen.findByRole("option", { name: /UnknownAgent/ })).toBeInTheDocument();
+  });
+});
+
+describe("NewWorkspaceDialog — base branch select", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    useWorkbench.setState(initial);
+  });
+
+  it("loads branches, defaults to the current branch, and submits it", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") {
+        return [
+          { name: "main", isRemote: false, isCurrent: false },
+          { name: "develop", isRemote: false, isCurrent: true },
+        ] as never;
+      }
+      return undefined as never;
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    await screen.findByText("develop");
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ baseBranch: "develop" }));
+  });
+
+  it("leaves baseBranch undefined when projectPath is null", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ baseBranch: undefined }));
+  });
+
+  it("disables the select and leaves baseBranch undefined when git_branch_list rejects", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") throw new Error("not a git repo");
+      return undefined as never;
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath="/tmp/not-a-repo" onSubmit={onSubmit} />
+    );
+    // Wait for the async effect to settle (error path sets branches to [])
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("base-branch-select")).toBeDisabled();
+    });
+    await userEvent.click(screen.getByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ baseBranch: undefined }));
   });
 });

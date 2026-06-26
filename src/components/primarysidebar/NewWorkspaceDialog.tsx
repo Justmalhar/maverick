@@ -1,7 +1,7 @@
 // Opened by the Projects "+" action: choose a coding agent, a base branch, and a
 // branch name (type prefix + slug) for a new workspace's worktree in one flow.
 // Defer naming to the AI with "Let AI name it later".
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import {
   Dialog,
@@ -22,6 +22,8 @@ import { composeTypedBranch } from "@/lib/branch-name";
 import { cn } from "@/lib/utils";
 import { useWorkbench } from "@/state/store";
 import { brandFor } from "@/lib/backend-brand";
+import { gitBranchList } from "@/lib/tauri";
+import type { Branch } from "@/lib/ipc";
 
 const BRANCH_TYPES = ["feature", "fix", "bug", "chore", "hotfix"] as const;
 type BranchType = (typeof BRANCH_TYPES)[number];
@@ -49,15 +51,36 @@ export function NewWorkspaceDialog({
   projectPath,
   onSubmit,
 }: Props) {
-  // Silence unused-param until Task 3 populates the base-branch selector.
-  void projectPath;
-
   const backends = useWorkbench((s) => s.backends);
   const [backend, setBackend] = useState(
     () => backends.find((b) => b.active)?.id ?? backends[0]?.id ?? "claude-code"
   );
   const selectedBrand = brandFor(backend);
   const SelectedIcon = selectedBrand?.Icon;
+
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [base, setBase] = useState<string>("");
+
+  useEffect(() => {
+    if (!open || !projectPath) {
+      setBranches([]);
+      setBase("");
+      return;
+    }
+    let cancelled = false;
+    gitBranchList(projectPath)
+      .then((list) => {
+        if (cancelled) return;
+        setBranches(list);
+        setBase(list.find((b) => b.isCurrent)?.name ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setBranches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectPath]);
 
   const [type, setType] = useState<BranchType>("feature");
   const [name, setName] = useState("");
@@ -70,21 +93,16 @@ export function NewWorkspaceDialog({
     setName("");
   }
 
-  // Placeholder until Task 3 wires the base-branch selector.
-  function baseBranch(): string | undefined {
-    return undefined;
-  }
-
   function create() {
     if (!canCreate) return;
     onOpenChange(false);
-    onSubmit({ backend, baseBranch: baseBranch(), branch: composed });
+    onSubmit({ backend, baseBranch: base || undefined, branch: composed });
     reset();
   }
 
   function aiLater() {
     onOpenChange(false);
-    onSubmit({ backend, baseBranch: baseBranch(), aiLater: true });
+    onSubmit({ backend, baseBranch: base || undefined, aiLater: true });
     reset();
   }
 
@@ -119,6 +137,27 @@ export function NewWorkspaceDialog({
                     </SelectItem>
                   );
                 })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">Base branch</span>
+            <Select value={base} onValueChange={setBase} disabled={branches.length === 0}>
+              <SelectTrigger className="h-8 text-[12px]" data-testid="base-branch-select">
+                <SelectValue placeholder={projectPath ? "Default branch" : "—"} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={`${b.isRemote ? "r" : "l"}-${b.name}`} value={b.name} className="text-[12px]">
+                    <span className="flex items-center gap-2">
+                      {b.name}
+                      {b.isCurrent ? (
+                        <span className="text-[10px] text-muted-foreground">current</span>
+                      ) : null}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
