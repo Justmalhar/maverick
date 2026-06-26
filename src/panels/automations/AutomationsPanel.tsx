@@ -56,13 +56,21 @@ export default function AutomationsPanel() {
   );
 
   const upsert = useCallback(
-    (next: Automation) => {
+    (next: Automation, prevName?: string) => {
       // Compute the merged list synchronously so we can both render it and
       // persist it to maverick.yaml in the same pass — without this the edit was
       // in-memory only and vanished on reload.
-      const idx = automations.findIndex((a) => a.name === next.name);
+      //
+      // Match on the *previous* name (the entry being edited), not next.name —
+      // otherwise a rename (next.name changed) never finds the original row and
+      // appends a duplicate on every keystroke instead of renaming in place.
+      const key = prevName ?? next.name;
+      const idx = automations.findIndex((a) => a.name === key);
       const merged = idx >= 0 ? automations.map((a, i) => (i === idx ? next : a)) : [...automations, next];
       setAutomations(merged);
+      // Keep the selection bound to the (possibly renamed) entry so the builder
+      // stays open on it instead of snapping back to the stale old name.
+      setSelected(next.name);
       if (activeProject) {
         configSave(activeProject.path, { automations: merged }).catch((e) => setError(String(e)));
       }
@@ -93,13 +101,12 @@ export default function AutomationsPanel() {
             variant="outline"
             data-testid="automation-new"
             onClick={() => {
-              const fresh: Automation = {
-                name: `new-automation-${automations.length + 1}`,
-                trigger: "manual",
-                steps: [],
-              };
-              upsert(fresh);
-              setSelected(fresh.name);
+              // Derive a name that doesn't collide with an existing automation
+              // (length+1 collides after deletes, and upsert would overwrite).
+              let n = automations.length + 1;
+              let name = `new-automation-${n}`;
+              while (automations.some((a) => a.name === name)) name = `new-automation-${++n}`;
+              upsert({ name, trigger: "manual", steps: [] });
             }}
           >
             <Plus className="h-3 w-3" /> New
@@ -115,13 +122,22 @@ export default function AutomationsPanel() {
             </div>
           ) : (
             automations.map((a) => (
-              <button
+              // role=button (not <button>) so the per-row Run <Button> below is
+              // not an invalid nested-button (React DOM-nesting warning).
+              <div
                 key={a.name}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelected(a.name)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelected(a.name);
+                  }
+                }}
                 data-testid="automation-item"
                 className={cn(
-                  "flex w-full items-center justify-between border-b border-border/40 px-3 py-1.5 text-left text-xs hover:bg-accent/10",
+                  "flex w-full cursor-pointer items-center justify-between border-b border-border/40 px-3 py-1.5 text-left text-xs hover:bg-accent/10",
                   selected === a.name && "bg-accent/20"
                 )}
               >
@@ -141,7 +157,7 @@ export default function AutomationsPanel() {
                 >
                   <Play className="h-3 w-3" />
                 </Button>
-              </button>
+              </div>
             ))
           )}
         </ScrollArea>
@@ -151,14 +167,14 @@ export default function AutomationsPanel() {
         {selectedAutomation ? (
           <AutomationBuilder
             automation={selectedAutomation}
-            onChange={(next) => upsert(next)}
+            onChange={(next) => upsert(next, selectedAutomation?.name)}
           />
         ) : (
           <div className="flex items-center justify-center text-xs text-muted-foreground">
             Select an automation to edit
           </div>
         )}
-        <AutomationRunner running={running} automationName={selectedAutomation?.name} />
+        <AutomationRunner running={running} automationName={running ?? selectedAutomation?.name} />
       </div>
     </motion.div>
   );
