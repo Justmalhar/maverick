@@ -28,6 +28,13 @@ describe("BlameView", () => {
     await waitFor(() => expect(screen.getByText(/bf/)).toBeInTheDocument());
   });
 
+  it("Enter in the file input triggers blame", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([] as never);
+    renderWithProviders(<BlameView worktreePath="/wt" />);
+    await userEvent.type(screen.getByTestId("blame-file-input"), "c.ts{Enter}");
+    await waitFor(() => expect(invoke).toHaveBeenCalled());
+  });
+
   it("manual blame button triggers load", async () => {
     vi.mocked(invoke).mockResolvedValueOnce([] as never);
     renderWithProviders(<BlameView worktreePath="/wt" />);

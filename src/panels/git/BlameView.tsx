@@ -43,6 +43,12 @@ export default function BlameView({ worktreePath, initialFile = "" }: Props) {
           data-testid="blame-file-input"
           value={filePath}
           onChange={(e) => setFilePath(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void load();
+            }
+          }}
           placeholder="path/to/file.ts"
           className="flex-1"
         />

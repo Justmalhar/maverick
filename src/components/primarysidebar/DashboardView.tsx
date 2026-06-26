@@ -80,6 +80,9 @@ function AgentCard({
   // Re-fetch the worktree diff summary whenever the agent goes quiet — a fresh
   // `working`/`done` transition is the cheapest signal that the tree changed.
   useEffect(() => {
+    // Only refresh the diff on settled states — skip the rapid working/attention
+    // churn so the dashboard doesn't fire a diff_get per status flip per card.
+    if (status === "working" || status === "attention") return;
     let cancelled = false;
     diffGet(workspace.worktreePath)
       .then((diff) => {

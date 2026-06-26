@@ -136,12 +136,18 @@ export default function StashList({ worktreePath }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {pending?.action === "drop" ? "Drop stash?" : `${pending?.action} stash`}
+              {pending?.action === "drop"
+                ? "Drop stash?"
+                : pending?.action === "pop"
+                  ? "Pop stash?"
+                  : "Apply stash?"}
             </DialogTitle>
             <DialogDescription>
               {pending?.action === "drop"
                 ? "This permanently removes the stash. This action cannot be undone."
-                : `Apply stash@{${pending?.stash.index}} to the working tree.`}
+                : pending?.action === "pop"
+                  ? `Applies stash@{${pending?.stash.index}} to the working tree and removes it from the stash list.`
+                  : `Applies stash@{${pending?.stash.index}} to the working tree (the stash is kept).`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
