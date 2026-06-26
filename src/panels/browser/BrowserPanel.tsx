@@ -149,11 +149,20 @@ export default function BrowserPanel({ visible = true }: Props) {
   const goTo = useCallback(
     (target: string) => {
       if (native) {
-        void browserNavigate(target).catch((e) => console.error("browser navigate failed", e));
+        void browserNavigate(target)
+          .then(() => {
+            // The native webview re-injects INSPECT_SCRIPT on each load with its
+            // listeners DISABLED; re-enable if the inspector is currently on, or
+            // the toggle stays lit while element capture is silently dead.
+            if (inspecting) {
+              void browserEval("window.__mvInspect && window.__mvInspect.enable()").catch(swallow);
+            }
+          })
+          .catch((e) => console.error("browser navigate failed", e));
       }
       // iframe engine navigates declaratively via the `url` prop + key remount.
     },
-    [native]
+    [native, inspecting]
   );
 
   const navigate = useCallback(
