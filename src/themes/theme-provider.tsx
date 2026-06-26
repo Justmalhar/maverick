@@ -75,11 +75,11 @@ function hexToHsl(hex: string): string {
 
 // Maps legacy ui keys to one or more of our CSS custom property names.
 const LEGACY_MAP: Array<[string, string | string[]]> = [
-  ["bg-base",     ["background", "editor-bg", "tab-active-bg", "titlebar-bg", "activitybar-bg", "statusbar-bg", "statusbar-no-folder-bg", "sidebar-hover"]],
+  ["bg-base",     ["background", "editor-bg", "tab-active-bg", "titlebar-bg", "activitybar-bg", "sidebar-hover"]],
   ["bg-sidebar",  ["sidebar-bg", "tab-inactive-bg", "card", "popover", "input", "muted", "secondary"]],
-  ["accent",      ["accent", "activitybar-active-border", "tab-active-border", "ring", "primary", "statusbar-prominent-bg", "diff-rename", "info"]],
+  ["accent",      ["accent", "activitybar-active-border", "tab-active-border", "ring", "primary", "diff-rename", "info"]],
   ["accent-muted",["sidebar-selected"]],
-  ["text-primary",["foreground", "tab-fg-active", "card-foreground", "popover-foreground", "activitybar-fg-active", "sidebar-fg", "statusbar-fg"]],
+  ["text-primary",["foreground", "tab-fg-active", "card-foreground", "popover-foreground", "activitybar-fg-active", "sidebar-fg"]],
   ["text-muted",  ["muted-foreground", "tab-fg", "sidebar-section-header", "activitybar-fg"]],
   ["border",      ["border", "border-glass", "border-strong", "border-glass-strong"]],
   ["success",     ["diff-add", "success"]],
@@ -131,9 +131,6 @@ const VSCODE_MAP: Array<[string, string | string[]]> = [
   ["list.activeSelectionForeground",    "sidebar-selected-fg"],
   ["editor.background",                 ["background", "editor-bg", "tab-active-bg"]],
   ["editor.foreground",                 ["foreground", "tab-fg-active", "card-foreground", "popover-foreground"]],
-  ["statusBar.background",              ["statusbar-bg", "statusbar-no-folder-bg"]],
-  ["statusBar.foreground",              "statusbar-fg"],
-  ["statusBarItem.prominentBackground", "statusbar-prominent-bg"],
   ["dropdown.background",               ["card", "popover", "input"]],
   ["list.inactiveSelectionBackground",  ["muted", "secondary"]],
   ["progressBar.background",            ["primary", "ring"]],

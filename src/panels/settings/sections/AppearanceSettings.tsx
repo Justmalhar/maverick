@@ -54,7 +54,6 @@ const CUSTOM_COLORS: CustomColor[] = [
   { key: "appearance.customColors.border", cssVar: "--border", label: "Border" },
   { key: "appearance.customColors.card", cssVar: "--card", label: "Card" },
   { key: "appearance.customColors.sidebar", cssVar: "--sidebar-bg", label: "Sidebar" },
-  { key: "appearance.customColors.statusbar", cssVar: "--statusbar-bg", label: "Status bar" },
 ];
 
 export default function AppearanceSettings() {

@@ -51,10 +51,6 @@
   --color-tab-fg: hsl(var(--tab-fg));
   --color-tab-fg-active: hsl(var(--tab-fg-active));
   --color-tab-indicator: hsl(var(--tab-active-border));
-  --color-statusbar: hsl(var(--statusbar-bg));
-  --color-statusbar-fg: hsl(var(--statusbar-fg));
-  --color-statusbar-no-folder: hsl(var(--statusbar-no-folder-bg));
-  --color-statusbar-prominent: hsl(var(--statusbar-prominent-bg));
 
   --color-overlay: hsl(var(--overlay));
 

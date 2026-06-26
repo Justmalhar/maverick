@@ -34,12 +34,6 @@
   --tab-fg-active: 0 0% 98%;           /* #fafafa */
   --tab-active-border: 0 0% 100%;      /* #ffffff */
 
-  /* Status bar */
-  --statusbar-bg: 0 0% 2%;
-  --statusbar-fg: 240 5% 84%;
-  --statusbar-no-folder-bg: 0 0% 2%;
-  --statusbar-prominent-bg: 240 6% 10%;
-
   /* shadcn primitives */
   --card: 240 8% 5%;                   /* #0d0d10 */
   --card-foreground: 240 5% 96%;
@@ -97,7 +91,6 @@
   /* Layout constants */
   --titlebar-height: 32px;
   --activitybar-width: 48px;
-  --statusbar-height: 22px;
   --editor-tabs-height: 35px;
   --panel-tabs-height: 35px;
   --section-header-height: 22px;
