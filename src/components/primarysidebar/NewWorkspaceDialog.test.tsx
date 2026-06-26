@@ -147,6 +147,7 @@ describe("NewWorkspaceDialog — base branch select", () => {
         return [
           { name: "main", isRemote: false, isCurrent: false },
           { name: "develop", isRemote: false, isCurrent: true },
+          { name: "origin/develop", isRemote: true, isCurrent: false },
         ] as never;
       }
       return undefined as never;

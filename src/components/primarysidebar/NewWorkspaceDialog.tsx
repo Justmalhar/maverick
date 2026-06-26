@@ -39,7 +39,6 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectName: string;
-  /** Reserved for Task 2 (base-branch detection). Unused until then. */
   projectPath: string | null;
   onSubmit: (payload: NewWorkspacePayload) => void;
 }
@@ -91,6 +90,8 @@ export function NewWorkspaceDialog({
   function reset() {
     setType("feature");
     setName("");
+    setBase("");
+    setBranches([]);
   }
 
   function create() {
