@@ -1,13 +1,12 @@
 import type { Workspace } from "@/lib/ipc";
+import { useWorkbench } from "@/state/store";
+import { useShallow } from "zustand/react/shallow";
 import { TerminalView } from "./terminal/TerminalView";
 import { useAutomationTriggers } from "@/hooks/useAutomationTriggers";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { cn } from "@/lib/utils";
 
-interface Props {
-  workspace: Workspace;
-  active: boolean;
-}
+interface Props { workspace: Workspace; active: boolean; }
 
 // Keep-alive: never unmount on workspace switch — toggle visibility only. Every
 // terminal PTY survives. What does NOT survive an inactive switch is the
@@ -20,19 +19,31 @@ export function WorkspaceEditor({ workspace, active }: Props) {
   useAutomationTriggers(workspace);
   // Consume any staged headless agent run for this workspace (no-op in terminal mode).
   useAgentRun(workspace);
+  const workspaceId = workspace.id;
+  // useShallow performs shallow array/object comparison so selectors returning new
+  // arrays each call don't cause infinite re-render loops (zustand uses Object.is).
+  const groups = useWorkbench(useShallow((s) => s.terminalGroups.filter((g) => g.workspaceId === workspaceId)));
+  const activeGroupId = useWorkbench((s) => s.activeGroupByWorkspace[workspaceId]) ?? workspaceId;
   return (
     <div
       data-testid={`workspace-editor-${workspace.id}`}
       data-active={active ? "true" : "false"}
-      className={cn(
-        "mv-workspace-editor absolute inset-0 flex flex-col bg-editor",
-        !active && "keep-alive-hidden content-visibility-auto"
-      )}
+      className={cn("mv-workspace-editor absolute inset-0 flex flex-col bg-editor", !active && "keep-alive-hidden content-visibility-auto")}
       aria-hidden={!active}
     >
-      <div className="absolute inset-0">
-        <TerminalView workspace={workspace} groupId={workspace.id} visible={active} />
-      </div>
+      {groups.map((g) => {
+        const groupActive = active && g.id === activeGroupId;
+        return (
+          <div
+            key={g.id}
+            data-testid={`terminal-group-${g.id}`}
+            aria-hidden={!groupActive}
+            className={cn("absolute inset-0", !groupActive && "keep-alive-hidden content-visibility-auto")}
+          >
+            <TerminalView workspace={workspace} groupId={g.id} visible={groupActive} />
+          </div>
+        );
+      })}
     </div>
   );
 }

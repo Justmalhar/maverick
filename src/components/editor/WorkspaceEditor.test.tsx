@@ -43,8 +43,31 @@ beforeEach(() => {
 });
 
 describe("WorkspaceEditor", () => {
+  it("mounts every group, shows only the active one", () => {
+    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s" };
+    useWorkbench.setState({
+      workspaces: [ws],
+      terminalGroups: [
+        { id: "w1", workspaceId: "w1", title: "Terminal 1" },
+        { id: "term-2", workspaceId: "w1", title: "Terminal 2" },
+      ],
+      activeGroupByWorkspace: { w1: "term-2" },
+      splitTrees: {},
+    });
+    renderWithProviders(<WorkspaceEditor workspace={ws} active />);
+    expect(screen.getByTestId("terminal-view-w1")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-view-term-2")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-group-w1").getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getByTestId("terminal-group-term-2").getAttribute("aria-hidden")).toBe("false");
+  });
+
   it("renders only the terminal view and spawns a shell in the worktree", async () => {
-    renderWithProviders(<WorkspaceEditor workspace={makeWorkspace({ id: "w1", worktreePath: "/wt" })} active />);
+    const ws = makeWorkspace({ id: "w1", worktreePath: "/wt" });
+    useWorkbench.setState({
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
+    });
+    renderWithProviders(<WorkspaceEditor workspace={ws} active />);
     expect(screen.getByTestId("workspace-editor-w1")).toBeInTheDocument();
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
@@ -56,7 +79,12 @@ describe("WorkspaceEditor", () => {
   });
 
   it("inactive workspace adds the keep-alive-hidden class", () => {
-    renderWithProviders(<WorkspaceEditor workspace={makeWorkspace({ id: "w1" })} active={false} />);
+    const ws = makeWorkspace({ id: "w1" });
+    useWorkbench.setState({
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
+    });
+    renderWithProviders(<WorkspaceEditor workspace={ws} active={false} />);
     expect(screen.getByTestId("workspace-editor-w1").className).toMatch(/keep-alive-hidden/);
   });
 });
