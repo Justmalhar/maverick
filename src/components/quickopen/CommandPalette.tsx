@@ -85,6 +85,15 @@ export function CommandPalette() {
         shortcutId: "view.git",
       },
       {
+        id: "view.gitPanel",
+        label: "View: Show Git",
+        icon: GitBranch,
+        run: () => {
+          openSystemTab("git");
+          setOpen(false);
+        },
+      },
+      {
         id: "view.kanban",
         label: "View: Show Kanban",
         icon: KanbanSquare,

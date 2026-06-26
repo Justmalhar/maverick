@@ -154,6 +154,13 @@ describe("EditorGroup", () => {
     await waitFor(() => expect(screen.getByTestId("skill-editor-panel")).toBeInTheDocument());
   });
 
+  it("renders git system tab (GitPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["git"], activeSystemTab: "git", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    // No active workspace → GitPanel shows its empty state.
+    await waitFor(() => expect(screen.getByTestId("git-panel-empty")).toBeInTheDocument());
+  });
+
   it("keeps the browser mounted (hidden) when another system tab is active", async () => {
     useWorkbench.setState({
       ...initial,

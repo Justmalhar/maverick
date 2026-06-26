@@ -25,12 +25,18 @@ describe("PrimarySideBar", () => {
     expect(screen.getByTestId("sidebar-nav-automations")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-mcps")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-skills")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-git")).toBeInTheDocument();
   });
 
-  it("does not render Projects or Source Control nav buttons", () => {
+  it("does not render a Projects nav button (projects render as a list)", () => {
     renderWithProviders(<PrimarySideBar />);
     expect(screen.queryByTestId("sidebar-nav-projects")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("sidebar-nav-git")).not.toBeInTheDocument();
+  });
+
+  it("clicking the Git nav item opens the git system tab", async () => {
+    renderWithProviders(<PrimarySideBar />);
+    await userEvent.click(screen.getByTestId("sidebar-nav-git"));
+    expect(useWorkbench.getState().activeSystemTab).toBe("git");
   });
 
   it("always renders the projects list", () => {

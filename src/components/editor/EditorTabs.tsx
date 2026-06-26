@@ -11,6 +11,7 @@ import {
   Sparkles,
   SquarePen,
   TerminalSquare,
+  GitBranch,
   X,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
@@ -64,9 +65,10 @@ const SYSTEM_TAB_META: Record<
   mcps: { label: "MCP Servers", icon: Plug },
   skills: { label: "Skills", icon: Sparkles },
   "skill-editor": { label: "New Skill", icon: SquarePen },
+  git: { label: "Git", icon: GitBranch },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "automations", "mcps", "skills"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "automations", "mcps", "skills", "git"];
 
 export function EditorTabs() {
   const platform = useOSPlatform();
