@@ -33,6 +33,13 @@ describe("formatKeybinding", () => {
     expect(formatKeybinding("$mod+Shift+Space", "macos")).toBe("⌘⇧Space");
   });
 
+  it("renders physical-code symbol bindings as their unshifted glyph", () => {
+    expect(formatKeybinding("$mod+Shift+Comma", "windows")).toBe("Ctrl+Shift+,");
+    expect(formatKeybinding("$mod+Shift+Period", "windows")).toBe("Ctrl+Shift+.");
+    expect(formatKeybinding("$mod+Shift+Slash", "windows")).toBe("Ctrl+Shift+/");
+    expect(formatKeybinding("$mod+Shift+Slash", "macos")).toBe("⌘⇧/");
+  });
+
   it("keeps chord sequences space-separated", () => {
     expect(formatKeybinding("] c", "windows")).toBe("] C");
     expect(formatKeybinding("[ c", "macos")).toBe("[ C");

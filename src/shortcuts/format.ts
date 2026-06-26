@@ -28,6 +28,13 @@ function formatToken(token: string, mac: boolean): string {
       return mac ? "⏎" : "Enter";
     case "Space":
       return "Space";
+    // Physical-code bindings for shifted symbols render as their unshifted glyph.
+    case "Comma":
+      return ",";
+    case "Period":
+      return ".";
+    case "Slash":
+      return "/";
     default:
       return token.length === 1 ? token.toUpperCase() : token;
   }

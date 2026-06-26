@@ -246,7 +246,7 @@ describe("useShortcuts", () => {
     renderHook(() => useShortcuts());
     act(() => fire("$mod+b"));
     expect(useWorkbench.getState().layout.primarySideBarVisible).toBe(false);
-    act(() => fire("$mod+Shift+."));
+    act(() => fire("$mod+Shift+Period"));
     expect(useWorkbench.getState().layout.auxiliaryBarVisible).toBe(false);
     act(() => fire("$mod+j"));
     expect(useWorkbench.getState().layout.panelVisible).toBe(true);
@@ -267,7 +267,7 @@ describe("useShortcuts", () => {
     expect(useWorkbench.getState().presetLauncherOpen).toBe(true);
     act(() => fire("$mod+,"));
     expect(useWorkbench.getState().settingsOpen).toBe(true);
-    act(() => fire("$mod+Shift+/"));
+    act(() => fire("$mod+Shift+Slash"));
     expect(useWorkbench.getState().keybindingHelpOpen).toBe(true);
   });
 
@@ -287,7 +287,7 @@ describe("useShortcuts", () => {
     useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "ws1", projectId: "p1" })]);
     useWorkbench.getState().setActiveWorkspace("ws1");
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+Shift+,"));
+    act(() => fire("$mod+Shift+Comma"));
     const { projectSettings } = useWorkbench.getState();
     expect(projectSettings.open).toBe(true);
     expect(projectSettings.projectId).toBe("p1");
@@ -295,7 +295,7 @@ describe("useShortcuts", () => {
 
   it("project-settings.open is a no-op when no active workspace", () => {
     renderHook(() => useShortcuts());
-    act(() => fire("$mod+Shift+,"));
+    act(() => fire("$mod+Shift+Comma"));
     expect(useWorkbench.getState().projectSettings.open).toBe(false);
   });
 

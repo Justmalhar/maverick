@@ -17,6 +17,7 @@ import { AuxiliaryBar } from "@/components/auxiliarybar/AuxiliaryBar";
 import { EditorArea } from "@/components/editor/EditorArea";
 import { QuickOpen } from "@/components/quickopen/QuickOpen";
 import { CommandPalette } from "@/components/quickopen/CommandPalette";
+import { KeybindingHelp } from "@/components/quickopen/KeybindingHelp";
 import { Toaster } from "@/components/notifications/Toaster";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
@@ -134,6 +135,7 @@ export function Workbench() {
 
       <QuickOpen />
       <CommandPalette />
+      <KeybindingHelp />
 
       <Suspense fallback={<OverlayFallback />}>
         <PresetPicker

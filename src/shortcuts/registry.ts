@@ -29,7 +29,10 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "workspace.close", label: "Close active tab", category: "Workspace", keys: "$mod+w", display: "⌘W" },
   ...WORKSPACE_INDEX_JUMPS,
   { id: "project.new", label: "Add project", category: "Workspace", keys: "$mod+Shift+n", display: "⌘⇧N" },
-  { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+,", display: "⌘⇧," },
+  // Shifted-symbol keys must bind to the physical code, not the unshifted glyph:
+  // with Shift held the browser reports key="<" (not ","), so "$mod+Shift+,"
+  // would never match. tinykeys matches event.code, so bind "Comma" instead.
+  { id: "project-settings.open", label: "Project Settings: Open for active workspace", category: "Workspace", keys: "$mod+Shift+Comma", display: "⌘⇧," },
   { id: "project-settings.edit-file", label: "Project Settings: Edit maverick.json", category: "Workspace", keys: "" },
 
   // Editor
@@ -55,7 +58,7 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
 
   // Panel toggles
   { id: "layout.toggleSidebar", label: "Toggle primary sidebar", category: "Panel", keys: "$mod+b", display: "⌘B" },
-  { id: "layout.toggleAuxBar", label: "Toggle auxiliary panel", category: "Panel", keys: "$mod+Shift+.", display: "⌘⇧." },
+  { id: "layout.toggleAuxBar", label: "Toggle auxiliary panel", category: "Panel", keys: "$mod+Shift+Period", display: "⌘⇧." },
   { id: "layout.togglePanel", label: "Toggle bottom panel", category: "Panel", keys: "$mod+j", display: "⌘J" },
 
   // Activity views
@@ -69,7 +72,7 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "global.quickOpen", label: "Quick open file", category: "Global", keys: "$mod+p", display: "⌘P" },
   { id: "global.presets", label: "Preset launcher", category: "Global", keys: "$mod+Shift+Space", display: "⌘⇧Space" },
   { id: "global.settings", label: "Open Settings", category: "Global", keys: "$mod+,", display: "⌘," },
-  { id: "global.help", label: "Keybinding reference", category: "Global", keys: "$mod+Shift+/", display: "⌘⇧?" },
+  { id: "global.help", label: "Keybinding reference", category: "Global", keys: "$mod+Shift+Slash", display: "⌘⇧?" },
 ] as const;
 
 export type ActionId = (typeof KEYBINDINGS)[number]["id"];
