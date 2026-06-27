@@ -171,8 +171,8 @@ export function DiffView() {
     );
   }
 
-  // Whether the agent is reachable at all (live PTY or headless backend) — gate
-  // the AI actions so they don't present as enabled-but-inert.
+  // Whether the agent is reachable (a live PTY for this workspace) — gate the AI
+  // actions so they don't present as enabled-but-inert.
   const canAct = canDispatchAgentAction({
     workspaceId: active.id,
     backend: active.agentBackend,

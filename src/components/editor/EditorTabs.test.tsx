@@ -173,7 +173,7 @@ describe("EditorTabs", () => {
     expect(screen.getByTestId("editor-tabs-open-terminal")).toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-dashboard")).toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-kanban")).toBeInTheDocument();
-    expect(screen.getByTestId("editor-tabs-open-automations")).toBeInTheDocument();
+    expect(screen.queryByTestId("editor-tabs-open-automations")).not.toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-mcps")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-tabs-open-browser")).not.toBeInTheDocument();
   });
@@ -236,14 +236,14 @@ describe("EditorTabs", () => {
   it("keyboard Space on close button removes system tab", () => {
     useWorkbench.setState({
       ...initial,
-      systemTabs: ["automations"],
-      activeSystemTab: "automations",
+      systemTabs: ["mcps"],
+      activeSystemTab: "mcps",
       activeWorkspaceId: null,
     });
     renderWithProviders(<EditorTabs />);
-    const closeBtn = screen.getByLabelText("Close Automations");
+    const closeBtn = screen.getByLabelText("Close MCP Servers");
     fireEvent.keyDown(closeBtn, { key: " " });
-    expect(useWorkbench.getState().systemTabs).not.toContain("automations");
+    expect(useWorkbench.getState().systemTabs).not.toContain("mcps");
   });
 
   it("dropdown item click opens a system tab", async () => {

@@ -61,7 +61,6 @@ export interface MaverickConfig {
   worktrees?: { base: string };
   skills?: Skill[];
   presets?: WorkspacePreset[];
-  automations?: Automation[];
   mcps?: MCPServerConfig[];
   project?: ProjectSettings;
 }
@@ -92,19 +91,6 @@ export type PresetNode =
   | { type: "browser"; url?: string }
   | { type: "split"; direction: "h" | "v"; ratio: number; top: PresetNode; bottom: PresetNode }
   | { type: "split"; direction: "h" | "v"; ratio: number; left: PresetNode; right: PresetNode };
-
-export interface Automation {
-  name: string;
-  trigger: "manual" | "schedule" | "on-file-change";
-  // Cadence for `trigger: "schedule"` — simple interval like "30m" / "2h" / "1d".
-  interval?: string;
-  steps: AutomationStep[];
-}
-
-export interface AutomationStep {
-  type: "shell" | "skill" | "git" | "workspace" | "notify" | "url";
-  [key: string]: unknown;
-}
 
 export interface MCPServerConfig {
   name: string;

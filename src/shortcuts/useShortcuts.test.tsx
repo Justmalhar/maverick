@@ -257,8 +257,6 @@ describe("useShortcuts", () => {
     expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
     act(() => fire("$mod+Shift+b"));
     expect(useWorkbench.getState().activeSystemTab).toBe("browser");
-    act(() => fire("$mod+Shift+a"));
-    expect(useWorkbench.getState().activeSystemTab).toBe("automations");
     act(() => fire("$mod+Shift+p"));
     expect(useWorkbench.getState().commandPaletteOpen).toBe(true);
     act(() => fire("$mod+p"));

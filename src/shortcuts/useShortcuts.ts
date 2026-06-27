@@ -125,7 +125,6 @@ export function useShortcuts() {
       "view.git": () => useWorkbench.getState().openSourceControl(),
       "view.kanban": () => useWorkbench.getState().openSystemTab("kanban"),
       "view.browser": () => useWorkbench.getState().openSystemTab("browser"),
-      "view.automations": () => useWorkbench.getState().openSystemTab("automations"),
       "global.commandPalette": () => useWorkbench.getState().setCommandPaletteOpen(true),
       "global.quickOpen": () => useWorkbench.getState().setQuickOpenOpen(true),
       "global.presets": () => useWorkbench.getState().setPresetLauncherOpen(true),

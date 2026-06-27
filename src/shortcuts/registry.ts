@@ -65,7 +65,6 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "view.git", label: "Show Git", category: "Panel", keys: "$mod+Shift+g", display: "⌘⇧G" },
   { id: "view.kanban", label: "Show Kanban", category: "Panel", keys: "$mod+Shift+k", display: "⌘⇧K" },
   { id: "view.browser", label: "Show Browser", category: "Panel", keys: "$mod+Shift+b", display: "⌘⇧B" },
-  { id: "view.automations", label: "Show Automations", category: "Panel", keys: "$mod+Shift+a", display: "⌘⇧A" },
 
   // Global
   { id: "global.commandPalette", label: "Command palette", category: "Global", keys: "$mod+Shift+p", display: "⌘⇧P" },

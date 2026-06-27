@@ -2,8 +2,6 @@ import type { Workspace } from "@/lib/ipc";
 import { useWorkbench } from "@/state/store";
 import { useShallow } from "zustand/react/shallow";
 import { TerminalView } from "./terminal/TerminalView";
-import { useAutomationTriggers } from "@/hooks/useAutomationTriggers";
-import { useAgentRun } from "@/hooks/useAgentRun";
 import { cn } from "@/lib/utils";
 
 interface Props { workspace: Workspace; active: boolean; }
@@ -15,10 +13,6 @@ interface Props { workspace: Workspace; active: boolean; }
 // scales with the pool size (~6), not the number of open terminals (CLAUDE.md
 // 200MB budget), while the PTY/session lives on (CLAUDE.md rule 6).
 export function WorkspaceEditor({ workspace, active }: Props) {
-  // Activate this workspace's automation triggers while its editor is mounted.
-  useAutomationTriggers(workspace);
-  // Consume any staged headless agent run for this workspace (no-op in terminal mode).
-  useAgentRun(workspace);
   const workspaceId = workspace.id;
   // useShallow performs shallow array/object comparison so selectors returning new
   // arrays each call don't cause infinite re-render loops (zustand uses Object.is).

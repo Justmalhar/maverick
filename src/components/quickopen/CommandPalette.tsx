@@ -4,7 +4,6 @@ import {
   GitBranch,
   KanbanSquare,
   Globe,
-  Zap,
   Plug,
   Settings,
   SlidersHorizontal,
@@ -112,16 +111,6 @@ export function CommandPalette() {
           setOpen(false);
         },
         shortcutId: "view.browser",
-      },
-      {
-        id: "view.automations",
-        label: "View: Show Automations",
-        icon: Zap,
-        run: () => {
-          openSystemTab("automations");
-          setOpen(false);
-        },
-        shortcutId: "view.automations",
       },
       {
         id: "view.mcps",

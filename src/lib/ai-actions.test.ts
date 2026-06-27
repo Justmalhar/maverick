@@ -72,20 +72,7 @@ describe("sendAgentPrompt", () => {
     expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "do it\n" });
   });
 
-  it("dispatches a headless agent run when there is no PTY (the default mode) (#31)", async () => {
-    vi.mocked(invoke).mockResolvedValue({ agentId: "a1" } as never);
-    const r = await sendAgentPrompt({
-      target: { workspaceId: "ws2", backend: "claude-code", cwd: "/wt2" },
-      prompt: "review it",
-    });
-    expect(r).toEqual({ ran: true });
-    expect(invoke).toHaveBeenCalledWith(
-      "agent_run",
-      expect.objectContaining({ workspaceId: "ws2", backend: "claude-code", prompt: "review it", cwd: "/wt2" })
-    );
-  });
-
-  it("no-ops on an empty prompt or an unreachable backend (no PTY, no headless)", async () => {
+  it("no-ops on an empty prompt or when there is no live agent PTY", async () => {
     expect(
       await sendAgentPrompt({ target: { workspaceId: "ws3", backend: "claude-code", cwd: "/w" }, prompt: "  " })
     ).toEqual({ ran: false });
@@ -99,10 +86,9 @@ describe("sendAgentPrompt", () => {
 describe("canDispatchAgentAction", () => {
   beforeEach(() => __testing__.leafPtyCache.clear());
 
-  it("is true with a live PTY, true for a headless backend, false otherwise", () => {
+  it("is true only with a live PTY, false otherwise", () => {
     __testing__.leafPtyCache.set("p-1", "pty");
     expect(canDispatchAgentAction({ workspaceId: "p", backend: "aider", cwd: "/w" })).toBe(true); // PTY
-    expect(canDispatchAgentAction({ workspaceId: "h", backend: "claude-code", cwd: "/w" })).toBe(true); // headless
-    expect(canDispatchAgentAction({ workspaceId: "n", backend: "aider", cwd: "/w" })).toBe(false);
+    expect(canDispatchAgentAction({ workspaceId: "n", backend: "claude-code", cwd: "/w" })).toBe(false);
   });
 });

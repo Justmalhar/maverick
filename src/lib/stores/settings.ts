@@ -142,13 +142,6 @@ export function getAiBranchNames(): boolean {
   return typeof v === "boolean" ? v : true;
 }
 
-/** Where a task/workspace agent runs. Defaults to "headless" (background + Agent Output panel). */
-export function getAgentLaunchMode(): "headless" | "terminal" {
-  return useSettingsStore.getState().values["general.agentLaunchMode"] === "terminal"
-    ? "terminal"
-    : "headless";
-}
-
 /** React accessor for the global env map plus a setter that persists it. */
 export function useGlobalEnv(): [Record<string, string>, (next: Record<string, string>) => void] {
   const raw = useSettingsStore((s) => s.values["general.env"]);

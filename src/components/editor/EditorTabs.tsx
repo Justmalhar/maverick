@@ -6,7 +6,6 @@ import {
   Gauge,
   Globe,
   CheckSquare2,
-  Zap,
   Plug,
   Sparkles,
   SquarePen,
@@ -51,14 +50,13 @@ const SYSTEM_TAB_META: Record<
   usage: { label: "Usage", icon: Gauge },
   browser: { label: "Browser", icon: Globe, shortcutKeys: "$mod+Shift+b" },
   kanban: { label: "Tasks", icon: CheckSquare2, shortcutKeys: "$mod+Shift+k" },
-  automations: { label: "Automations", icon: Zap, shortcutKeys: "$mod+Shift+a" },
   mcps: { label: "MCP Servers", icon: Plug },
   skills: { label: "Skills", icon: Sparkles },
   "skill-editor": { label: "New Skill", icon: SquarePen },
   git: { label: "Git", icon: GitBranch },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "automations", "mcps", "skills", "git"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "mcps", "skills", "git"];
 
 export function EditorTabs() {
   const platform = useOSPlatform();

@@ -59,11 +59,6 @@ presets:
         bottom:
           type: browser
           url: https://example.com
-automations:
-  - name: deploy
-    trigger: manual
-    steps:
-      - { type: shell, command: "echo hi" }
 mcps:
   - { name: filesys, command: mcp-fs, args: [] }
 `;
@@ -174,12 +169,12 @@ describe("ConfigLoader.save", () => {
   test("merges a patch into existing YAML and persists it", () => {
     const { loader, files } = harness({ yaml: MIN_CONFIG });
     const saved = loader.save("/p", {
-      automations: [{ name: "build", trigger: "manual", steps: [{ type: "shell", command: "x" }] }],
+      mcps: [{ name: "build", command: "mcp-build", args: [] }],
     });
-    expect(saved.automations?.[0].name).toBe("build");
-    // Re-reading the written file yields the same automation.
+    expect(saved.mcps?.[0].name).toBe("build");
+    // Re-reading the written file yields the same server.
     const round = loader.load("/p");
-    expect(round.automations?.[0].name).toBe("build");
+    expect(round.mcps?.[0].name).toBe("build");
     expect(files["/p/maverick.yaml"]).toContain("build");
   });
 
@@ -222,9 +217,9 @@ describe("ConfigLoader.save", () => {
       writeFileSync(join(tmp, "maverick.yaml"), MIN_CONFIG, "utf8");
       const loader = new ConfigLoader();
       loader.save(tmp, {
-        automations: [{ name: "ship", trigger: "manual", steps: [] }],
+        mcps: [{ name: "ship", command: "mcp-ship", args: [] }],
       });
-      expect(loader.load(tmp).automations?.[0].name).toBe("ship");
+      expect(loader.load(tmp).mcps?.[0].name).toBe("ship");
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

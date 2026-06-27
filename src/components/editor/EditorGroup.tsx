@@ -13,7 +13,6 @@ const FileTabPane = lazy(() => import("@/components/viewers/FileTabPane"));
 const UsagePanel = lazy(() => import("@/panels/usage/UsagePanel"));
 const BrowserPanel = lazy(() => import("@/panels/browser/BrowserPanel"));
 const KanbanBoard = lazy(() => import("@/panels/kanban/KanbanBoard"));
-const AutomationsPanel = lazy(() => import("@/panels/automations/AutomationsPanel"));
 const MCPsPanel = lazy(() => import("@/panels/mcps/MCPsPanel"));
 const SkillsPanel = lazy(() => import("@/panels/skills/SkillsPanel"));
 const SkillEditorPanel = lazy(() => import("@/panels/skills/SkillEditorPanel"));
@@ -29,8 +28,6 @@ function SystemTabContent({ id }: { id: Exclude<SystemTabId, "browser"> }) {
       return <UsagePanel />;
     case "kanban":
       return <KanbanBoard />;
-    case "automations":
-      return <AutomationsPanel />;
     case "mcps":
       return <MCPsPanel />;
     case "skills":

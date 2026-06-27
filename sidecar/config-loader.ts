@@ -55,20 +55,6 @@ const PresetSchema = z.object({
   layout: PresetNodeSchema,
 });
 
-const AutomationStepSchema = z
-  .object({
-    type: z.enum(["shell", "skill", "git", "workspace", "notify", "url"]),
-  })
-  .passthrough();
-
-const AutomationSchema = z.object({
-  name: z.string(),
-  trigger: z.enum(["manual", "schedule", "on-file-change"]),
-  // Cadence for schedule triggers, e.g. "30m" / "2h" / "1d".
-  interval: z.string().optional(),
-  steps: z.array(AutomationStepSchema),
-});
-
 const MCPSchema = z.object({
   name: z.string(),
   // A blank command (hand-edited maverick.json) used to be accepted and only
@@ -87,7 +73,6 @@ export const MaverickConfigSchema = z.object({
   worktrees: z.object({ base: z.string() }).optional(),
   skills: z.array(SkillSchema).optional(),
   presets: z.array(PresetSchema).optional(),
-  automations: z.array(AutomationSchema).optional(),
   mcps: z.array(MCPSchema).optional(),
   project: ProjectSettingsSchema.optional(),
 });
@@ -124,9 +109,9 @@ export class ConfigLoader {
   }
 
   // Merge a partial patch into the on-disk config and persist it. Used by
-  // panels (e.g. Automations) so edits survive a reload. The patch is shallow
-  // over top-level keys (automations/mcps/skills/presets), validated against
-  // the full schema, and written back in the file's native format (YAML when a
+  // panels (e.g. MCP/Skills) so edits survive a reload. The patch is shallow
+  // over top-level keys (mcps/skills/presets), validated against the full
+  // schema, and written back in the file's native format (YAML when a
   // maverick.yaml exists, JSON otherwise).
   save(projectPath: string, patch: Partial<MaverickConfig>): MaverickConfig {
     const yamlPath = join(projectPath, "maverick.yaml");
