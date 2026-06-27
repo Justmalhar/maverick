@@ -11,6 +11,7 @@ interface Props {
   diffStatCache: Map<string, DiffStat>;
   onEdit: (task: KanbanTask) => void;
   onStart?: (task: KanbanTask) => Promise<void>;
+  onDelete?: (id: string) => void;
 }
 
 const LABELS: Record<KanbanTask["status"], string> = {
@@ -27,16 +28,13 @@ const STATUS_ICON: Record<KanbanTask["status"], React.ReactNode> = {
   done: <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />,
 };
 
-export default function KanbanColumn({ status, tasks, diffStatCache, onEdit, onStart }: Props) {
+export default function KanbanColumn({ status, tasks, diffStatCache, onEdit, onStart, onDelete }: Props) {
   return (
     <div
       data-testid={`kanban-column-${status}`}
       className="flex w-72 shrink-0 flex-col rounded-md border border-border bg-card/40"
     >
-      <div
-        className="flex items-center gap-2 px-3 py-2.5"
-        style={{ borderBottom: "1px solid hsl(var(--border))" }}
-      >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         {STATUS_ICON[status]}
         <span className="text-xs font-medium text-foreground/80">{LABELS[status]}</span>
         <span className="ml-0.5 text-xs text-muted-foreground">{tasks.length}</span>
@@ -59,6 +57,7 @@ export default function KanbanColumn({ status, tasks, diffStatCache, onEdit, onS
                 diffStat={task.workspaceId ? diffStatCache.get(task.workspaceId) : undefined}
                 onEdit={() => onEdit(task)}
                 onStart={onStart}
+                onDelete={onDelete}
               />
             ))}
             {provided.placeholder}

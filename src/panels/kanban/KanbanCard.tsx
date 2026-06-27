@@ -1,9 +1,21 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Draggable } from "@hello-pangea/dnd";
 import { formatDistanceToNow } from "date-fns";
-import { Eye, GitPullRequest, Loader2, Play } from "lucide-react";
+import { Eye, GitPullRequest, Loader2, MoreVertical, Pencil, Play, Trash2, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { prCreate } from "@/lib/tauri";
@@ -17,6 +29,8 @@ interface Props {
   onEdit: () => void;
   /** When provided, Board-level start handler is used instead of card-local logic. */
   onStart?: (task: KanbanTask) => Promise<void>;
+  /** When provided, an actions menu (three-dot + right-click) with Delete is shown. */
+  onDelete?: (id: string) => void;
 }
 
 const AGENT_DOT: Record<KanbanTask["status"], string> = {
@@ -26,7 +40,7 @@ const AGENT_DOT: Record<KanbanTask["status"], string> = {
   done: "bg-blue-400/40",
 };
 
-export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: Props) {
+export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onDelete }: Props) {
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const backends = useWorkbench((s) => s.backends);
   const workspaces = useWorkbench((s) => s.workspaces);
@@ -87,6 +101,36 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
     }
   };
 
+  // confirmDelete is only ever invoked from menu items rendered inside the
+  // `onDelete`-gated menus below, so onDelete is guaranteed defined here.
+  const confirmDelete = () => {
+    if (window.confirm("Delete this task? This cannot be undone.")) onDelete!(task.id);
+  };
+
+  const menuActions: {
+    key: string;
+    label: string;
+    icon: LucideIcon;
+    run: () => void;
+    destructive?: boolean;
+  }[] = [
+    { key: "edit", label: "Edit", icon: Pencil, run: onEdit },
+    { key: "delete", label: "Delete", icon: Trash2, run: confirmDelete, destructive: true },
+  ];
+
+  const renderMenuItems = (Item: React.ElementType) =>
+    menuActions.map((action) => (
+      <Item
+        key={action.key}
+        data-testid={`kanban-menu-${action.key}`}
+        onSelect={action.run}
+        className={action.destructive ? "text-destructive focus:text-destructive" : undefined}
+      >
+        <action.icon className="h-3.5 w-3.5" />
+        {action.label}
+      </Item>
+    ));
+
   const ActionButton = () => {
     switch (task.status) {
       case "todo":
@@ -145,7 +189,8 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
 
   return (
     <Draggable draggableId={task.id} index={index}>
-      {(provided, snapshot) => (
+      {(provided, snapshot) => {
+        const card = (
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
@@ -155,10 +200,30 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
           style={provided.draggableProps.style as React.CSSProperties}
           data-testid="kanban-card"
           className={cn(
-            "rounded-md border border-border/50 bg-card p-3 text-xs transition-all",
+            "group relative rounded-md border border-border/50 bg-card p-3 text-xs transition-all",
             snapshot.isDragging && "shadow-xl ring-1 ring-primary/50 opacity-90"
           )}
         >
+          {onDelete && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  data-testid="kanban-card-menu"
+                  aria-label="Task actions"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="absolute right-1.5 top-1.5 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent/20 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {renderMenuItems(DropdownMenuItem)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {/* Branch row — branch name + diff stats + status dot */}
           {task.branch && (
             <div className="mb-2 flex items-center gap-1.5">
@@ -232,7 +297,16 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart }: P
             </span>
           </div>
         </div>
-      )}
+        );
+        return onDelete ? (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
+            <ContextMenuContent>{renderMenuItems(ContextMenuItem)}</ContextMenuContent>
+          </ContextMenu>
+        ) : (
+          card
+        );
+      }}
     </Draggable>
   );
 }

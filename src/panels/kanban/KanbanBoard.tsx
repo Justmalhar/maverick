@@ -290,6 +290,7 @@ export default function KanbanBoard() {
               diffStatCache={diffStatCache}
               onEdit={(task) => setDialogTask(task)}
               onStart={handleStart}
+              onDelete={remove}
             />
           ))}
         </div>
