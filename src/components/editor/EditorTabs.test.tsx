@@ -5,33 +5,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTabs } from "./EditorTabs";
 import { useWorkbench } from "@/state/store";
-import { availableShells } from "@/lib/terminal-shell";
-import { wslAvailable, ptySpawn } from "@/lib/tauri";
 import { makeWorkspace, makePreset } from "@/test/fixtures";
-
-vi.mock("@/lib/tauri", async (orig) => {
-  const actual = await orig<typeof import("@/lib/tauri")>();
-  return {
-    ...actual,
-    ptySpawn: vi.fn(async () => ({ ptyId: "pty-1" })),
-    ptyKill: vi.fn(async () => undefined),
-    wslAvailable: vi.fn(async () => true),
-  };
-});
-
-// availableShells is exercised in terminal-shell.test.ts; here we drive the "+"
-// menu directly by stubbing which profiles a platform offers.
-vi.mock("@/lib/terminal-shell", async (orig) => {
-  const actual = await orig<typeof import("@/lib/terminal-shell")>();
-  return { ...actual, availableShells: vi.fn(() => []) };
-});
 
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
-  vi.mocked(availableShells).mockReturnValue([]);
-  vi.mocked(wslAvailable).mockResolvedValue(true);
-  vi.mocked(ptySpawn).mockReset().mockResolvedValue({ ptyId: "pty-1" });
   useWorkbench.setState({
     ...initial,
     workspaces: [],
@@ -413,6 +391,31 @@ describe("EditorTabs", () => {
       // EditorTabs only mounts with tabs present; clear active ids then fire.
       useWorkbench.setState({ activeWorkspaceId: null });
       fireCloseActiveTab();
+      expect(useWorkbench.getState().workspaces).toHaveLength(1);
+    });
+
+    it("calls closeTerminalGroup when the active group is non-primary with a single pane", () => {
+      // Seed: active workspace w1, active group is "term-2" (non-primary: term-2 !== w1),
+      // single-leaf split tree for term-2 so countLeaves returns 1.
+      useWorkbench.setState({
+        ...initial,
+        workspaces: [makeWorkspace({ id: "w1" })],
+        activeWorkspaceId: "w1",
+        activeFileTabId: null,
+        activeSystemTab: null,
+        terminalGroups: [
+          { id: "w1", workspaceId: "w1", title: "Terminal 1" },
+          { id: "term-2", workspaceId: "w1", title: "Terminal 2" },
+        ],
+        activeGroupByWorkspace: { w1: "term-2" },
+        splitTrees: {
+          "term-2": { type: "terminal", id: "term-2-leaf", backend: "claude", ptyId: "term-2" },
+        },
+      });
+      const closeTerminalGroup = vi.spyOn(useWorkbench.getState(), "closeTerminalGroup");
+      renderWithProviders(<EditorTabs />);
+      fireCloseActiveTab();
+      expect(closeTerminalGroup).toHaveBeenCalledWith("term-2");
       expect(useWorkbench.getState().workspaces).toHaveLength(1);
     });
   });

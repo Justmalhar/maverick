@@ -103,7 +103,6 @@ export function EditorTabs() {
   const ctxGroups = terminalGroups.filter((g) => g.workspaceId === contextWorkspaceId);
   const ctxFileTabs = fileTabs.filter((t) => t.workspaceId === contextWorkspaceId);
 
-
   function onOpenPanelTerminal() {
     const state = useWorkbench.getState();
     if (!state.layout.panelVisible) state.togglePanel();
