@@ -42,7 +42,7 @@ export default function IdentitySection() {
       setConfirmOpen(false);
       const message = err instanceof Error ? err.message : String(err);
       console.error("remove project failed", err);
-      void notifySend("Remove project failed", `${data.name}: ${message}`, undefined, "error").catch(() => {});
+      void notifySend("Remove project failed", `${data?.name}: ${message}`, undefined, "error").catch(() => {});
     }
   }
 
