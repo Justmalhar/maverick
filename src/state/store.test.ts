@@ -605,4 +605,15 @@ describe("terminal groups", () => {
     expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id1);
     expect(useWorkbench.getState().terminalGroups.find((g) => g.id === id2)).toBeUndefined();
   });
+
+  it("closeTerminalGroup kills the closed group's leaf PTYs", async () => {
+    const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    __testing__.leafPtyCache.set(`${id}-1`, "pty-extra");
+    __testing__.leafPtyCache.set("w1-1", "pty-primary");
+    useWorkbench.getState().closeTerminalGroup(id);
+    expect(__testing__.leafPtyCache.has(`${id}-1`)).toBe(false);   // extra group's leaf killed
+    expect(__testing__.leafPtyCache.has("w1-1")).toBe(true);        // primary untouched
+  });
 });

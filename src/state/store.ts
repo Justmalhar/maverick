@@ -343,10 +343,11 @@ export const useWorkbench = create<WorkbenchState>()(
       });
       return id;
     },
-    closeTerminalGroup: (groupId) =>
+    closeTerminalGroup: (groupId) => {
+      const group = get().terminalGroups.find((g) => g.id === groupId);
+      if (!group || group.id === group.workspaceId) return;   // primary not closable
+      killTerminalGroupLeaves(groupId);
       set((s) => {
-        const group = s.terminalGroups.find((g) => g.id === groupId);
-        if (!group || group.id === group.workspaceId) return {};
         const siblings = s.terminalGroups.filter((g) => g.workspaceId === group.workspaceId && g.id !== groupId);
         const fallback = siblings[siblings.length - 1]?.id ?? group.workspaceId;
         const { [groupId]: _tree, ...splitTrees } = s.splitTrees;
@@ -358,7 +359,8 @@ export const useWorkbench = create<WorkbenchState>()(
               ? { ...s.activeGroupByWorkspace, [group.workspaceId]: fallback }
               : s.activeGroupByWorkspace,
         };
-      }),
+      });
+    },
     setActiveGroup: (workspaceId, groupId) =>
       set((s) => ({ activeGroupByWorkspace: { ...s.activeGroupByWorkspace, [workspaceId]: groupId } })),
     setLaunchSpec: (workspaceId, spec) =>

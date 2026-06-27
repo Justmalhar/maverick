@@ -82,7 +82,8 @@ export function EditorTabs() {
     setSaveLayoutFor(workspaceId);
   };
 
-  // Terminal groups scoped to each workspace (raw subscription — not selectWorkspaceGroups).
+  // Raw subscription + inline filter avoids a new-array-per-render selector that would
+  // trigger a re-render on every unrelated store write.
   const terminalGroups = useWorkbench((s) => s.terminalGroups);
   const activeGroupByWorkspace = useWorkbench((s) => s.activeGroupByWorkspace);
   const setActiveGroup = useWorkbench((s) => s.setActiveGroup);
