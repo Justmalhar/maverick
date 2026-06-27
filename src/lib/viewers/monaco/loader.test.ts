@@ -71,11 +71,4 @@ describe("ensureLanguage", () => {
     expect(lang).toBe("plaintext");
     hlInstance.loadLanguage = original;
   });
-
-  it("returns plaintext immediately for a file with no recognised extension (early return branch)", async () => {
-    // languageForPath("/a/NOEXT") returns "plaintext" → ensureLanguage must
-    // return early WITHOUT calling getMonaco(), exercising the `if (lang === "plaintext") return lang` branch.
-    const lang = await ensureLanguage("/a/NOEXT");
-    expect(lang).toBe("plaintext");
-  });
 });

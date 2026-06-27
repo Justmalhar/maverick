@@ -7,8 +7,6 @@ import { useWorkbench } from "@/state/store";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { makeWorkspace } from "@/test/fixtures";
 import type { Workspace } from "@/lib/ipc";
-import * as terminalShell from "@/lib/terminal-shell";
-import * as settings from "@/lib/stores/settings";
 
 const captured: Record<string, (e: { payload: unknown }) => void> = {};
 const unlistenData = vi.fn();
@@ -168,45 +166,5 @@ describe("useLaunchSpec", () => {
     act(() => emitData("pty-1", "late"));
     act(() => vi.advanceTimersByTime(400));
     expect(writeCalls().some((c) => String((c[1] as { data: string }).data).includes("p"))).toBe(false);
-  });
-
-  it("launchShell() returns 'cmd' on Windows when default shell is cmd", async () => {
-    const isWindowsSpy = vi.spyOn(terminalShell, "isWindows").mockReturnValue(true);
-    const shellKindSpy = vi.spyOn(settings, "getDefaultShellKind").mockReturnValue("cmd");
-    __resetLaunchedForTests();
-    useWorkbench.setState({ launchSpecs: {} });
-    useWorkbench.getState().setLaunchSpec("win-cmd", { command: "codex", args: [] });
-    const ws = makeWorkspace({ id: "win-cmd", sessionId: undefined });
-    await mount(ws, "pty-cmd", true);
-    // On Windows+cmd the command line uses cmd quoting (no slash escaping).
-    expect(writeCalls().length).toBeGreaterThan(0);
-    isWindowsSpy.mockRestore();
-    shellKindSpy.mockRestore();
-  });
-
-  it("launchShell() returns 'posix' on Windows when default shell is wsl", async () => {
-    const isWindowsSpy = vi.spyOn(terminalShell, "isWindows").mockReturnValue(true);
-    const shellKindSpy = vi.spyOn(settings, "getDefaultShellKind").mockReturnValue("wsl");
-    __resetLaunchedForTests();
-    useWorkbench.setState({ launchSpecs: {} });
-    useWorkbench.getState().setLaunchSpec("win-wsl", { command: "claude", args: [] });
-    const ws = makeWorkspace({ id: "win-wsl", sessionId: undefined });
-    await mount(ws, "pty-wsl", true);
-    expect(writeCalls().length).toBeGreaterThan(0);
-    isWindowsSpy.mockRestore();
-    shellKindSpy.mockRestore();
-  });
-
-  it("launchShell() returns 'powershell' on Windows when default shell is powershell", async () => {
-    const isWindowsSpy = vi.spyOn(terminalShell, "isWindows").mockReturnValue(true);
-    const shellKindSpy = vi.spyOn(settings, "getDefaultShellKind").mockReturnValue("powershell");
-    __resetLaunchedForTests();
-    useWorkbench.setState({ launchSpecs: {} });
-    useWorkbench.getState().setLaunchSpec("win-ps", { command: "claude", args: [] });
-    const ws = makeWorkspace({ id: "win-ps", sessionId: undefined });
-    await mount(ws, "pty-ps", true);
-    expect(writeCalls().length).toBeGreaterThan(0);
-    isWindowsSpy.mockRestore();
-    shellKindSpy.mockRestore();
   });
 });

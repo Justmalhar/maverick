@@ -1,4 +1,3 @@
-/* v8 ignore next — import hoisted by ESM; V8 never records its execution range */
 import { Check } from "lucide-react";
 import { useFirstRun, WIZARD_STEP_COUNT, type WizardStep } from "@/hooks/useFirstRun";
 import { Button } from "@/components/ui/button";

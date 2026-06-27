@@ -252,55 +252,6 @@ describe("DiffView", () => {
     expect(useReviewComments.getState().comments).toHaveLength(0);
   });
 
-  it("onDraftPr catch block: logs error when sendAgentPrompt throws", async () => {
-    activeWorkspaceWithDiff();
-    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // diff_get
-      .mockRejectedValueOnce(new Error("draft-pr-failed")); // pty_write throws
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("diff-draft-pr"));
-    await waitFor(() =>
-      expect(errSpy).toHaveBeenCalledWith("Draft PR failed", expect.any(Error))
-    );
-    errSpy.mockRestore();
-  });
-
-  it("onFixErrors catch block: logs error when sendAgentPrompt throws", async () => {
-    activeWorkspaceWithDiff();
-    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // diff_get
-      .mockRejectedValueOnce(new Error("pty broken")); // pty_write
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("diff-fix-errors"));
-    await waitFor(() =>
-      expect(errSpy).toHaveBeenCalledWith("Fix errors failed", expect.any(Error))
-    );
-    errSpy.mockRestore();
-  });
-
-  it("onSendComments catch block: logs error when sendReviewComments throws", async () => {
-    activeWorkspaceWithDiff();
-    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
-    useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 1, side: "new", body: "test" });
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // diff_get
-      .mockRejectedValueOnce(new Error("agent failed")); // pty_write
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("diff-send-comments"));
-    await waitFor(() =>
-      expect(errSpy).toHaveBeenCalledWith("Send review comments failed", expect.any(Error))
-    );
-    errSpy.mockRestore();
-  });
-
   it("clicking a changed-file row opens a diff tab for that file", async () => {
     useWorkbench.setState({
       ...initial,

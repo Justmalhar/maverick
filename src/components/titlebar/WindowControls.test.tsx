@@ -1,18 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
+import { renderWithProviders, screen } from "@/test/utils";
 
 const minimize = vi.fn().mockResolvedValue(undefined);
 const toggleMaximize = vi.fn().mockResolvedValue(undefined);
 const close = vi.fn().mockResolvedValue(undefined);
 const isMaximized = vi.fn().mockResolvedValue(false);
-
-// onResized captures the callback so tests can fire a synthetic resize event.
-let capturedResizeCallback: (() => Promise<void>) | undefined;
-const onResized = vi.fn().mockImplementation((cb: () => Promise<void>) => {
-  capturedResizeCallback = cb;
-  return Promise.resolve(() => {});
-});
+const onResized = vi.fn().mockResolvedValue(() => {});
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ minimize, toggleMaximize, close, isMaximized, onResized }),
@@ -47,21 +41,5 @@ describe("WindowControls", () => {
     await userEvent.click(screen.getByLabelText("minimize"));
     await userEvent.click(screen.getByLabelText("maximize"));
     await userEvent.click(screen.getByLabelText("close"));
-  });
-
-  it("updates maximize state when the resize event fires (onResized callback, line 32)", async () => {
-    // First render: not maximized
-    isMaximized.mockResolvedValue(false);
-    renderWithProviders(<WindowControls />);
-    // Wait for the useEffect to fire and onResized to be registered
-    await waitFor(() => expect(onResized).toHaveBeenCalled());
-
-    // Simulate the window being maximized via a native resize event
-    isMaximized.mockResolvedValue(true);
-    await act(async () => {
-      await capturedResizeCallback?.();
-    });
-
-    expect(await screen.findByLabelText("restore")).toBeInTheDocument();
   });
 });

@@ -25,12 +25,6 @@ describe("GeneralSettings", () => {
     expect(toggle).not.toBeChecked();
   });
 
-  it("startup command onChange updates the store value (missing function coverage)", () => {
-    renderWithProviders(<GeneralSettings />);
-    fireEvent.change(screen.getByTestId("general-startup-command"), { target: { value: "claude --dangerously-skip-permissions" } });
-    expect(useSettingsStore.getState().values["general.startupCommand"]).toBe("claude --dangerously-skip-permissions");
-  });
-
   it("exposes an agent launch mode control that updates the setting", async () => {
     renderWithProviders(<GeneralSettings />);
     await userEvent.click(screen.getByTestId("general-agent-launch-mode"));

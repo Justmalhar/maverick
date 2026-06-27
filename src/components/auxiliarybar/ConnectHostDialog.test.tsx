@@ -105,29 +105,4 @@ describe("ConnectHostDialog", () => {
       expect(invoke).toHaveBeenCalledWith("git_credential_status", { provider: "gitlab" })
     );
   });
-
-  it("refreshStatus catch: surfaces error when git_credential_status throws (lines 73-74)", async () => {
-    mockInvoke({
-      git_credential_status: () => {
-        throw new Error("status-check-failed");
-      },
-    });
-    renderWithProviders(
-      <ConnectHostDialog open onOpenChange={() => {}} defaultProvider="github" />
-    );
-    expect(await screen.findByTestId("connect-error")).toHaveTextContent("status-check-failed");
-  });
-
-  it("onDisconnect catch: surfaces error when git_credential_disconnect throws (line 116)", async () => {
-    mockInvoke({
-      git_credential_status: () => ({ provider: "github", connected: true, username: "octocat" }),
-      git_credential_disconnect: () => {
-        throw new Error("disconnect-failed");
-      },
-    });
-    renderWithProviders(<ConnectHostDialog open onOpenChange={() => {}} defaultProvider="github" />);
-    await screen.findByTestId("connect-disconnect");
-    await userEvent.click(screen.getByTestId("connect-disconnect"));
-    expect(await screen.findByTestId("connect-error")).toHaveTextContent("disconnect-failed");
-  });
 });

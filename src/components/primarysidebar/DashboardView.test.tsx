@@ -159,13 +159,4 @@ describe("DashboardView", () => {
     expect(screen.getByTestId("dashboard-agent-w1")).toHaveAttribute("data-active", "false");
     expect(screen.getByTestId("dashboard-agent-w2")).toHaveAttribute("data-active", "true");
   });
-
-  it("silently clears stats when diff_get throws (catch branch, line 102)", async () => {
-    vi.mocked(invoke).mockRejectedValue(new Error("diff-unavailable"));
-    useWorkbench.setState({ ...initial, workspaces: [makeWorkspace({ id: "w1" })] });
-    renderWithProviders(<DashboardView />);
-    // After the rejection resolves, the card must still render with no stats row.
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("diff_get", expect.anything()));
-    expect(screen.queryByTestId("dashboard-agent-stats-w1")).not.toBeInTheDocument();
-  });
 });

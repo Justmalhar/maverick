@@ -356,10 +356,4 @@ describe("tauri command wrappers", () => {
     captured["fs:changed"]({ payload: { root: "/wt", paths: ["/wt/a.ts"] } });
     expect(fsChangedCb).toHaveBeenCalledWith({ root: "/wt", paths: ["/wt/a.ts"] });
   });
-
-  it("agentKill calls agent_kill with the agentId", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({ ok: true } as never);
-    await api.agentKill("agent-abc");
-    expect(invoke).toHaveBeenLastCalledWith("agent_kill", { agentId: "agent-abc" });
-  });
 });

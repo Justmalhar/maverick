@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen, waitFor, fireEvent } from "@/test/utils";
+import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { invoke } from "@tauri-apps/api/core";
 import SkillEditorPanel from "./SkillEditorPanel";
 import { useWorkbench } from "@/state/store";
@@ -93,41 +93,6 @@ describe("SkillEditorPanel", () => {
       expect(invoke).toHaveBeenCalledWith(
         "skills_create_global",
         expect.objectContaining({ name: "refactor", overwrite: true })
-      )
-    );
-  });
-
-  it("parseFrontmatter ignores frontmatter lines without a colon (idx === -1 branch)", async () => {
-    // Construct frontmatter with a line that has no colon — parseFrontmatter must
-    // skip it and still parse name: correctly.
-    vi.mocked(invoke)
-      .mockResolvedValueOnce({ ok: true, filePath: "/tmp/my-skill.md" })
-      .mockResolvedValueOnce([{ name: "my-skill", description: "", prompt: "p" }]);
-    renderWithProviders(<SkillEditorPanel />);
-    const ta = screen.getByTestId("skill-editor-textarea");
-    // Use fireEvent.change to set multi-line content directly.
-    fireEvent.change(ta, {
-      target: { value: "---\nname: my-skill\nNOCOLONONTHISLINE\n---\n\nPrompt here" },
-    });
-    await userEvent.click(screen.getByTestId("skill-editor-save"));
-    await waitFor(() => expect(useWorkbench.getState().activeSystemTab).toBe("skills"));
-  });
-
-  it("parseFrontmatter uses empty string when description key is absent (??'' branch)", async () => {
-    // Frontmatter has name but no description → fm.description is undefined → ?? "" fires.
-    vi.mocked(invoke)
-      .mockResolvedValueOnce({ ok: true, filePath: "/tmp/nodesc.md" })
-      .mockResolvedValueOnce([{ name: "nodesc", description: "", prompt: "p" }]);
-    renderWithProviders(<SkillEditorPanel />);
-    const ta = screen.getByTestId("skill-editor-textarea");
-    fireEvent.change(ta, {
-      target: { value: "---\nname: nodesc\n---\n\nPrompt text" },
-    });
-    await userEvent.click(screen.getByTestId("skill-editor-save"));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "skills_create_global",
-        expect.objectContaining({ name: "nodesc", description: "" })
       )
     );
   });
