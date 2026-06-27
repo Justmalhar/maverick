@@ -121,6 +121,14 @@
   ::-webkit-scrollbar-corner { background: transparent; }
 
   button { -webkit-app-region: no-drag; }
+
+  /* Radix ScrollArea wraps children in a `display:table` div that shrink-wraps
+     to content width, defeating `truncate` on long branch names — the row grows
+     past the sidebar edge and clips diff stats + the new-workspace button.
+     Forcing block layout constrains it to the viewport so truncation engages. */
+  .mv-primarysidebar [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+  }
 }
 
 @layer utilities {
