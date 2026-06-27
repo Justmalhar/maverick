@@ -1,4 +1,4 @@
-import { LayoutDashboard, Gauge, CheckSquare2, Zap, Plug, Sparkles, GitBranch } from "lucide-react";
+import { LayoutDashboard, Gauge, CheckSquare2 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { cn } from "@/lib/utils";
 import { ProjectsView } from "./ProjectsView";
@@ -12,10 +12,6 @@ const NAV_ITEMS: Array<{
   { tab: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { tab: "usage", icon: Gauge, label: "Usage" },
   { tab: "kanban", icon: CheckSquare2, label: "Tasks" },
-  { tab: "automations", icon: Zap, label: "Automations" },
-  { tab: "mcps", icon: Plug, label: "MCPs" },
-  { tab: "skills", icon: Sparkles, label: "Skills" },
-  { tab: "git", icon: GitBranch, label: "Git" },
 ];
 
 function NavItem({

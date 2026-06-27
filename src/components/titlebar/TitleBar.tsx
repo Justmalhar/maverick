@@ -6,7 +6,6 @@ import { useOSPlatform } from "@/hooks/useOSPlatform";
 import { formatKeybinding } from "@/shortcuts/format";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { WindowControls } from "./WindowControls";
-import { Breadcrumb } from "./Breadcrumb";
 import { TrafficLightSpacer } from "./TrafficLightSpacer";
 import { NotificationBell } from "./NotificationBell";
 
@@ -85,7 +84,6 @@ export function TitleBar() {
             {primarySideBarVisible && !collapsed ? "Hide" : "Show"} Primary Side Bar
           </TooltipContent>
         </Tooltip>
-        <Breadcrumb className="ml-1 min-w-0" />
       </div>
 
       <div data-tauri-drag-region className="drag flex h-full items-center justify-center">
