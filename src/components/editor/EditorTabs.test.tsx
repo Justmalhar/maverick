@@ -5,7 +5,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen } from "@/test/utils";
 import { EditorTabs } from "./EditorTabs";
 import { useWorkbench } from "@/state/store";
-import { defaultTerminalCwd } from "@/lib/default-cwd";
 import { availableShells } from "@/lib/terminal-shell";
 import { wslAvailable, ptySpawn } from "@/lib/tauri";
 import { makeWorkspace, makePreset } from "@/test/fixtures";
@@ -27,10 +26,6 @@ vi.mock("@/lib/terminal-shell", async (orig) => {
   return { ...actual, availableShells: vi.fn(() => []) };
 });
 
-vi.mock("@/lib/default-cwd", () => ({
-  defaultTerminalCwd: vi.fn(async () => "/Users/test/Desktop"),
-}));
-
 const initial = useWorkbench.getState();
 
 beforeEach(() => {
@@ -44,11 +39,59 @@ beforeEach(() => {
     commandPaletteOpen: false,
     systemTabs: [],
     activeSystemTab: null,
-    terminalTabs: [],
-    activeTerminalTabId: null,
+    terminalGroups: [],
+    activeGroupByWorkspace: {},
     fileTabs: [],
     activeFileTabId: null,
+    fileTabAccessOrder: [],
   });
+});
+
+function seed() {
+  useWorkbench.setState({
+    workspaces: [
+      { id: "w1", projectId: "p", branch: "b1", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s", title: "A" },
+      { id: "w2", projectId: "p", branch: "b2", agentBackend: "claude", worktreePath: "/wt/w2", status: "active", sessionId: "s", title: "B" },
+    ],
+    activeWorkspaceId: "w1",
+    terminalGroups: [
+      { id: "w1", workspaceId: "w1", title: "Terminal 1" },
+      { id: "term-2", workspaceId: "w1", title: "Terminal 2" },
+      { id: "w2", workspaceId: "w2", title: "Terminal 1" },
+    ],
+    activeGroupByWorkspace: { w1: "w1", w2: "w2" },
+    fileTabs: [
+      { id: "file:/wt/w1/a.ts", kind: "file", path: "/wt/w1/a.ts", worktreePath: "/wt/w1", workspaceId: "w1", preview: false, dirty: false, mode: "edit", viewed: false },
+      { id: "file:/wt/w2/b.ts", kind: "file", path: "/wt/w2/b.ts", worktreePath: "/wt/w2", workspaceId: "w2", preview: false, dirty: false, mode: "edit", viewed: false },
+    ],
+    activeFileTabId: null, activeSystemTab: null, systemTabs: [], fileTabAccessOrder: [],
+  });
+}
+
+it("shows both workspace chips but only the active workspace's group + file tabs", () => {
+  seed();
+  renderWithProviders(<EditorTabs />);
+  expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
+  expect(screen.getByTestId("editor-tab-w2")).toBeInTheDocument();
+  expect(screen.getByTestId("editor-tab-group-w1")).toBeInTheDocument();
+  expect(screen.getByTestId("editor-tab-group-term-2")).toBeInTheDocument();
+  expect(screen.queryByTestId("editor-tab-group-w2")).toBeNull();
+  expect(screen.getByText("a.ts")).toBeInTheDocument();
+  expect(screen.queryByText("b.ts")).toBeNull();
+});
+
+it("primary group tab has no close button; extra group does", () => {
+  seed();
+  renderWithProviders(<EditorTabs />);
+  expect(screen.queryByLabelText("Close Terminal 1")).toBeNull();
+  expect(screen.getByLabelText("Close Terminal 2")).toBeInTheDocument();
+});
+
+it("+ adds a terminal group to the context workspace", async () => {
+  seed();
+  renderWithProviders(<EditorTabs />);
+  await userEvent.click(screen.getByTestId("editor-tabs-add-terminal"));
+  expect(useWorkbench.getState().terminalGroups.filter((g) => g.workspaceId === "w1")).toHaveLength(3);
 });
 
 describe("EditorTabs", () => {
@@ -59,8 +102,11 @@ describe("EditorTabs", () => {
       activeWorkspaceId: "w1",
       systemTabs: [],
       activeSystemTab: null,
-      terminalTabs: [],
-      activeTerminalTabId: null,
+      terminalGroups: [
+        { id: "w1", workspaceId: "w1", title: "Terminal 1" },
+        { id: "w2", workspaceId: "w2", title: "Terminal 1" },
+      ],
+      activeGroupByWorkspace: { w1: "w1", w2: "w2" },
     });
     renderWithProviders(<EditorTabs />);
     expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
@@ -73,6 +119,11 @@ describe("EditorTabs", () => {
       ...initial,
       workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" })],
       activeWorkspaceId: "w1",
+      terminalGroups: [
+        { id: "w1", workspaceId: "w1", title: "Terminal 1" },
+        { id: "w2", workspaceId: "w2", title: "Terminal 1" },
+      ],
+      activeGroupByWorkspace: { w1: "w1", w2: "w2" },
     });
     renderWithProviders(<EditorTabs />);
     await userEvent.click(screen.getAllByLabelText("Close workspace")[0]);
@@ -86,7 +137,7 @@ describe("EditorTabs", () => {
     expect(useWorkbench.getState().systemTabs).toContain("browser");
   });
 
-  it("plus dropdown contains New Terminal and tab items but not Browser", async () => {
+  it("plus dropdown contains New Terminal in Panel and tab items but not Browser", async () => {
     renderWithProviders(<EditorTabs />);
     await userEvent.click(screen.getByTestId("editor-tabs-new"));
     expect(screen.getByTestId("editor-tabs-open-terminal")).toBeInTheDocument();
@@ -97,131 +148,6 @@ describe("EditorTabs", () => {
     expect(screen.queryByTestId("editor-tabs-open-browser")).not.toBeInTheDocument();
   });
 
-  it("clicking the Terminal item spawns a PTY and adds a terminal tab", async () => {
-    renderWithProviders(<EditorTabs />);
-    await userEvent.click(screen.getByTestId("editor-tabs-new"));
-    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal-tab"));
-
-    await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(1));
-    const state = useWorkbench.getState();
-    expect(state.terminalTabs[0].cwd).toBe("/Users/test/Desktop");
-    expect(state.terminalTabs[0].ptyId).toBe("pty-1");
-    expect(state.activeTerminalTabId).toBe(state.terminalTabs[0].id);
-  });
-
-  describe("Windows shell profiles", () => {
-    beforeEach(() => {
-      vi.mocked(availableShells).mockReturnValue(["powershell", "cmd", "wsl"]);
-    });
-
-    it("lists PowerShell, Command Prompt, and WSL when WSL is detected", async () => {
-      vi.mocked(wslAvailable).mockResolvedValue(true);
-      renderWithProviders(<EditorTabs />);
-      await userEvent.click(screen.getByTestId("editor-tabs-new"));
-      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-tabs-open-terminal-cmd")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-tabs-open-terminal-wsl")).toBeInTheDocument();
-      expect(screen.getByText("PowerShell")).toBeInTheDocument();
-      expect(screen.getByText("Command Prompt")).toBeInTheDocument();
-      expect(screen.getByText("WSL")).toBeInTheDocument();
-      // The platform-agnostic "Terminal" item is replaced by the profiles.
-      expect(screen.queryByTestId("editor-tabs-open-terminal-tab")).not.toBeInTheDocument();
-    });
-
-    it("hides WSL when no usable install is detected", async () => {
-      vi.mocked(wslAvailable).mockResolvedValue(false);
-      renderWithProviders(<EditorTabs />);
-      await userEvent.click(screen.getByTestId("editor-tabs-new"));
-      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-tabs-open-terminal-cmd")).toBeInTheDocument();
-      expect(screen.queryByTestId("editor-tabs-open-terminal-wsl")).not.toBeInTheDocument();
-    });
-
-    it("hides WSL when detection rejects", async () => {
-      vi.mocked(wslAvailable).mockRejectedValue(new Error("no wsl"));
-      renderWithProviders(<EditorTabs />);
-      await userEvent.click(screen.getByTestId("editor-tabs-new"));
-      expect(await screen.findByTestId("editor-tabs-open-terminal-powershell")).toBeInTheDocument();
-      expect(screen.queryByTestId("editor-tabs-open-terminal-wsl")).not.toBeInTheDocument();
-    });
-
-    it.each([
-      ["powershell", "powershell.exe", ["-NoLogo"]],
-      ["cmd", "cmd.exe", []],
-      ["wsl", "wsl.exe", []],
-    ] as const)("clicking %s spawns %s", async (kind, shell, args) => {
-      vi.mocked(wslAvailable).mockResolvedValue(true);
-      renderWithProviders(<EditorTabs />);
-      await userEvent.click(screen.getByTestId("editor-tabs-new"));
-      await userEvent.click(await screen.findByTestId(`editor-tabs-open-terminal-${kind}`));
-      await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(1));
-      expect(ptySpawn).toHaveBeenCalledWith(shell, args, "/Users/test/Desktop", {});
-    });
-  });
-
-  it("renders terminal tabs in the strip and switches on click", async () => {
-    useWorkbench.setState({
-      ...initial,
-      workspaces: [],
-      systemTabs: [],
-      activeSystemTab: null,
-      terminalTabs: [
-        { id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" },
-        { id: "t2", cwd: "/b", title: "b", ptyId: "pty-2" },
-      ],
-      activeTerminalTabId: "t1",
-    });
-    renderWithProviders(<EditorTabs />);
-    expect(screen.getByTestId("editor-tab-terminal-t1")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("editor-tab-terminal-t2"));
-    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
-  });
-
-  it("close button on a terminal tab removes it and kills its PTY", async () => {
-    const { ptyKill } = await import("@/lib/tauri");
-    useWorkbench.setState({
-      ...initial,
-      workspaces: [],
-      systemTabs: [],
-      activeSystemTab: null,
-      terminalTabs: [{ id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" }],
-      activeTerminalTabId: "t1",
-    });
-    renderWithProviders(<EditorTabs />);
-    const closeBtn = screen.getByLabelText("Close a");
-    await userEvent.click(closeBtn);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(ptyKill).toHaveBeenCalledWith("pty-1");
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(0);
-  });
-
-  it("keyboard Enter on a terminal tab close button removes it", async () => {
-    useWorkbench.setState({
-      ...initial,
-      workspaces: [],
-      systemTabs: [],
-      activeSystemTab: null,
-      terminalTabs: [{ id: "t1", cwd: "/a", title: "a", ptyId: "pty-1" }],
-      activeTerminalTabId: "t1",
-    });
-    renderWithProviders(<EditorTabs />);
-    fireEvent.keyDown(screen.getByLabelText("Close a"), { key: "Enter" });
-    await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(0));
-  });
-
-  it("logs an error when opening a terminal tab fails", async () => {
-    vi.mocked(defaultTerminalCwd).mockRejectedValueOnce(new Error("no cwd"));
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    renderWithProviders(<EditorTabs />);
-    await userEvent.click(screen.getByTestId("editor-tabs-new"));
-    await userEvent.click(screen.getByTestId("editor-tabs-open-terminal-tab"));
-    await waitFor(() =>
-      expect(errSpy).toHaveBeenCalledWith("Failed to open terminal tab", expect.any(Error))
-    );
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(0);
-    errSpy.mockRestore();
-  });
-
   it("clicking a workspace tab while a system tab is active switches to the workspace", async () => {
     useWorkbench.setState({
       ...initial,
@@ -229,6 +155,8 @@ describe("EditorTabs", () => {
       systemTabs: ["kanban"],
       activeSystemTab: "kanban",
       activeWorkspaceId: null,
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
     await userEvent.click(screen.getByTestId("editor-tab-w1"));
@@ -336,6 +264,8 @@ describe("EditorTabs", () => {
       ...initial,
       workspaces: [makeWorkspace({ id: "w1", agentBackend: "claude" })],
       activeWorkspaceId: "w1",
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
     fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
@@ -355,6 +285,8 @@ describe("EditorTabs", () => {
       ...initial,
       workspaces: [makeWorkspace({ id: "w1" })],
       activeWorkspaceId: "w1",
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
     });
     const onSplit = vi.fn();
     window.addEventListener("maverick:terminal:splitH", onSplit);
@@ -377,6 +309,8 @@ describe("EditorTabs", () => {
         ...initial,
         workspaces: [makeWorkspace({ id: "w1" })],
         activeWorkspaceId: "w1",
+        terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+        activeGroupByWorkspace: { w1: "w1" },
       });
       renderWithProviders(<EditorTabs />);
       fireCloseActiveTab();
@@ -388,6 +322,8 @@ describe("EditorTabs", () => {
         ...initial,
         workspaces: [makeWorkspace({ id: "w1" })],
         activeWorkspaceId: "w1",
+        terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+        activeGroupByWorkspace: { w1: "w1" },
         splitTrees: {
           w1: {
             type: "split",
@@ -415,6 +351,8 @@ describe("EditorTabs", () => {
         ...initial,
         workspaces: [makeWorkspace({ id: "w1" })],
         activeWorkspaceId: "w1",
+        terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+        activeGroupByWorkspace: { w1: "w1" },
         splitTrees: {
           w1: { type: "terminal", id: "w1-1", backend: "claude", ptyId: "w1" },
         },
@@ -430,17 +368,6 @@ describe("EditorTabs", () => {
       renderWithProviders(<EditorTabs />);
       fireCloseActiveTab();
       expect(useWorkbench.getState().systemTabs).not.toContain("kanban");
-    });
-
-    it("closes the active terminal tab", async () => {
-      useWorkbench.setState({
-        ...initial,
-        terminalTabs: [{ id: "t1", cwd: "/tmp", title: "zsh", ptyId: "pty-t1" }],
-        activeTerminalTabId: "t1",
-      });
-      renderWithProviders(<EditorTabs />);
-      fireCloseActiveTab();
-      await waitFor(() => expect(useWorkbench.getState().terminalTabs).toHaveLength(0));
     });
 
     it("closes a clean file tab", () => {
@@ -479,6 +406,8 @@ describe("EditorTabs", () => {
         workspaces: [makeWorkspace({ id: "w1" })],
         activeWorkspaceId: "w1",
         systemTabs: [],
+        terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+        activeGroupByWorkspace: { w1: "w1" },
       });
       renderWithProviders(<EditorTabs />);
       // EditorTabs only mounts with tabs present; clear active ids then fire.
@@ -494,6 +423,8 @@ describe("EditorTabs", () => {
       ...initial,
       workspaces: [makeWorkspace({ id: "w1" })],
       activeWorkspaceId: "w1",
+      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
+      activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
     fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
