@@ -119,6 +119,25 @@ describe("useWorkspace", () => {
     expect(useWorkbench.getState().workspaces).toHaveLength(0);
   });
 
+  it("removeProject kills child-workspace PTYs, calls projectDestroy, and clears the project", async () => {
+    leafTesting.leafPtyCache.set("w-x-1", "pty-x");
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p-x" }), makeProject({ id: "p-y" })],
+      workspaces: [makeWorkspace({ id: "w-x", projectId: "p-x" })],
+      activeWorkspaceId: null,
+    });
+    vi.mocked(invoke).mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => useWorkspace());
+    await act(async () => {
+      await result.current.removeProject("p-x");
+    });
+    expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-x" });
+    expect(invoke).toHaveBeenCalledWith("project_destroy", { projectId: "p-x" });
+    expect(useWorkbench.getState().projects.map((p) => p.id)).toEqual(["p-y"]);
+    expect(useWorkbench.getState().workspaces).toHaveLength(0);
+  });
+
   it("refreshBackends populates store with installed backends, marks active by defaultBackend", async () => {
     const detected: DetectedBackend[] = [
       { name: "claude-code", command: "claude", installed: true, path: "/usr/local/bin/claude", version: "1.0" },
