@@ -20,3 +20,12 @@ pub async fn project_list(state: State<'_, AppState>) -> Result<Value, String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn project_destroy(state: State<'_, AppState>, project_id: String) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("project.destroy", json!({ "projectId": project_id }))
+        .await
+        .map_err(|e| e.to_string())
+}

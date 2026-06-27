@@ -63,7 +63,7 @@ pub use notify::{
 };
 pub use pr::pr_create;
 pub use preset::{preset_launch, preset_list, preset_save_current};
-pub use project::{project_add, project_list};
+pub use project::{project_add, project_destroy, project_list};
 pub use remote::{
     remote_devices, remote_pair, remote_revoke, remote_start, remote_status, remote_stop,
 };
