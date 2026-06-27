@@ -12,14 +12,14 @@ import { ChevronDown } from "lucide-react";
 const MAX_VISIBLE = 5;
 
 const PROJECT_COLORS = [
-  "bg-blue-500",
-  "bg-violet-500",
-  "bg-emerald-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-cyan-500",
-  "bg-pink-500",
-  "bg-indigo-500",
+  "bg-project-1",
+  "bg-project-2",
+  "bg-project-3",
+  "bg-project-4",
+  "bg-project-5",
+  "bg-project-6",
+  "bg-project-7",
+  "bg-project-8",
 ];
 
 function projectColor(id: string): string {
@@ -69,7 +69,7 @@ export default function ProjectFilterTabs({ filterProjectId, onFilterChange }: P
         >
           <span
             className={cn(
-              "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold text-white",
+              "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold text-project-fg",
               projectColor(p.id)
             )}
           >
@@ -100,7 +100,7 @@ export default function ProjectFilterTabs({ filterProjectId, onFilterChange }: P
               >
                 <span
                   className={cn(
-                    "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold text-white",
+                    "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold text-project-fg",
                     projectColor(p.id)
                   )}
                 >

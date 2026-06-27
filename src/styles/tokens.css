@@ -5,46 +5,52 @@
    ============================================================ */
 
 :root {
-  /* ── Maverick Dark (fallback — ThemeProvider overrides at runtime) ── */
+  /* ── Maverick Dark (fallback — ThemeProvider overrides at runtime) ──
+     Near-black elevation ramp (not pure OLED black): the editor canvas is the
+     deepest surface and chrome/panels step lighter so spatial hierarchy reads.
+     Elevation: editor 0 0% 4% → chrome 240 9% 6% → panels 240 8% 8% →
+     controls 240 8% 10% → hover 240 8% 12% → selected 240 8% 19%.
+     Muted/icon foregrounds are tuned to clear WCAG AA (≥4.5:1 text, ≥3:1 icon)
+     against the canvas. */
 
-  --titlebar-bg: 0 0% 2%;              /* #050505 */
+  --titlebar-bg: 240 9% 6%;            /* #0e0e11 */
 
-  --activitybar-bg: 0 0% 2%;           /* #050505 */
-  --activitybar-fg: 240 5% 34%;        /* #52525b */
+  --activitybar-bg: 240 9% 6%;         /* #0e0e11 */
+  --activitybar-fg: 240 6% 56%;        /* #8a8a94 — was #52525b (2.9:1, failed) */
   --activitybar-fg-active: 0 0% 98%;   /* #fafafa */
   --activitybar-active-border: 0 0% 100%; /* #ffffff */
 
   /* Primary side bar */
-  --sidebar-bg: 0 0% 4%;               /* #0a0a0a */
+  --sidebar-bg: 240 8% 8%;             /* #121215 */
   --sidebar-fg: 240 5% 84%;            /* #d4d4d8 */
-  --sidebar-section-header: 240 4% 46%; /* #71717a */
-  --sidebar-hover: 240 6% 10%;         /* #18181b */
-  --sidebar-selected: 240 5% 16%;      /* #27272a */
+  --sidebar-section-header: 240 5% 62%; /* #9a9aa3 — was #71717a (4.4:1) */
+  --sidebar-hover: 240 8% 12%;         /* #1d1d22 */
+  --sidebar-selected: 240 8% 19%;      /* #2d2d34 */
   --sidebar-selected-fg: 0 0% 100%;    /* derived at runtime; white default */
 
   /* Editor */
-  --background: 0 0% 0%;               /* #000000 */
+  --background: 0 0% 4%;               /* #0a0a0a — near-black canvas */
   --foreground: 240 5% 96%;            /* #f5f5f7 */
-  --editor-bg: 0 0% 0%;
+  --editor-bg: 0 0% 4%;
 
   /* Editor tab strip */
-  --tab-inactive-bg: 0 0% 2%;          /* #050505 */
-  --tab-active-bg: 0 0% 0%;            /* #000000 */
-  --tab-fg: 240 4% 46%;                /* #71717a */
+  --tab-inactive-bg: 240 9% 6%;        /* #0e0e11 */
+  --tab-active-bg: 0 0% 4%;            /* #0a0a0a — matches editor canvas */
+  --tab-fg: 240 5% 62%;                /* #9a9aa3 */
   --tab-fg-active: 0 0% 98%;           /* #fafafa */
   --tab-active-border: 0 0% 100%;      /* #ffffff */
 
   /* shadcn primitives */
-  --card: 240 8% 5%;                   /* #0d0d10 */
+  --card: 240 8% 10%;                  /* #17171b */
   --card-foreground: 240 5% 96%;
-  --popover: 240 8% 5%;
+  --popover: 240 8% 10%;
   --popover-foreground: 240 5% 96%;
   --primary: 0 0% 100%;                /* #ffffff */
   --primary-foreground: 0 0% 0%;       /* derived: white primary → black fg */
-  --secondary: 240 6% 13%;             /* #1f1f23 */
+  --secondary: 240 7% 13%;             /* #1f1f23 */
   --secondary-foreground: 0 0% 96%;
-  --muted: 240 6% 13%;
-  --muted-foreground: 240 4% 46%;
+  --muted: 240 8% 10%;                 /* #17171b */
+  --muted-foreground: 240 5% 62%;      /* #9a9aa3 — was #71717a (4.4:1) */
   --accent: 0 0% 100%;                 /* #ffffff */
   --accent-foreground: 0 0% 0%;        /* derived: white accent → black fg */
   --destructive: 0 91% 71%;            /* #f87171 */
@@ -54,13 +60,25 @@
   --info: 213 94% 68%;                 /* #60a5fa */
 
   /* Borders */
-  --border: 240 5% 16%;                /* #27272a */
-  --border-strong: 240 5% 26%;         /* #3f3f46 */
-  --border-glass: 240 5% 16%;
-  --border-glass-strong: 240 5% 26%;
+  --border: 240 7% 19%;                /* #2e2e33 — was #27272a (1.4:1 surfaces) */
+  --border-strong: 240 7% 28%;         /* #44444c */
+  --border-glass: 240 7% 19%;
+  --border-glass-strong: 240 7% 28%;
 
-  --input: 240 8% 5%;                  /* #0d0d10 */
+  --input: 240 8% 10%;                 /* #17171b */
   --ring: 0 0% 100%;                   /* #ffffff */
+
+  /* Project identity badges — categorical hues, stable across themes.
+     Components pull these via bg-project-1..8; never hardcode palette utilities. */
+  --project-1: 217 91% 60%;            /* blue */
+  --project-2: 258 90% 66%;            /* violet */
+  --project-3: 160 84% 39%;            /* emerald */
+  --project-4: 38 92% 50%;             /* amber */
+  --project-5: 350 89% 60%;            /* rose */
+  --project-6: 189 94% 43%;            /* cyan */
+  --project-7: 330 81% 60%;            /* pink */
+  --project-8: 239 84% 67%;            /* indigo */
+  --project-fg: 0 0% 100%;             /* text on a project badge */
 
   /* Diff colors */
   --diff-add: 142 71% 58%;             /* #4ade80 */

@@ -63,6 +63,17 @@
   --color-diff-rename: hsl(var(--diff-rename));
   --color-diff-rename-bg: hsl(var(--diff-rename-bg));
 
+  /* Project identity badge palette */
+  --color-project-1: hsl(var(--project-1));
+  --color-project-2: hsl(var(--project-2));
+  --color-project-3: hsl(var(--project-3));
+  --color-project-4: hsl(var(--project-4));
+  --color-project-5: hsl(var(--project-5));
+  --color-project-6: hsl(var(--project-6));
+  --color-project-7: hsl(var(--project-7));
+  --color-project-8: hsl(var(--project-8));
+  --color-project-fg: hsl(var(--project-fg));
+
   --radius-sm: var(--radius-sm);
   --radius: var(--radius);
   --radius-md: var(--radius-md);

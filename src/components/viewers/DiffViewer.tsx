@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type * as MonacoApi from "monaco-editor/esm/vs/editor/editor.api";
 import { getMonaco, ensureLanguage } from "@/lib/viewers/monaco/loader";
 import { getOrCreateModel, releaseModel } from "@/lib/viewers/monaco/model-cache";
+import { monoFontFamily } from "@/lib/fonts";
 import { fileRead, fileReadAtRef, fileWrite, gitDiscardFile } from "@/lib/tauri";
 import type { ViewerProps } from "@/lib/viewers/types";
 
@@ -49,7 +50,7 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
 
       const editor = monaco.editor.createDiffEditor(hostRef.current, {
         theme: "maverick-dark",
-        fontFamily: "Geist Mono, monospace",
+        fontFamily: monoFontFamily(),
         fontSize: 12,
         automaticLayout: true,
         renderSideBySide: true,

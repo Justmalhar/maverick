@@ -34,10 +34,10 @@ interface Props {
 }
 
 const AGENT_DOT: Record<KanbanTask["status"], string> = {
-  in_progress: "bg-amber-400",
-  review: "bg-emerald-400",
+  in_progress: "bg-warning",
+  review: "bg-success",
   todo: "bg-muted-foreground/40",
-  done: "bg-blue-400/40",
+  done: "bg-info/40",
 };
 
 export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onDelete }: Props) {
@@ -232,10 +232,10 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
               </span>
               {diffStat && (diffStat.added > 0 || diffStat.removed > 0) && (
                 <>
-                  <span className="text-[10px] font-medium text-emerald-400">
+                  <span className="text-[10px] font-medium text-diff-add">
                     +{diffStat.added}
                   </span>
-                  <span className="text-[10px] font-medium text-red-400">
+                  <span className="text-[10px] font-medium text-diff-delete">
                     -{diffStat.removed}
                   </span>
                 </>
