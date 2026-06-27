@@ -81,6 +81,15 @@ export function NewWorkspaceDialog({
     };
   }, [open, projectPath]);
 
+  useEffect(() => {
+    if (!open) {
+      setType("feature");
+      setName("");
+      return;
+    }
+    setBackend(backends.find((b) => b.active)?.id ?? backends[0]?.id ?? "claude-code");
+  }, [open, backends]);
+
   const [type, setType] = useState<BranchType>("feature");
   const [name, setName] = useState("");
 
@@ -122,8 +131,14 @@ export function NewWorkspaceDialog({
             <span className="text-[11px] font-medium text-muted-foreground">Coding agent</span>
             <Select value={backend} onValueChange={setBackend} disabled={backends.length === 0}>
               <SelectTrigger className="h-8 text-[12px]" data-testid="agent-select">
-                {SelectedIcon ? <SelectedIcon size={14} /> : null}
-                <SelectValue placeholder={selectedBrand?.label ?? backend} />
+                {backends.length === 0 ? (
+                  <span className="text-muted-foreground">No agents detected</span>
+                ) : (
+                  <>
+                    {SelectedIcon ? <SelectedIcon size={14} /> : null}
+                    <SelectValue placeholder={selectedBrand?.label ?? backend} />
+                  </>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {backends.map((b) => {

@@ -145,6 +145,48 @@ describe("NewWorkspaceDialog — agent select", () => {
     await userEvent.click(screen.getByTestId("branch-ai-later"));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "codex" }));
   });
+
+  it("re-derives the active backend when opened after backends load", async () => {
+    useWorkbench.setState({ ...initial, backends: [] });
+    const onSubmit = vi.fn();
+    const { rerender } = renderWithProviders(
+      <NewWorkspaceDialog open={false} onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    useWorkbench.setState({
+      ...initial,
+      backends: [
+        makeBackend({ id: "claude-code", name: "Claude Code", active: false }),
+        makeBackend({ id: "codex", name: "Codex", active: true }),
+      ],
+    });
+    rerender(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(await screen.findByTestId("branch-ai-later"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: "codex" }));
+  });
+
+  it("resets the branch name when the dialog is closed and reopened", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    const { rerender } = renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={vi.fn()} />
+    );
+    await userEvent.type(screen.getByTestId("branch-name-input"), "halfdone");
+    rerender(<NewWorkspaceDialog open={false} onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={vi.fn()} />);
+    rerender(<NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={vi.fn()} />);
+    expect(screen.getByTestId("branch-name-input")).toHaveValue("");
+  });
+
+  it("shows a 'No agents detected' label when no backends are installed", () => {
+    useWorkbench.setState({ ...initial, backends: [] });
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={vi.fn()} />
+    );
+    expect(screen.getByText("No agents detected")).toBeInTheDocument();
+  });
 });
 
 describe("NewWorkspaceDialog — base branch select", () => {
@@ -271,5 +313,51 @@ describe("NewWorkspaceDialog — base branch select", () => {
     );
     await userEvent.type(screen.getByTestId("branch-name-input"), "Dark Mode{Enter}");
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ branch: "feature/dark-mode" }));
+  });
+
+  it("does not submit when Enter is pressed with an empty branch name", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={vi.fn()} projectName="demo" projectPath={null} onSubmit={onSubmit} />
+    );
+    await userEvent.click(screen.getByTestId("branch-name-input"));
+    await userEvent.keyboard("{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("ignores the gitBranchList result after the dialog closes (cancels inflight fetch)", async () => {
+    useWorkbench.setState({
+      ...initial,
+      backends: [makeBackend({ id: "claude-code", name: "Claude Code", active: true })],
+    });
+    let resolveList!: (v: unknown) => void;
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "git_branch_list") {
+        return new Promise((res) => { resolveList = res; }) as never;
+      }
+      return undefined as never;
+    });
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn();
+    const { rerender } = renderWithProviders(
+      <NewWorkspaceDialog open onOpenChange={onOpenChange} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    // Close before the list resolves — triggers the cleanup and sets cancelled = true
+    rerender(
+      <NewWorkspaceDialog open={false} onOpenChange={onOpenChange} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    // Resolve after cancellation — cancelled guard must prevent any setState call
+    resolveList([{ name: "main", isRemote: false, isCurrent: true }]);
+    // Reopen: since the cancelled effect ran (not the resolve path), branches should be empty
+    rerender(
+      <NewWorkspaceDialog open onOpenChange={onOpenChange} projectName="demo" projectPath="/tmp/demo" onSubmit={onSubmit} />
+    );
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("base-branch-select")).toBeDisabled();
+    });
   });
 });
