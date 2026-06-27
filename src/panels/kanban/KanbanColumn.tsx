@@ -34,10 +34,7 @@ export default function KanbanColumn({ status, tasks, diffStatCache, onEdit, onS
       data-testid={`kanban-column-${status}`}
       className="flex w-72 shrink-0 flex-col rounded-md border border-border bg-card/40"
     >
-      <div
-        className="flex items-center gap-2 px-3 py-2.5"
-        style={{ borderBottom: "1px solid hsl(var(--border))" }}
-      >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         {STATUS_ICON[status]}
         <span className="text-xs font-medium text-foreground/80">{LABELS[status]}</span>
         <span className="ml-0.5 text-xs text-muted-foreground">{tasks.length}</span>

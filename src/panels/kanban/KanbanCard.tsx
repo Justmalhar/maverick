@@ -101,6 +101,8 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
     }
   };
 
+  // confirmDelete is only ever invoked from menu items rendered inside the
+  // `onDelete`-gated menus below, so onDelete is guaranteed defined here.
   const confirmDelete = () => {
     if (window.confirm("Delete this task? This cannot be undone.")) onDelete!(task.id);
   };

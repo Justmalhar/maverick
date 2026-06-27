@@ -396,4 +396,16 @@ describe("KanbanCard", () => {
     await userEvent.click(await screen.findByTestId("kanban-menu-edit"));
     expect(onEdit).toHaveBeenCalled();
   });
+
+  it("right-click context menu Delete does nothing when confirm is dismissed", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "ctx-2" })} index={0} onEdit={vi.fn()} onDelete={onDelete} />
+    );
+    fireEvent.contextMenu(screen.getByTestId("kanban-card"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-delete"));
+    expect(onDelete).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
 });
