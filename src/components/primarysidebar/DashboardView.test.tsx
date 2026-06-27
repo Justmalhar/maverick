@@ -36,12 +36,41 @@ describe("DashboardView", () => {
     expect(screen.queryByTestId("dashboard-agent-ws-1")).not.toBeInTheDocument();
   });
 
-  it("renders one agent card per workspace with title, project and branch/backend", () => {
+  it("renders the Maverick branding header with a live summary", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" })],
+    });
+    useAgentStatusStore.setState({ statuses: { w1: "working" } });
+    renderWithProviders(<DashboardView />);
+    const header = screen.getByTestId("dashboard-header");
+    expect(header).toHaveTextContent("Maverick");
+    expect(header).toHaveTextContent("2 workspaces · 1 active");
+  });
+
+  it("summarises an empty workbench in the header", () => {
+    renderWithProviders(<DashboardView />);
+    expect(screen.getByTestId("dashboard-header")).toHaveTextContent("No agents running yet");
+  });
+
+  it("counts idle workspaces and projects in their stat cards", () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1" }), makeProject({ id: "p2" })],
+      workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" }), makeWorkspace({ id: "w3" })],
+    });
+    useAgentStatusStore.setState({ statuses: { w1: "working", w2: "idle", w3: "idle" } });
+    renderWithProviders(<DashboardView />);
+    expect(screen.getByTestId("dashboard-stat-idle")).toHaveTextContent("2");
+    expect(screen.getByTestId("dashboard-stat-projects")).toHaveTextContent("2");
+  });
+
+  it("renders one agent card per workspace with title, project and branch", () => {
     useWorkbench.setState({
       ...initial,
       projects: [makeProject({ id: "proj-1", name: "Polaris" })],
       workspaces: [
-        makeWorkspace({ id: "w1", projectId: "proj-1", title: "Fix login", branch: "feat/login", agentBackend: "claude" }),
+        makeWorkspace({ id: "w1", projectId: "proj-1", title: "Fix login", branch: "feat/login", agentBackend: "claude-code" }),
       ],
     });
     renderWithProviders(<DashboardView />);
@@ -49,7 +78,29 @@ describe("DashboardView", () => {
     expect(card).toHaveTextContent("Fix login");
     expect(card).toHaveTextContent("Polaris");
     expect(card).toHaveTextContent("feat/login");
-    expect(card).toHaveTextContent("claude");
+  });
+
+  it("shows the backend as a brand icon labelled by its display name", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", agentBackend: "claude-code" })],
+    });
+    renderWithProviders(<DashboardView />);
+    expect(screen.getByTestId("dashboard-agent-backend-w1")).toHaveAttribute(
+      "aria-label",
+      "Claude Code"
+    );
+  });
+
+  it("falls back to a text mark for an unknown backend", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", agentBackend: "mystery" })],
+    });
+    renderWithProviders(<DashboardView />);
+    const mark = screen.getByTestId("dashboard-agent-backend-w1");
+    expect(mark).toHaveAttribute("aria-label", "mystery");
+    expect(mark).toHaveTextContent("my");
   });
 
   it("falls back to the branch as the card title when no title is set", () => {
