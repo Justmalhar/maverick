@@ -322,6 +322,32 @@ describe("workbench store", () => {
     expect(ps.projectId).toBeNull();
   });
 
+  it("removeProject tears down child workspaces, drops the project, closes its settings", () => {
+    useWorkbench.getState().setProjects([
+      makeProject({ id: "p-del" }),
+      makeProject({ id: "p-keep" }),
+    ]);
+    useWorkbench.getState().setWorkspaces([
+      makeWorkspace({ id: "w-a", projectId: "p-del" }),
+      makeWorkspace({ id: "w-b", projectId: "p-del" }),
+      makeWorkspace({ id: "w-c", projectId: "p-keep" }),
+    ]);
+    useWorkbench.setState({ projectSettings: { open: true, projectId: "p-del" } });
+
+    useWorkbench.getState().removeProject("p-del");
+
+    expect(useWorkbench.getState().projects.map((p) => p.id)).toEqual(["p-keep"]);
+    expect(useWorkbench.getState().workspaces.map((w) => w.id)).toEqual(["w-c"]);
+    expect(useWorkbench.getState().projectSettings.open).toBe(false);
+  });
+
+  it("removeProject leaves project settings open when a different project is removed", () => {
+    useWorkbench.getState().setProjects([makeProject({ id: "p1" }), makeProject({ id: "p2" })]);
+    useWorkbench.setState({ projectSettings: { open: true, projectId: "p2" } });
+    useWorkbench.getState().removeProject("p1");
+    expect(useWorkbench.getState().projectSettings).toEqual({ open: true, projectId: "p2" });
+  });
+
   it("addWorkspace: reuses existing primary group when called twice with the same id", () => {
     // The ternary on line 273 — when the group already exists, keep s.terminalGroups unchanged.
     const ws = makeWorkspace({ id: "dup" });
