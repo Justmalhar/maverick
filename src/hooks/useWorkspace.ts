@@ -5,6 +5,7 @@ import {
   workspaceDestroy,
   workspaceList,
   projectAdd,
+  projectDestroy,
   projectList,
   detectBackends,
   bootstrapStatus,
@@ -19,6 +20,7 @@ export function useWorkspace() {
   const setWorkspaces = useWorkbench((s) => s.setWorkspaces);
   const addProject = useWorkbench((s) => s.addProject);
   const setProjects = useWorkbench((s) => s.setProjects);
+  const removeProjectFromStore = useWorkbench((s) => s.removeProject);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const setBackends = useWorkbench((s) => s.setBackends);
 
@@ -53,6 +55,22 @@ export function useWorkspace() {
       removeWorkspace(workspaceId);
     },
     [removeWorkspace]
+  );
+
+  const removeProject = useCallback(
+    async (projectId: string) => {
+      // Kill every child workspace's terminal PTYs first — their cwd is a
+      // worktree project.destroy is about to remove. Mirrors `destroy`.
+      const childIds = new Set(
+        useWorkbench.getState().workspaces.filter((w) => w.projectId === projectId).map((w) => w.id)
+      );
+      for (const g of useWorkbench.getState().terminalGroups.filter((gr) => childIds.has(gr.workspaceId))) {
+        killTerminalGroupLeaves(g.id);
+      }
+      await projectDestroy(projectId);
+      removeProjectFromStore(projectId);
+    },
+    [removeProjectFromStore]
   );
 
   const refreshWorkspaces = useCallback(
@@ -103,6 +121,7 @@ export function useWorkspace() {
   return {
     create,
     destroy,
+    removeProject,
     refreshWorkspaces,
     addProjectFromPath,
     refreshProjects,

@@ -58,6 +58,10 @@ export async function projectList(): Promise<Project[]> {
   return invoke("project_list");
 }
 
+export async function projectDestroy(projectId: string): Promise<void> {
+  return invoke("project_destroy", { projectId });
+}
+
 export async function workspaceList(projectId?: string): Promise<Workspace[]> {
   return invoke("workspace_list", { projectId });
 }

@@ -128,6 +128,7 @@ interface WorkbenchState {
   setWorkspaces: (workspaces: Workspace[]) => void;
   addWorkspace: (workspace: Workspace) => void;
   removeWorkspace: (id: string) => void;
+  removeProject: (id: string) => void;
   updateWorkspace: (id: string, patch: Partial<Workspace>) => void;
   // Workspaces created via "let AI name it later" — renamed from their diff after
   // the first commit. workspaceId list; cleared once renamed (or on destroy).
@@ -306,6 +307,21 @@ export const useWorkbench = create<WorkbenchState>()(
           pendingAiRename: s.pendingAiRename.filter((wid) => wid !== id),
         };
       });
+    },
+    removeProject: (id) => {
+      // Reuse removeWorkspace's canonical teardown for each child so PTYs,
+      // runners, terminal groups, and split trees are reaped — not leaked —
+      // before the project row leaves the store.
+      for (const w of get().workspaces.filter((ws) => ws.projectId === id)) {
+        get().removeWorkspace(w.id);
+      }
+      set((s) => ({
+        projects: s.projects.filter((p) => p.id !== id),
+        projectSettings:
+          s.projectSettings.open && s.projectSettings.projectId === id
+            ? { ...s.projectSettings, open: false, projectId: null }
+            : s.projectSettings,
+      }));
     },
     updateWorkspace: (id, patch) =>
       set((s) => ({

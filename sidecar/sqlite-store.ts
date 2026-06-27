@@ -182,6 +182,18 @@ export class SQLiteStore {
     return row ? { id: row.id, name: row.name, path: row.path, createdAt: row.created_at } : null;
   }
 
+  projectDestroy(projectId: string): { ok: true } {
+    // Manual cascade: foreign_keys=ON and no ON DELETE clauses, so every table
+    // referencing projects(id) must be cleared before the project row. Workspaces
+    // (and their sessions/messages/context/notifications) are torn down upstream
+    // per-workspace; this clears the project-scoped rows that outlive them.
+    this.db.query("DELETE FROM repo_configs WHERE project_id = ?").run(projectId);
+    this.db.query("DELETE FROM workspace_presets WHERE project_id = ?").run(projectId);
+    this.db.query("DELETE FROM kanban_tasks WHERE project_id = ?").run(projectId);
+    this.db.query("DELETE FROM projects WHERE id = ?").run(projectId);
+    return { ok: true };
+  }
+
   workspaceGet(id: string): Workspace | null {
     const row = this.db
       .query<WorkspaceRow, [string]>("SELECT * FROM workspaces WHERE id = ?")
