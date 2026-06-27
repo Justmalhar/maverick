@@ -23,6 +23,15 @@ describe("AuxiliaryBar", () => {
     expect(useWorkbench.getState().layout.auxiliaryView).toBe("scm");
   });
 
+  it("does not render the Checks tab but keeps Agent", () => {
+    renderWithProviders(<AuxiliaryBar />);
+    expect(screen.queryByTestId("aux-tab-checks")).not.toBeInTheDocument();
+    expect(screen.getByTestId("aux-tab-files")).toBeInTheDocument();
+    expect(screen.getByTestId("aux-tab-diff")).toBeInTheDocument();
+    expect(screen.getByTestId("aux-tab-scm")).toBeInTheDocument();
+    expect(screen.getByTestId("aux-tab-agent")).toBeInTheDocument();
+  });
+
   it("keeps inactive tab panels mounted (keep-alive) so in-progress state survives switches", () => {
     // auxiliaryView defaults to "files" (beforeEach). The Source Control panel
     // must stay mounted-but-hidden rather than being torn down — otherwise a

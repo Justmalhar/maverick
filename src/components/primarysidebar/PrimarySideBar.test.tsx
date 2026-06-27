@@ -18,14 +18,19 @@ beforeEach(() => {
 });
 
 describe("PrimarySideBar", () => {
-  it("renders all nav items including Skills", () => {
+  it("renders the core nav items", () => {
     renderWithProviders(<PrimarySideBar />);
     expect(screen.getByTestId("sidebar-nav-dashboard")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-usage")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-kanban")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-automations")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-mcps")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-skills")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-git")).toBeInTheDocument();
+  });
+
+  it("does not render the automations, mcps, skills, or git nav items", () => {
+    renderWithProviders(<PrimarySideBar />);
+    expect(screen.queryByTestId("sidebar-nav-automations")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-mcps")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-skills")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-git")).not.toBeInTheDocument();
   });
 
   it("does not render a Projects nav button (projects render as a list)", () => {
@@ -33,10 +38,10 @@ describe("PrimarySideBar", () => {
     expect(screen.queryByTestId("sidebar-nav-projects")).not.toBeInTheDocument();
   });
 
-  it("clicking the Git nav item opens the git system tab", async () => {
+  it("clicking the Tasks nav item opens the kanban system tab", async () => {
     renderWithProviders(<PrimarySideBar />);
-    await userEvent.click(screen.getByTestId("sidebar-nav-git"));
-    expect(useWorkbench.getState().activeSystemTab).toBe("git");
+    await userEvent.click(screen.getByTestId("sidebar-nav-kanban"));
+    expect(useWorkbench.getState().activeSystemTab).toBe("kanban");
   });
 
   it("always renders the projects list", () => {

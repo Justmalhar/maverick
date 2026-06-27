@@ -316,7 +316,7 @@ export interface MaverickConfig {
   project?: ProjectSettings;
 }
 
-export type AuxiliaryView = "files" | "diff" | "scm" | "checks" | "agent" | "none";
+export type AuxiliaryView = "files" | "diff" | "scm" | "agent" | "none";
 
 export interface AgentRunSpec {
   workspaceId: string;

@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { useWorkbench, computeLiveWorkspaceIds, computeLiveFileTabIds, type SystemTabId } from "@/state/store";
 import { useSettings } from "@/lib/stores/settings";
 import { EditorTabs } from "./EditorTabs";
+import { EditorBreadcrumb } from "./EditorBreadcrumb";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 import { EmptyEditor } from "./EmptyEditor";
 import { TerminalPane } from "./terminal/TerminalPane";
@@ -83,6 +84,7 @@ export function EditorGroup() {
       data-testid="editor-group"
       className="mv-editorgroup flex h-full w-full flex-col bg-editor"
     >
+      {hasAnyTabs && <EditorBreadcrumb />}
       {hasAnyTabs && <EditorTabs />}
       <div className="relative flex-1 overflow-hidden">
         {showEmpty && <EmptyEditor />}

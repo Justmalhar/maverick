@@ -10,14 +10,12 @@ import { Panel } from "@/components/panel/Panel";
 import { FilesView } from "./FilesView";
 import { DiffView } from "./DiffView";
 import { SourceControlView } from "./SourceControlView";
-import { ChecksView } from "./ChecksView";
 import { AgentOutputView } from "./AgentOutputView";
 
 const TABS: Array<{ value: AuxiliaryView; label: string }> = [
   { value: "files", label: "Files" },
   { value: "diff", label: "Changes" },
   { value: "scm", label: "Source Control" },
-  { value: "checks", label: "Checks" },
   { value: "agent", label: "Agent" },
 ];
 
@@ -39,11 +37,16 @@ export function AuxiliaryBar() {
             className="flex h-full flex-col"
           >
             <TabsList
-              className="shrink-0 px-2"
+              className="flex w-full shrink-0 px-2"
               style={{ height: "var(--panel-tabs-height)", borderBottom: "1px solid hsl(var(--border))" }}
             >
               {TABS.map((t) => (
-                <TabsTrigger key={t.value} value={t.value} data-testid={`aux-tab-${t.value}`}>
+                <TabsTrigger
+                  key={t.value}
+                  value={t.value}
+                  data-testid={`aux-tab-${t.value}`}
+                  className="flex-1"
+                >
                   {t.label}
                 </TabsTrigger>
               ))}
@@ -61,9 +64,6 @@ export function AuxiliaryBar() {
             </TabsContent>
             <TabsContent value="scm" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
               <SourceControlView />
-            </TabsContent>
-            <TabsContent value="checks" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
-              <ChecksView />
             </TabsContent>
             <TabsContent value="agent" forceMount className="flex-1 overflow-hidden data-[state=inactive]:hidden">
               <AgentOutputView />
