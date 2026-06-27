@@ -28,13 +28,6 @@ interface PanelLayout {
 
 export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor" | "git";
 
-export interface TerminalTab {
-  id: string;
-  cwd: string;
-  title: string;
-  ptyId: string;
-}
-
 export interface TerminalGroup {
   id: string;
   workspaceId: string;
@@ -86,10 +79,6 @@ interface WorkbenchState {
   // System tabs (browser, kanban etc) opened as editor tabs alongside workspaces
   systemTabs: SystemTabId[];
   activeSystemTab: SystemTabId | null;
-
-  // Terminal tabs (standalone PTY tabs)
-  terminalTabs: TerminalTab[];
-  activeTerminalTabId: string | null;
 
   // File tabs (real editor tabs with VSCode preview-tab semantics)
   fileTabs: FileTab[];
@@ -194,13 +183,6 @@ interface WorkbenchState {
   closeSystemTab: (id: SystemTabId) => void;
   setActiveSystemTab: (id: SystemTabId | null) => void;
 
-  // Terminal tabs
-  addTerminalTab: (tab: TerminalTab) => void;
-  removeTerminalTab: (id: string) => void;
-  setActiveTerminalTab: (id: string | null) => void;
-  /** Bind a freshly-spawned PTY to an optimistically-added terminal tab. */
-  setTerminalTabPty: (id: string, ptyId: string) => void;
-
   // File tab mutators
   openFileTab: (input: OpenFileTabInput) => void;
   setActiveFileTab: (id: string | null) => void;
@@ -228,8 +210,6 @@ export const useWorkbench = create<WorkbenchState>()(
     editingSkill: null,
     systemTabs: [],
     activeSystemTab: null,
-    terminalTabs: [],
-    activeTerminalTabId: null,
     fileTabs: [],
     activeFileTabId: null,
     fileTabAccessOrder: [],
@@ -343,10 +323,8 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         activeWorkspaceId: id,
         // Selecting a workspace switches the editor away from any system tab or
-        // standalone terminal tab, mirroring how opening one clears the active
-        // workspace.
+        // file tab, mirroring how opening one clears the active workspace.
         activeSystemTab: id ? null : s.activeSystemTab,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         activeFileTabId: id ? null : s.activeFileTabId,
         workspaceAccessOrder: id
           ? [id, ...s.workspaceAccessOrder.filter((wid) => wid !== id)]
@@ -472,7 +450,6 @@ export const useWorkbench = create<WorkbenchState>()(
         systemTabs: s.systemTabs.includes(id) ? s.systemTabs : [...s.systemTabs, id],
         activeSystemTab: id,
         activeWorkspaceId: null,
-        activeTerminalTabId: null,
         activeFileTabId: null,
       })),
     closeSystemTab: (id) =>
@@ -484,31 +461,7 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         activeSystemTab: id,
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         activeFileTabId: id ? null : s.activeFileTabId,
-      })),
-
-    addTerminalTab: (tab) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.some((t) => t.id === tab.id)
-          ? s.terminalTabs
-          : [...s.terminalTabs, tab],
-      })),
-    setTerminalTabPty: (id, ptyId) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.map((t) => (t.id === id ? { ...t, ptyId } : t)),
-      })),
-    removeTerminalTab: (id) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.filter((t) => t.id !== id),
-        activeTerminalTabId: s.activeTerminalTabId === id ? null : s.activeTerminalTabId,
-      })),
-    setActiveTerminalTab: (id) =>
-      set(() => ({
-        activeTerminalTabId: id,
-        activeWorkspaceId: null,
-        activeSystemTab: null,
-        activeFileTabId: null,
       })),
 
     openFileTab: (input) =>
@@ -524,7 +477,6 @@ export const useWorkbench = create<WorkbenchState>()(
             activeFileTabId: id,
             activeWorkspaceId: null,
             activeSystemTab: null,
-            activeTerminalTabId: null,
             fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
           };
         }
@@ -553,7 +505,6 @@ export const useWorkbench = create<WorkbenchState>()(
           activeFileTabId: id,
           activeWorkspaceId: null,
           activeSystemTab: null,
-          activeTerminalTabId: null,
           fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
         };
       }),
@@ -563,7 +514,6 @@ export const useWorkbench = create<WorkbenchState>()(
         activeFileTabId: id,
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
         activeSystemTab: id ? null : s.activeSystemTab,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         fileTabAccessOrder: id
           ? [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)]
           : s.fileTabAccessOrder,
@@ -635,11 +585,6 @@ export const selectWorkspacesForProject =
   (projectId: string) =>
   (s: WorkbenchState): Workspace[] =>
     s.workspaces.filter((w) => w.projectId === projectId);
-
-export const selectWorkspaceGroups =
-  (workspaceId: string) =>
-  (s: WorkbenchState): TerminalGroup[] =>
-    s.terminalGroups.filter((g) => g.workspaceId === workspaceId);
 
 /**
  * The set of workspace ids whose editors stay rendered (keep-alive). When more

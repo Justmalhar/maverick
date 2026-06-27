@@ -18,7 +18,7 @@ function openTab(path = "/wt/src/a.ts", overrides: Record<string, unknown> = {})
 
 describe("file tabs in EditorTabs", () => {
   beforeEach(() => {
-    useWorkbench.setState({ fileTabs: [], activeFileTabId: null, workspaces: [], systemTabs: [], terminalTabs: [] });
+    useWorkbench.setState({ fileTabs: [], activeFileTabId: null, workspaces: [], systemTabs: [] });
   });
 
   it("renders the basename, italic while preview", () => {

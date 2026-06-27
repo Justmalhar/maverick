@@ -96,8 +96,6 @@ export function EditorTabs() {
   const pinFileTab = useWorkbench((s) => s.pinFileTab);
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
-  // The "context workspace" is the one whose group/file tabs are shown.
-  // When a file tab is active (activeId is null), fall back to the file tab's workspace.
   const contextWorkspaceId =
     activeId ?? fileTabs.find((t) => t.id === activeFileTabId)?.workspaceId ?? null;
   const ctxGroups = terminalGroups.filter((g) => g.workspaceId === contextWorkspaceId);

@@ -77,4 +77,23 @@ describe("ConflictResolver", () => {
     await userEvent.click(await screen.findByTestId("resolve-ours"));
     await waitFor(() => expect(screen.getByText(/resolveX/)).toBeInTheDocument());
   });
+
+  it("catches error from resolveWithAI when sendAgentPrompt throws (lines 35-36)", async () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt" })],
+      activeWorkspaceId: "w1",
+    });
+    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_conflicts") {
+        return [{ filePath: "a.ts", hunkIndex: 0, ours: ["o"], theirs: ["t"] }];
+      }
+      if (cmd === "pty_write") throw new Error("pty-error");
+      return undefined;
+    }) as unknown as typeof invoke);
+    renderWithProviders(<ConflictResolver worktreePath="/wt" />);
+    await userEvent.click(await screen.findByTestId("conflict-resolve-ai"));
+    await waitFor(() => expect(screen.getByText(/pty-error/)).toBeInTheDocument());
+  });
 });

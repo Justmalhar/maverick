@@ -22,6 +22,10 @@ describe("parseDelimited", () => {
   it("empty input yields empty table", () => {
     expect(parseDelimited("", ",")).toEqual({ header: [], rows: [] });
   });
+
+  it("all-whitespace input yields empty table (trim branch)", () => {
+    expect(parseDelimited("   \n\t  ", ",")).toEqual({ header: [], rows: [] });
+  });
 });
 
 describe("sortRows", () => {

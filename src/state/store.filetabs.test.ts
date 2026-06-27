@@ -18,7 +18,6 @@ describe("FileTab store", () => {
       activeFileTabId: null,
       activeWorkspaceId: null,
       activeSystemTab: null,
-      activeTerminalTabId: null,
     });
   });
 
@@ -93,6 +92,22 @@ describe("FileTab store", () => {
     useWorkbench.getState().setFileTabMode(id, "edit");
     useWorkbench.getState().setFileTabViewer(id, "hex");
     expect(useWorkbench.getState().fileTabs[0]).toMatchObject({ mode: "edit", viewerId: "hex" });
+  });
+
+  it("setFileTabViewer and setFileTabViewed leave non-matching tabs unchanged (false branch of map ternary)", () => {
+    // Open two tabs so the map ternary hits both branches: matching and non-matching.
+    open({ path: "/wt/src/a.ts", kind: "file", preview: false });
+    open({ path: "/wt/src/b.ts", kind: "diff", mode: "diff", preview: false });
+    const [tab0, tab1] = useWorkbench.getState().fileTabs;
+    useWorkbench.getState().setFileTabViewer(tab0.id, "code-viewer");
+    expect(useWorkbench.getState().fileTabs[0].viewerId).toBe("code-viewer");
+    // tab1 must NOT have been touched.
+    expect(useWorkbench.getState().fileTabs[1].viewerId).toBeUndefined();
+
+    useWorkbench.getState().setFileTabViewed(tab1.id, true);
+    expect(useWorkbench.getState().fileTabs[1].viewed).toBe(true);
+    // tab0 must NOT have been touched.
+    expect(useWorkbench.getState().fileTabs[0].viewed).toBe(false);
   });
 
   it("activating a workspace clears the active file tab and vice versa", () => {

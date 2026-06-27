@@ -48,4 +48,19 @@ describe("formatKeybinding", () => {
   it("returns empty string for empty input", () => {
     expect(formatKeybinding("", "windows")).toBe("");
   });
+
+  it("renders Ctrl as ⌃ on macOS and Ctrl on windows", () => {
+    expect(formatKeybinding("Ctrl+k", "macos")).toBe("⌃K");
+    expect(formatKeybinding("Ctrl+k", "windows")).toBe("Ctrl+K");
+  });
+
+  it("renders Enter as ⏎ on macOS and Enter on windows", () => {
+    expect(formatKeybinding("Enter", "macos")).toBe("⏎");
+    expect(formatKeybinding("Enter", "windows")).toBe("Enter");
+  });
+
+  it("renders ArrowDown and ArrowUp", () => {
+    expect(formatKeybinding("ArrowDown", "macos")).toBe("↓");
+    expect(formatKeybinding("ArrowUp", "linux")).toBe("↑");
+  });
 });
