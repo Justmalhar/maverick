@@ -189,6 +189,39 @@ describe("SQLiteStore", () => {
     expect(() => store.workspaceDestroy("nope")).toThrow();
   });
 
+  test("projectDestroy deletes project-scoped rows and the project", () => {
+    const proj = store.projectAdd({ path: "/tmp/pd" });
+    store.db
+      .query(
+        `INSERT INTO kanban_tasks
+           (id, project_id, title, description, status, column_order, workspace_id,
+            labels_json, due_date, created_at, agent_backend, branch, attachments)
+         VALUES ('task_pd', ?, 't', NULL, 'todo', 0, NULL, '[]', NULL, 0, '', '', '[]')`
+      )
+      .run(proj.id);
+    store.db
+      .query(
+        `INSERT INTO workspace_presets (id, project_id, name, description, base_branch, layout_json, created_at)
+         VALUES ('preset_pd', ?, 'p', '', 'main', '{}', 0)`
+      )
+      .run(proj.id);
+    store.db
+      .query("INSERT INTO repo_configs (id, project_id) VALUES ('rc_pd', ?)")
+      .run(proj.id);
+
+    const r = store.projectDestroy(proj.id);
+
+    expect(r.ok).toBe(true);
+    expect(store.projectGet(proj.id)).toBeNull();
+    expect(store.db.query("SELECT id FROM kanban_tasks WHERE id = 'task_pd'").get()).toBeNull();
+    expect(store.db.query("SELECT id FROM workspace_presets WHERE id = 'preset_pd'").get()).toBeNull();
+    expect(store.db.query("SELECT id FROM repo_configs WHERE id = 'rc_pd'").get()).toBeNull();
+  });
+
+  test("projectDestroy on a missing project is a no-op returning ok", () => {
+    expect(store.projectDestroy("nope")).toEqual({ ok: true });
+  });
+
   test("messageAppend + messagesList round-trip", () => {
     const proj = store.projectAdd({ path: "/tmp/m" });
     const ws = store.workspaceCreate({
