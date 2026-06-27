@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen } from "@/test/utils";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { useWorkbench } from "@/state/store";
 import IdentitySection from "./IdentitySection";
 
 const removeProject = vi.fn();
@@ -23,6 +24,7 @@ const STUB = {
 beforeEach(() => {
   removeProject.mockReset();
   vi.mocked(invoke).mockRejectedValue(new Error("noop"));
+  useWorkbench.setState({ workspaces: [] });
   useProjectSettingsStore.setState({
     data: STUB,
     projectId: "p1",
@@ -61,5 +63,50 @@ describe("IdentitySection", () => {
     await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
     await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
     expect(removeProject).not.toHaveBeenCalled();
+  });
+
+  it("renders nothing when settings data is absent", () => {
+    useProjectSettingsStore.setState({
+      data: null,
+      projectId: "p1",
+      status: "idle",
+      dirty: {},
+      lastError: null,
+    });
+    const { container } = renderWithProviders(<IdentitySection />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("does not call removeProject when projectId is null", async () => {
+    useProjectSettingsStore.setState({
+      data: STUB,
+      projectId: null,
+      status: "loaded",
+      dirty: {},
+      lastError: null,
+    });
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    await userEvent.click(screen.getByTestId("confirm-remove-project"));
+    expect(removeProject).not.toHaveBeenCalled();
+  });
+
+  it("uses the singular noun when the project has exactly one workspace", async () => {
+    useWorkbench.setState({
+      workspaces: [
+        {
+          id: "w1",
+          projectId: "p1",
+          branch: "callsign/x",
+          agentBackend: "claude",
+          worktreePath: "/p/demo/.maverick/w1",
+          status: "idle",
+          sessionId: "s1",
+        },
+      ],
+    });
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    expect(screen.getByText(/its 1 workspace /)).toBeInTheDocument();
   });
 });
