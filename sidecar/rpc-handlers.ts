@@ -49,6 +49,7 @@ function nullishOptional<T extends z.ZodTypeAny>(schema: T) {
 
 const Schemas = {
   projectAdd: z.object({ path: z.string(), name: nullishOptional(z.string()) }),
+  projectDestroy: z.object({ projectId: z.string() }),
   projectSettingsGet: z.object({ projectId: z.string() }),
   projectSettingsUpdate: z.object({
     projectId: z.string(),
@@ -437,6 +438,54 @@ export class RpcHandlers {
     return { projectPath: project.path, worktreePath: ws.worktreePath };
   }
 
+  private async teardownWorkspace(workspaceId: string): Promise<void> {
+    const ws = this.store.workspaceGet(workspaceId);
+    if (!ws) return;
+    // A headless agent must not outlive its workspace. (Preset/terminal PTYs
+    // are Rust-owned and reaped by the frontend's killWorkspaceLeaves on
+    // removeWorkspace — the sidecar no longer spawns any.)
+    this.agentRunner.killWorkspace(workspaceId);
+    const project = this.store.projectGet(ws.projectId);
+    if (project) {
+      const settings = this.projectSettings.read(project.path);
+      if (settings.scripts.archive.trim() !== "") {
+        const [archiveCmd, ...archiveArgs] = shellCommandArgs(settings.scripts.archive);
+        const { proc, exited } = this.process.spawnOnceHandle({
+          cwd: ws.worktreePath,
+          command: archiveCmd,
+          args: archiveArgs,
+        });
+        const archive = exited
+          .then((code) => ({ code }))
+          .catch((err) => {
+            console.error(`[workspace.destroy] archive failed:`, err);
+            return { code: -1 };
+          });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<{ code: number }>((resolve) => {
+          timer = setTimeout(() => {
+            try {
+              proc.kill();
+            } catch {
+              /* already exited */
+            }
+            resolve({ code: -2 });
+          }, 30_000);
+        });
+        await Promise.race([archive, timeout]);
+        if (timer) clearTimeout(timer);
+      }
+    }
+    // Remove the worktree (with a prune fallback) BEFORE deleting the DB row:
+    // if removal throws, the row survives so the worktree stays recoverable
+    // rather than becoming an orphaned, unreferenced directory.
+    await this.worktree.destroy({
+      worktreePath: ws.worktreePath,
+      projectPath: project?.path,
+    });
+    this.store.workspaceDestroy(workspaceId);
+  }
+
   private emitProjectSettingsChanged(projectId: string, settings: unknown): void {
     this.notifier.write(
       JSON.stringify({
@@ -487,6 +536,16 @@ export class RpcHandlers {
       }
       case "project.list":
         return this.store.projectList();
+      case "project.destroy": {
+        const p = Schemas.projectDestroy.parse(params);
+        const project = this.store.projectGet(p.projectId);
+        if (!project) return { ok: true };
+        for (const ws of this.store.workspaceList(p.projectId)) {
+          await this.teardownWorkspace(ws.id);
+        }
+        this.store.projectDestroy(p.projectId);
+        return { ok: true };
+      }
       case "project.settings.get": {
         const p = Schemas.projectSettingsGet.parse(params);
         const project = this.store.projectGet(p.projectId);
@@ -563,54 +622,7 @@ export class RpcHandlers {
       }
       case "workspace.destroy": {
         const p = Schemas.workspaceDestroy.parse(params);
-        const ws = this.store.workspaceGet(p.workspaceId);
-        if (!ws) return { ok: true };
-        // A headless agent must not outlive its workspace. (Preset/terminal PTYs
-        // are Rust-owned and reaped by the frontend's killWorkspaceLeaves on
-        // removeWorkspace — the sidecar no longer spawns any.)
-        this.agentRunner.killWorkspace(p.workspaceId);
-        const project = this.store.projectGet(ws.projectId);
-        if (project) {
-          const settings = this.projectSettings.read(project.path);
-          if (settings.scripts.archive.trim() !== "") {
-            // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
-            const [archiveCmd, ...archiveArgs] = shellCommandArgs(settings.scripts.archive);
-            const { proc, exited } = this.process.spawnOnceHandle({
-              cwd: ws.worktreePath,
-              command: archiveCmd,
-              args: archiveArgs,
-            });
-            const archive = exited
-              .then((code) => ({ code }))
-              .catch((err) => {
-                console.error(`[workspace.destroy] archive failed:`, err);
-                return { code: -1 };
-              });
-            // Kill the lingering script if the timeout wins the race; otherwise
-            // a hung archive command would leak a child for the process lifetime.
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const timeout = new Promise<{ code: number }>((resolve) => {
-              timer = setTimeout(() => {
-                try {
-                  proc.kill();
-                } catch {
-                  /* already exited */
-                }
-                resolve({ code: -2 });
-              }, 30_000);
-            });
-            await Promise.race([archive, timeout]);
-            if (timer) clearTimeout(timer);
-          }
-        }
-        // Remove the worktree (with a prune fallback) BEFORE deleting the DB row:
-        // if removal throws, the row survives so the worktree stays recoverable
-        // rather than becoming an orphaned, unreferenced directory.
-        await this.worktree.destroy({
-          worktreePath: ws.worktreePath,
-          projectPath: project?.path,
-        });
-        this.store.workspaceDestroy(p.workspaceId);
+        await this.teardownWorkspace(p.workspaceId);
         return { ok: true };
       }
       case "workspace.list": {

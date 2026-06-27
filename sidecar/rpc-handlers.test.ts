@@ -1162,6 +1162,62 @@ describe("RpcHandlers", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("project.destroy removes all workspaces, their worktrees, and the project", async () => {
+    const { mkdirSync, existsSync } = await import("fs");
+    const { dir, projectId, store } = makeWithTempProject();
+    const removed: string[] = [];
+    let createCount = 0;
+    const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create() {
+        const idx = createCount++;
+        const wt = `${dir}/wt-${idx}`;
+        mkdirSync(wt, { recursive: true });
+        return { workspaceId: `ws_${idx}`, worktreePath: wt };
+      },
+      async destroy({ worktreePath }: { worktreePath: string }) {
+        removed.push(worktreePath);
+        return { ok: true as const };
+      },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    const a = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/a", backend: "claude",
+    })) as { id: string };
+    const b = (await h.dispatch("workspace.create", {
+      projectId, projectPath: dir, branch: "feat/b", backend: "claude",
+    })) as { id: string };
+
+    const result = (await h.dispatch("project.destroy", { projectId })) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    expect(removed).toHaveLength(2);
+    expect(store.projectGet(projectId)).toBeNull();
+    expect(store.workspaceGet(a.id)).toBeNull();
+    expect(store.workspaceGet(b.id)).toBeNull();
+    expect(existsSync(dir)).toBe(true); // the source folder is never touched
+  });
+
+  it("project.destroy on an unknown project is a no-op", async () => {
+    const { store } = makeWithTempProject();
+    const fakeWorktree = {
+      async resolveBaseBranch() { return "HEAD"; },
+      async create() { return { workspaceId: "x", worktreePath: "/x" }; },
+      async destroy() { throw new Error("should not be called"); },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const { RpcHandlers } = await import("./rpc-handlers");
+    const h = new RpcHandlers({ store, worktree: fakeWorktree as never, notifier: { write: () => {} } });
+    const result = (await h.dispatch("project.destroy", { projectId: "missing" })) as { ok: boolean };
+    expect(result.ok).toBe(true);
+  });
+
   it("workspace.create generates a unique callsign branch and title when branch is omitted", async () => {
     const { mkdirSync } = await import("fs");
     const { dir, projectId, store } = makeWithTempProject();
