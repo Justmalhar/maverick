@@ -3,6 +3,7 @@ import { useReducedMotion } from "framer-motion";
 import type * as MonacoApi from "monaco-editor/esm/vs/editor/editor.api";
 import { getMonaco } from "@/lib/viewers/monaco/loader";
 import { getOrCreateModel, releaseModel } from "@/lib/viewers/monaco/model-cache";
+import { monoFontFamily } from "@/lib/fonts";
 import { fileRead, fileWrite, onFsChanged } from "@/lib/tauri";
 import type { TextEncoding } from "@/lib/ipc";
 import type { ViewerProps } from "@/lib/viewers/types";
@@ -41,7 +42,7 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
       const editor = monaco.editor.create(hostRef.current, {
         model,
         theme: "maverick-dark",
-        fontFamily: "Geist Mono, monospace",
+        fontFamily: monoFontFamily(),
         fontSize: 12,
         minimap: { enabled: false },
         automaticLayout: true,

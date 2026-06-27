@@ -23,9 +23,9 @@ const LABELS: Record<KanbanTask["status"], string> = {
 
 const STATUS_ICON: Record<KanbanTask["status"], React.ReactNode> = {
   todo: <Clock className="h-3.5 w-3.5 text-muted-foreground" />,
-  in_progress: <Zap className="h-3.5 w-3.5 text-amber-400" />,
-  review: <Eye className="h-3.5 w-3.5 text-emerald-400" />,
-  done: <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />,
+  in_progress: <Zap className="h-3.5 w-3.5 text-warning" />,
+  review: <Eye className="h-3.5 w-3.5 text-success" />,
+  done: <CheckCircle2 className="h-3.5 w-3.5 text-info" />,
 };
 
 export default function KanbanColumn({ status, tasks, diffStatCache, onEdit, onStart, onDelete }: Props) {

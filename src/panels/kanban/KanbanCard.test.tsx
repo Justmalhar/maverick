@@ -101,7 +101,7 @@ describe("KanbanCard", () => {
     expect(screen.queryByTestId("agent-dot")).not.toBeInTheDocument();
   });
 
-  it("renders green agent dot for in_progress", () => {
+  it("renders warning agent dot for in_progress", () => {
     renderWithProviders(
       <KanbanCard
         task={makeKanbanTask({ status: "in_progress", branch: "main" })}
@@ -109,10 +109,10 @@ describe("KanbanCard", () => {
         onEdit={vi.fn()}
       />
     );
-    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-amber-400");
+    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-warning");
   });
 
-  it("renders amber dot for review", () => {
+  it("renders success dot for review", () => {
     renderWithProviders(
       <KanbanCard
         task={makeKanbanTask({ status: "review", branch: "main" })}
@@ -120,7 +120,7 @@ describe("KanbanCard", () => {
         onEdit={vi.fn()}
       />
     );
-    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-emerald-400");
+    expect(screen.getByTestId("agent-dot")).toHaveClass("bg-success");
   });
 
   it("shows Start button for todo status", () => {
