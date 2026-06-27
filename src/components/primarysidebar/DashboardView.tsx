@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Boxes, Activity, Moon, FolderGit2, GitCompare, Sparkles } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatus, useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
@@ -15,6 +16,7 @@ interface DiffStats {
 }
 
 export function DashboardView() {
+  const reduce = useReducedMotion();
   const workspaces = useWorkbench((s) => s.workspaces);
   const projects = useWorkbench((s) => s.projects);
   const statuses = useAgentStatusStore((s) => s.statuses);
@@ -35,85 +37,93 @@ export function DashboardView() {
       : `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"} · ${activeCount} active`;
 
   return (
-    <div
+    <motion.div
       data-testid="dashboard-view"
-      className="flex flex-col gap-4 overflow-auto px-3 py-3"
+      className="h-full w-full overflow-auto bg-editor"
+      initial={reduce ? false : { opacity: 0 }}
+      animate={reduce ? undefined : { opacity: 1 }}
+      transition={{ duration: 0.2 }}
     >
-      <header data-testid="dashboard-header" className="flex items-center gap-2.5 px-0.5">
-        <img
-          src="/app-icon.png"
-          alt=""
-          width={28}
-          height={28}
-          className="shrink-0 rounded-lg shadow-sm"
-        />
-        <div className="flex min-w-0 flex-col">
-          <span className="text-[13px] font-semibold tracking-tight text-foreground">
-            Maverick
-          </span>
-          <span className="truncate text-[11px] text-muted-foreground">{summary}</span>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard
-          testId="dashboard-stat-workspaces"
-          icon={Boxes}
-          label="Workspaces"
-          value={String(workspaces.length)}
-        />
-        <StatCard
-          testId="dashboard-stat-active"
-          icon={Activity}
-          label="Active"
-          value={String(activeCount)}
-          accent={activeCount > 0}
-        />
-        <StatCard
-          testId="dashboard-stat-idle"
-          icon={Moon}
-          label="Idle"
-          value={String(idleCount)}
-        />
-        <StatCard
-          testId="dashboard-stat-projects"
-          icon={FolderGit2}
-          label="Projects"
-          value={String(projects.length)}
-        />
-      </div>
-
-      {workspaces.length === 0 ? (
-        <div
-          data-testid="dashboard-empty"
-          className="flex flex-col items-center gap-2 rounded-md border border-border-glass bg-card px-3 py-7 text-center"
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-8 py-16">
+        <header
+          data-testid="dashboard-header"
+          className="flex flex-col items-center gap-4 text-center"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Sparkles className="h-4 w-4" />
+          <img
+            src="/app-icon.png"
+            alt=""
+            width={72}
+            height={72}
+            className="shrink-0 rounded-2xl shadow-md"
+          />
+          <div className="flex flex-col items-center gap-1.5">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Maverick
+            </h1>
+            <span className="text-sm text-muted-foreground">{summary}</span>
           </div>
-          <span className="text-[13px] text-foreground">No active agents</span>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            Start a workspace from a project or a task to run an agent here.
-          </p>
+        </header>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard
+            testId="dashboard-stat-workspaces"
+            icon={Boxes}
+            label="Workspaces"
+            value={String(workspaces.length)}
+          />
+          <StatCard
+            testId="dashboard-stat-active"
+            icon={Activity}
+            label="Active"
+            value={String(activeCount)}
+            accent={activeCount > 0}
+          />
+          <StatCard
+            testId="dashboard-stat-idle"
+            icon={Moon}
+            label="Idle"
+            value={String(idleCount)}
+          />
+          <StatCard
+            testId="dashboard-stat-projects"
+            icon={FolderGit2}
+            label="Projects"
+            value={String(projects.length)}
+          />
         </div>
-      ) : (
-        <section className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between px-0.5">
-            <span className="text-[10px] uppercase tracking-wider text-sidebar-section">
-              Agents
-            </span>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {workspaces.length}
-            </span>
+
+        {workspaces.length === 0 ? (
+          <div
+            data-testid="dashboard-empty"
+            className="flex flex-col items-center gap-3 rounded-xl border border-border-glass bg-card px-6 py-16 text-center"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <span className="text-sm text-foreground">No active agents</span>
+            <p className="max-w-sm text-[13px] text-muted-foreground">
+              Start a workspace from a project or a task to run an agent here.
+            </p>
           </div>
-          <ul className="flex flex-col gap-1.5">
-            {workspaces.map((w) => (
-              <AgentCard key={w.id} workspace={w} projectName={projectName(w.projectId)} />
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
+        ) : (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-[11px] uppercase tracking-wider text-sidebar-section">
+                Agents
+              </span>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {workspaces.length}
+              </span>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {workspaces.map((w) => (
+                <AgentCard key={w.id} workspace={w} projectName={projectName(w.projectId)} />
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
@@ -254,19 +264,19 @@ function StatCard({
   return (
     <div
       data-testid={testId}
-      className="flex items-center gap-2 rounded-md border border-border-glass bg-card px-2.5 py-2"
+      className="flex flex-col gap-3 rounded-xl border border-border-glass bg-card px-4 py-4"
     >
       <span
         className={cn(
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
           accent ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
         )}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon className="h-4 w-4" />
       </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="text-[10px] uppercase tracking-wider text-sidebar-section">{label}</span>
-        <span className="font-mono text-sm font-semibold leading-none text-foreground">{value}</span>
+        <span className="font-mono text-2xl font-semibold leading-none text-foreground">{value}</span>
       </span>
     </div>
   );
