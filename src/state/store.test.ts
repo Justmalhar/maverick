@@ -19,6 +19,7 @@ function makeTab(overrides: Partial<FileTab> = {}): FileTab {
     kind: "file",
     path,
     worktreePath: "/wt",
+    workspaceId: null,
     preview: false,
     dirty: false,
     mode: "edit",
@@ -40,8 +41,8 @@ beforeEach(() => {
     activeWorkspaceId: null,
     splitTrees: {},
     launchSpecs: {},
-    terminalTabs: [],
-    activeTerminalTabId: null,
+    terminalGroups: [],
+    activeGroupByWorkspace: {},
     systemTabs: [],
     activeSystemTab: null,
     fileTabs: [],
@@ -115,6 +116,17 @@ describe("workbench store", () => {
     expect(__testing__.leafPtyCache.has("w-pty-2")).toBe(false);
     expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-aaa" });
     expect(invoke).toHaveBeenCalledWith("pty_kill", { ptyId: "pty-bbb" });
+  });
+
+  it("removeWorkspace kills leaves for extra terminal groups too", async () => {
+    const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+    useWorkbench.getState().addWorkspace(makeWorkspace({ id: "w1" }));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    __testing__.leafPtyCache.set("w1-1", "pty-primary");
+    __testing__.leafPtyCache.set(`${id}-1`, "pty-extra");
+    useWorkbench.getState().removeWorkspace("w1");
+    expect(__testing__.leafPtyCache.has("w1-1")).toBe(false);
+    expect(__testing__.leafPtyCache.has(`${id}-1`)).toBe(false);
   });
 
   it("removeWorkspace prunes the workspace's split tree (#40m)", () => {
@@ -310,63 +322,25 @@ describe("workbench store", () => {
     expect(ps.projectId).toBeNull();
   });
 
-  it("terminal tabs: add, remove, set active, mutual exclusivity", () => {
-    const tab1 = { id: "t1", cwd: "/Users/me/Desktop", title: "Desktop", ptyId: "pty-1" };
-    const tab2 = { id: "t2", cwd: "/Users/me/code", title: "code", ptyId: "pty-2" };
-
-    useWorkbench.getState().addTerminalTab(tab1);
-    useWorkbench.getState().addTerminalTab(tab2);
-    expect(useWorkbench.getState().terminalTabs.map((t) => t.id)).toEqual(["t1", "t2"]);
-
-    // duplicate add is a no-op
-    useWorkbench.getState().addTerminalTab(tab1);
-    expect(useWorkbench.getState().terminalTabs).toHaveLength(2);
-
-    // setActiveTerminalTab nulls workspace and system tab actives
-    useWorkbench.setState({ activeWorkspaceId: "w1", activeSystemTab: "browser" });
-    useWorkbench.getState().setActiveTerminalTab("t2");
-    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
-    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
-    expect(useWorkbench.getState().activeSystemTab).toBeNull();
-
-    // setActiveWorkspace nulls activeTerminalTabId AND activeSystemTab
-    useWorkbench.setState({ activeSystemTab: "browser", activeTerminalTabId: "t1" });
-    useWorkbench.getState().setActiveWorkspace("w1");
-    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
-    expect(useWorkbench.getState().activeSystemTab).toBeNull();
-
-    // openSystemTab nulls activeTerminalTabId
-    useWorkbench.getState().setActiveTerminalTab("t1");
-    useWorkbench.getState().openSystemTab("browser");
-    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
-
-    // setActiveSystemTab with a non-null id nulls activeTerminalTabId and activeWorkspaceId
-    useWorkbench.setState({ activeWorkspaceId: "w1", activeTerminalTabId: "t1" });
-    useWorkbench.getState().setActiveSystemTab("browser");
-    expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
-    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
-
-    // removeTerminalTab clears active when removing the active tab
-    useWorkbench.getState().setActiveTerminalTab("t1");
-    useWorkbench.getState().removeTerminalTab("t1");
-    expect(useWorkbench.getState().activeTerminalTabId).toBeNull();
-    expect(useWorkbench.getState().terminalTabs.map((t) => t.id)).toEqual(["t2"]);
-
-    // removeTerminalTab on inactive tab does not clear active
-    useWorkbench.getState().setActiveTerminalTab("t2");
-    useWorkbench.getState().addTerminalTab({ ...tab1 });
-    useWorkbench.getState().removeTerminalTab("t1");
-    expect(useWorkbench.getState().activeTerminalTabId).toBe("t2");
+  it("addWorkspace: reuses existing primary group when called twice with the same id", () => {
+    // The ternary on line 273 — when the group already exists, keep s.terminalGroups unchanged.
+    const ws = makeWorkspace({ id: "dup" });
+    useWorkbench.getState().addWorkspace(ws);
+    const groupsBefore = useWorkbench.getState().terminalGroups.length;
+    // Force the primary group to already exist, then call addWorkspace again.
+    useWorkbench.getState().addWorkspace(ws);
+    // Should not duplicate the primary group.
+    expect(useWorkbench.getState().terminalGroups.length).toBe(groupsBefore);
   });
 
-  it("setTerminalTabPty binds a spawned PTY to a pending tab and ignores unknown ids", () => {
-    useWorkbench.getState().addTerminalTab({ id: "t1", cwd: "/a", title: "a", ptyId: "" });
-    useWorkbench.getState().setTerminalTabPty("t1", "pty-99");
-    expect(useWorkbench.getState().terminalTabs.find((t) => t.id === "t1")?.ptyId).toBe("pty-99");
-    // a non-matching id leaves every tab untouched
-    useWorkbench.getState().setTerminalTabPty("nope", "pty-x");
-    expect(useWorkbench.getState().terminalTabs.find((t) => t.id === "t1")?.ptyId).toBe("pty-99");
+  it("markPendingAiRename is idempotent and clearPendingAiRename removes", () => {
+    useWorkbench.getState().markPendingAiRename("w-ai");
+    useWorkbench.getState().markPendingAiRename("w-ai"); // duplicate — must not double-add
+    expect(useWorkbench.getState().pendingAiRename).toEqual(["w-ai"]);
+    useWorkbench.getState().clearPendingAiRename("w-ai");
+    expect(useWorkbench.getState().pendingAiRename).toEqual([]);
   });
+
 });
 
 describe("computeLiveWorkspaceIds", () => {
@@ -407,6 +381,20 @@ describe("computeLiveWorkspaceIds", () => {
   it("treats a non-positive limit as no suspension", () => {
     const list = [ws("a"), ws("b")];
     expect(computeLiveWorkspaceIds(list, ["a", "b"], "a", 0)).toEqual(new Set(["a", "b"]));
+  });
+
+  it("does not re-append workspaces that are already in the access order (false branch of !ranked.includes)", () => {
+    // All workspaces are in the access order — the `if (!ranked.includes(w.id))` branch
+    // is false for every workspace, so none are re-pushed.
+    const list = [ws("a"), ws("b"), ws("c"), ws("d")];
+    // Access order contains all 4 but limit is 2 — a+b in window, c+d suspended.
+    // None of the workspaces need appending; the push branch must NOT fire.
+    const live = computeLiveWorkspaceIds(list, ["a", "b", "c", "d"], "a", 2);
+    expect(live.has("a")).toBe(true);
+    expect(live.has("b")).toBe(true);
+    // c and d are beyond the limit and not active.
+    expect(live.has("c")).toBe(false);
+    expect(live.has("d")).toBe(false);
   });
 });
 
@@ -469,6 +457,16 @@ describe("computeLiveFileTabIds", () => {
     const live = computeLiveFileTabIds(tabs, tabs.map((t) => t.id), tabs[0].id, 0);
     expect(live).toEqual(new Set(tabs.map((t) => t.id)));
   });
+
+  it("does not re-append tabs already in the access order (false branch of !ranked.includes)", () => {
+    // All four tabs are in the access order — the push-if-missing branch is always false.
+    const [a, b, c, d] = [makeTab(), makeTab(), makeTab(), makeTab()];
+    const live = computeLiveFileTabIds([a, b, c, d], [a.id, b.id, c.id, d.id], a.id, 2);
+    expect(live.has(a.id)).toBe(true); // active
+    expect(live.has(b.id)).toBe(true); // MRU window
+    expect(live.has(c.id)).toBe(false);
+    expect(live.has(d.id)).toBe(false);
+  });
 });
 
 describe("fileTabAccessOrder mutations", () => {
@@ -514,5 +512,108 @@ describe("fileTabAccessOrder mutations", () => {
     useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/b.ts", worktreePath: "/wt", preview: false });
     useWorkbench.getState().closeFileTab("file:/wt/a.ts");
     expect(useWorkbench.getState().fileTabAccessOrder).toEqual(["file:/wt/b.ts"]);
+  });
+});
+
+function freshWorkspace(id: string) {
+  return {
+    id, projectId: "p1", branch: "b", agentBackend: "claude",
+    worktreePath: `/wt/${id}`, status: "active" as const, sessionId: "s",
+  };
+}
+
+describe("terminal groups", () => {
+  beforeEach(() => {
+    useWorkbench.setState({
+      workspaces: [], terminalGroups: [], activeGroupByWorkspace: {},
+      splitTrees: {}, activeWorkspaceId: null,
+    });
+  });
+
+  it("seeds a primary group (id === workspace.id) on addWorkspace", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const groups = useWorkbench.getState().terminalGroups;
+    expect(groups).toEqual([{ id: "w1", workspaceId: "w1", title: "Terminal 1" }]);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+  });
+
+  it("addTerminalGroup appends an extra group and activates it", () => {
+    const s = useWorkbench.getState();
+    s.addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    expect(id).toMatch(/^term-/);
+    const groups = useWorkbench.getState().terminalGroups.filter((g) => g.workspaceId === "w1");
+    expect(groups.map((g) => g.id)).toEqual(["w1", id]);
+    expect(groups[1].title).toBe("Terminal 2");
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id);
+  });
+
+  it("closeTerminalGroup removes an extra group, deletes its tree, re-points active", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.setState((st) => ({ splitTrees: { ...st.splitTrees, [id]: { type: "terminal", id: `${id}-1`, backend: "claude", ptyId: id } } }));
+    useWorkbench.getState().closeTerminalGroup(id);
+    expect(useWorkbench.getState().terminalGroups.find((g) => g.id === id)).toBeUndefined();
+    expect(useWorkbench.getState().splitTrees[id]).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+  });
+
+  it("closeTerminalGroup is a no-op for a primary group", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    useWorkbench.getState().closeTerminalGroup("w1");
+    expect(useWorkbench.getState().terminalGroups.find((g) => g.id === "w1")).toBeDefined();
+  });
+
+  it("setActiveGroup updates the active group for a workspace", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().setActiveGroup("w1", "w1");
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe("w1");
+    useWorkbench.getState().setActiveGroup("w1", id);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id);
+  });
+
+  it("removeWorkspace drops all groups, trees and active-group entry", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().removeWorkspace("w1");
+    expect(useWorkbench.getState().terminalGroups).toEqual([]);
+    expect(useWorkbench.getState().splitTrees[id]).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBeUndefined();
+  });
+
+  it("setWorkspaces seeds primary groups and prunes stale ones", () => {
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    useWorkbench.getState().addTerminalGroup("w1");
+    useWorkbench.getState().setWorkspaces([freshWorkspace("w2")]);
+    const groups = useWorkbench.getState().terminalGroups;
+    expect(groups).toEqual([{ id: "w2", workspaceId: "w2", title: "Terminal 1" }]);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBeUndefined();
+    expect(useWorkbench.getState().activeGroupByWorkspace.w2).toBe("w2");
+  });
+
+  it("closeTerminalGroup leaves activeGroupByWorkspace unchanged when a non-active extra group is closed", () => {
+    // Covers the false branch of `activeGroupByWorkspace[workspaceId] === groupId` (line 359).
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id1 = useWorkbench.getState().addTerminalGroup("w1"); // becomes active
+    const id2 = useWorkbench.getState().addTerminalGroup("w1"); // also added, id2 is now active
+    // Switch active back to id1 so that id2 is NOT the active group.
+    useWorkbench.getState().setActiveGroup("w1", id1);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id1);
+    // Close id2 — it is not the active group, so activeGroupByWorkspace must stay unchanged.
+    useWorkbench.getState().closeTerminalGroup(id2);
+    expect(useWorkbench.getState().activeGroupByWorkspace.w1).toBe(id1);
+    expect(useWorkbench.getState().terminalGroups.find((g) => g.id === id2)).toBeUndefined();
+  });
+
+  it("closeTerminalGroup kills the closed group's leaf PTYs", async () => {
+    const { __testing__ } = await import("@/components/editor/terminal/leaf-registry");
+    useWorkbench.getState().addWorkspace(freshWorkspace("w1"));
+    const id = useWorkbench.getState().addTerminalGroup("w1");
+    __testing__.leafPtyCache.set(`${id}-1`, "pty-extra");
+    __testing__.leafPtyCache.set("w1-1", "pty-primary");
+    useWorkbench.getState().closeTerminalGroup(id);
+    expect(__testing__.leafPtyCache.has(`${id}-1`)).toBe(false);   // extra group's leaf killed
+    expect(__testing__.leafPtyCache.has("w1-1")).toBe(true);        // primary untouched
   });
 });

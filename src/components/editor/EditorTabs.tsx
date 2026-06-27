@@ -40,17 +40,7 @@ import { cn } from "@/lib/utils";
 import { EditorTab } from "./EditorTab";
 import { FileEditorTab } from "./FileEditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
-import { useTerminalTab } from "@/hooks/useTerminalTab";
-import { availableShells, type ShellKind } from "@/lib/terminal-shell";
-import { wslAvailable } from "@/lib/tauri";
 import { countLeaves } from "@/lib/splitnode";
-import { defaultTerminalCwd } from "@/lib/default-cwd";
-
-const SHELL_LABELS: Record<ShellKind, string> = {
-  powershell: "PowerShell",
-  cmd: "Command Prompt",
-  wsl: "WSL",
-};
 
 const SYSTEM_TAB_META: Record<
   SystemTabId,
@@ -92,10 +82,13 @@ export function EditorTabs() {
     setSaveLayoutFor(workspaceId);
   };
 
-  const terminalTabs = useWorkbench((s) => s.terminalTabs);
-  const activeTerminalTabId = useWorkbench((s) => s.activeTerminalTabId);
-  const setActiveTerminalTab = useWorkbench((s) => s.setActiveTerminalTab);
-  const { open: openTerminalTab, close: closeTerminal } = useTerminalTab();
+  // Raw subscription + inline filter avoids a new-array-per-render selector that would
+  // trigger a re-render on every unrelated store write.
+  const terminalGroups = useWorkbench((s) => s.terminalGroups);
+  const activeGroupByWorkspace = useWorkbench((s) => s.activeGroupByWorkspace);
+  const setActiveGroup = useWorkbench((s) => s.setActiveGroup);
+  const addTerminalGroup = useWorkbench((s) => s.addTerminalGroup);
+  const closeTerminalGroup = useWorkbench((s) => s.closeTerminalGroup);
 
   const fileTabs = useWorkbench((s) => s.fileTabs);
   const activeFileTabId = useWorkbench((s) => s.activeFileTabId);
@@ -104,37 +97,10 @@ export function EditorTabs() {
   const pinFileTab = useWorkbench((s) => s.pinFileTab);
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
-  // Shell profiles for the "+" menu. Windows offers PowerShell / Command Prompt /
-  // WSL; WSL is dropped unless a usable install is detected. Other platforms get
-  // an empty list and fall back to the single "Terminal" item.
-  const [shellKinds, setShellKinds] = useState<ShellKind[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const offered = availableShells();
-    if (!offered.includes("wsl")) {
-      setShellKinds(offered);
-      return;
-    }
-    wslAvailable()
-      .then((ok) => {
-        if (!cancelled) setShellKinds(ok ? offered : offered.filter((k) => k !== "wsl"));
-      })
-      .catch(() => {
-        if (!cancelled) setShellKinds(offered.filter((k) => k !== "wsl"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function onNewTerminal(kind?: ShellKind) {
-    try {
-      const cwd = await defaultTerminalCwd();
-      await openTerminalTab(cwd, kind);
-    } catch (err) {
-      console.error("Failed to open terminal tab", err);
-    }
-  }
+  const contextWorkspaceId =
+    activeId ?? fileTabs.find((t) => t.id === activeFileTabId)?.workspaceId ?? null;
+  const ctxGroups = terminalGroups.filter((g) => g.workspaceId === contextWorkspaceId);
+  const ctxFileTabs = fileTabs.filter((t) => t.workspaceId === contextWorkspaceId);
 
   function onOpenPanelTerminal() {
     const state = useWorkbench.getState();
@@ -152,23 +118,22 @@ export function EditorTabs() {
         if (!closeFileTab(s.activeFileTabId)) setConfirmCloseId(s.activeFileTabId);
       } else if (s.activeSystemTab) {
         closeSystemTab(s.activeSystemTab);
-      } else if (s.activeTerminalTabId) {
-        void closeTerminal(s.activeTerminalTabId);
       } else if (s.activeWorkspaceId) {
-        // A workspace with splits closes the focused pane first (TerminalView
-        // owns focusedPaneId); the tab itself closes only once its last pane is
-        // gone. Without splits, ⌘W closes the whole tab.
-        const tree = s.splitTrees[s.activeWorkspaceId];
+        const ws = s.activeWorkspaceId;
+        const groupId = s.activeGroupByWorkspace[ws] ?? ws;
+        const tree = s.splitTrees[groupId];
         if (tree && countLeaves(tree) > 1) {
           window.dispatchEvent(new CustomEvent("maverick:terminal:closePane"));
+        } else if (groupId !== ws) {
+          s.closeTerminalGroup(groupId);
         } else {
-          removeWorkspace(s.activeWorkspaceId);
+          removeWorkspace(ws);
         }
       }
     }
     window.addEventListener("maverick:closeActiveTab", onCloseActiveTab);
     return () => window.removeEventListener("maverick:closeActiveTab", onCloseActiveTab);
-  }, [closeFileTab, closeSystemTab, closeTerminal, removeWorkspace]);
+  }, [closeFileTab, closeSystemTab, removeWorkspace]);
 
   return (
     <div
@@ -230,47 +195,40 @@ export function EditorTabs() {
           />
         ))}
 
-        {terminalTabs.map((tab) => {
-          const active = activeTerminalTabId === tab.id;
+        {ctxGroups.map((g) => {
+          const active =
+            activeId === contextWorkspaceId && !activeFileTabId && !activeSystemTab &&
+            (activeGroupByWorkspace[contextWorkspaceId!] ?? contextWorkspaceId) === g.id;
+          const closable = g.id !== g.workspaceId && ctxGroups.length > 1;
           return (
             <button
-              key={tab.id}
+              key={g.id}
               type="button"
-              onClick={() => setActiveTerminalTab(tab.id)}
-              data-testid={`editor-tab-terminal-${tab.id}`}
+              data-testid={`editor-tab-group-${g.id}`}
+              onClick={() => { setActiveWorkspace(g.workspaceId); setActiveGroup(g.workspaceId, g.id); }}
               className={cn(
                 "group relative flex min-w-[110px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
-                active
-                  ? "bg-tab-active text-tab-fg-active"
-                  : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
+                active ? "bg-tab-active text-tab-fg-active" : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
               )}
             >
               <TerminalSquare className="h-3.5 w-3.5 shrink-0 opacity-70" />
-              <span className="flex-1 truncate text-left">{tab.title}</span>
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Close ${tab.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void closeTerminal(tab.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    void closeTerminal(tab.id);
-                  }
-                }}
-                className="flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-60"
-                data-active={active}
-              >
-                <X className="h-3 w-3" />
-              </span>
+              <span className="flex-1 truncate text-left">{g.title}</span>
+              {closable && (
+                <span
+                  role="button" tabIndex={0} aria-label={`Close ${g.title}`}
+                  onClick={(e) => { e.stopPropagation(); closeTerminalGroup(g.id); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); closeTerminalGroup(g.id); } }}
+                  className="flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-60"
+                  data-active={active}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
             </button>
           );
         })}
 
-        {fileTabs.map((tab) => (
+        {ctxFileTabs.map((tab) => (
           <FileEditorTab
             key={tab.id}
             tab={tab}
@@ -285,6 +243,22 @@ export function EditorTabs() {
       </div>
 
       <div className="flex items-center gap-px pr-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="New terminal"
+              data-testid="editor-tabs-add-terminal"
+              disabled={!contextWorkspaceId}
+              onClick={() => contextWorkspaceId && addTerminalGroup(contextWorkspaceId)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground disabled:opacity-40"
+            >
+              <TerminalSquare className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">New terminal in workspace</TooltipContent>
+        </Tooltip>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -318,26 +292,6 @@ export function EditorTabs() {
           </Tooltip>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>New</DropdownMenuLabel>
-            {shellKinds.length === 0 ? (
-              <DropdownMenuItem
-                onClick={() => onNewTerminal()}
-                data-testid="editor-tabs-open-terminal-tab"
-              >
-                <TerminalSquare className="h-3.5 w-3.5" />
-                <span className="flex-1">Terminal</span>
-              </DropdownMenuItem>
-            ) : (
-              shellKinds.map((kind) => (
-                <DropdownMenuItem
-                  key={kind}
-                  onClick={() => onNewTerminal(kind)}
-                  data-testid={`editor-tabs-open-terminal-${kind}`}
-                >
-                  <TerminalSquare className="h-3.5 w-3.5" />
-                  <span className="flex-1">{SHELL_LABELS[kind]}</span>
-                </DropdownMenuItem>
-              ))
-            )}
             <DropdownMenuItem
               onClick={onOpenPanelTerminal}
               data-testid="editor-tabs-open-terminal"

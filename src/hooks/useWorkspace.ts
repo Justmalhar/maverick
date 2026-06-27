@@ -10,7 +10,7 @@ import {
   bootstrapStatus,
 } from "@/lib/tauri";
 import { brandFor } from "@/lib/backend-brand";
-import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
+import { killTerminalGroupLeaves } from "@/components/editor/terminal/leaf-registry";
 import type { Backend } from "@/lib/ipc";
 
 export function useWorkspace() {
@@ -43,10 +43,12 @@ export function useWorkspace() {
 
   const destroy = useCallback(
     async (workspaceId: string) => {
-      // Kill the workspace's PTYs first — their cwd is the worktree that
+      // Kill every terminal group's PTYs first — their cwd is the worktree that
       // workspaceDestroy is about to remove. ptyKill had zero callers before,
       // so every destroyed workspace leaked an OS process + reader thread.
-      killWorkspaceLeaves(workspaceId);
+      for (const g of useWorkbench.getState().terminalGroups.filter((gr) => gr.workspaceId === workspaceId)) {
+        killTerminalGroupLeaves(g.id);
+      }
       await workspaceDestroy(workspaceId);
       removeWorkspace(workspaceId);
     },

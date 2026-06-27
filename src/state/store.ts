@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { disposeWorkspaceRunners } from "@/lib/script-runner";
-import { killWorkspaceLeaves } from "@/components/editor/terminal/leaf-registry";
+import { killTerminalGroupLeaves } from "@/components/editor/terminal/leaf-registry";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import type {
   Project,
@@ -28,11 +28,10 @@ interface PanelLayout {
 
 export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor" | "git";
 
-export interface TerminalTab {
+export interface TerminalGroup {
   id: string;
-  cwd: string;
+  workspaceId: string;
   title: string;
-  ptyId: string;
 }
 
 export type FileTabKind = "file" | "diff";
@@ -45,6 +44,8 @@ export interface FileTab {
   path: string;
   /** Worktree root — diff context and breadcrumb base. */
   worktreePath: string;
+  /** The workspace (worktree) this tab belongs to; null when no workspace matches. */
+  workspaceId: string | null;
   /** "Open With…" override; undefined = registry default. */
   viewerId?: string;
   /** Italic preview tab — reused by the next single-click open. */
@@ -79,10 +80,6 @@ interface WorkbenchState {
   systemTabs: SystemTabId[];
   activeSystemTab: SystemTabId | null;
 
-  // Terminal tabs (standalone PTY tabs)
-  terminalTabs: TerminalTab[];
-  activeTerminalTabId: string | null;
-
   // File tabs (real editor tabs with VSCode preview-tab semantics)
   fileTabs: FileTab[];
   activeFileTabId: string | null;
@@ -94,6 +91,9 @@ interface WorkbenchState {
   // Most-recently-used first. Drives LRU render suspension of editor groups.
   workspaceAccessOrder: string[];
   splitTrees: Record<string, SplitNode>;
+  // Terminal groups per workspace (primary group id === workspace.id).
+  terminalGroups: TerminalGroup[];
+  activeGroupByWorkspace: Record<string, string>;
   // Single-shot CLI launch directives, keyed by workspace id. Set when a
   // workspace is opened for an agent (kanban / preset); consumed once by the
   // primary terminal leaf when its shell PTY is ready, then deleted.
@@ -136,6 +136,9 @@ interface WorkbenchState {
   clearPendingAiRename: (id: string) => void;
   setActiveWorkspace: (id: string | null) => void;
   setSplitTree: (workspaceId: string, tree: SplitNode) => void;
+  addTerminalGroup: (workspaceId: string) => string;
+  closeTerminalGroup: (groupId: string) => void;
+  setActiveGroup: (workspaceId: string, groupId: string) => void;
   /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
   setLaunchSpec: (workspaceId: string, spec: LaunchSpec) => void;
   setAgentLaunchSpec: (workspaceId: string, spec: AgentRunSpec) => void;
@@ -180,13 +183,6 @@ interface WorkbenchState {
   closeSystemTab: (id: SystemTabId) => void;
   setActiveSystemTab: (id: SystemTabId | null) => void;
 
-  // Terminal tabs
-  addTerminalTab: (tab: TerminalTab) => void;
-  removeTerminalTab: (id: string) => void;
-  setActiveTerminalTab: (id: string | null) => void;
-  /** Bind a freshly-spawned PTY to an optimistically-added terminal tab. */
-  setTerminalTabPty: (id: string, ptyId: string) => void;
-
   // File tab mutators
   openFileTab: (input: OpenFileTabInput) => void;
   setActiveFileTab: (id: string | null) => void;
@@ -199,6 +195,12 @@ interface WorkbenchState {
   setFileTabViewed: (id: string, viewed: boolean) => void;
 }
 
+const primaryGroup = (workspaceId: string): TerminalGroup => ({
+  id: workspaceId,
+  workspaceId,
+  title: "Terminal 1",
+});
+
 export const useWorkbench = create<WorkbenchState>()(
   subscribeWithSelector((set, get) => ({
     projects: [],
@@ -208,14 +210,14 @@ export const useWorkbench = create<WorkbenchState>()(
     editingSkill: null,
     systemTabs: [],
     activeSystemTab: null,
-    terminalTabs: [],
-    activeTerminalTabId: null,
     fileTabs: [],
     activeFileTabId: null,
     fileTabAccessOrder: [],
     activeWorkspaceId: null,
     workspaceAccessOrder: [],
     splitTrees: {},
+    terminalGroups: [],
+    activeGroupByWorkspace: {},
     launchSpecs: {},
     agentLaunchSpecs: {},
     pendingAiRename: [],
@@ -243,12 +245,23 @@ export const useWorkbench = create<WorkbenchState>()(
     setProjects: (projects) => set({ projects }),
     addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
     setWorkspaces: (workspaces) =>
-      set((s) => ({
-        workspaces,
-        workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) =>
-          workspaces.some((w) => w.id === wid)
-        ),
-      })),
+      set((s) => {
+        const ids = new Set(workspaces.map((w) => w.id));
+        const kept = s.terminalGroups.filter((g) => ids.has(g.workspaceId));
+        const groups = [...kept];
+        const active: Record<string, string> = {};
+        for (const w of workspaces) {
+          if (!groups.some((g) => g.id === w.id)) groups.push(primaryGroup(w.id));
+          const existing = s.activeGroupByWorkspace[w.id];
+          active[w.id] = existing && groups.some((g) => g.id === existing) ? existing : w.id;
+        }
+        return {
+          workspaces,
+          workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => ids.has(wid)),
+          terminalGroups: groups,
+          activeGroupByWorkspace: active,
+        };
+      }),
     addWorkspace: (workspace) =>
       set((s) => ({
         workspaces: [...s.workspaces, workspace],
@@ -256,22 +269,37 @@ export const useWorkbench = create<WorkbenchState>()(
           workspace.id,
           ...s.workspaceAccessOrder.filter((wid) => wid !== workspace.id),
         ],
+        terminalGroups: s.terminalGroups.some((g) => g.id === workspace.id)
+          ? s.terminalGroups
+          : [...s.terminalGroups, primaryGroup(workspace.id)],
+        activeGroupByWorkspace: {
+          ...s.activeGroupByWorkspace,
+          [workspace.id]: s.activeGroupByWorkspace[workspace.id] ?? workspace.id,
+        },
       })),
     removeWorkspace: (id) => {
       // Canonical teardown for BOTH close paths (tab X / ⌘W go through here, not
       // just the Archive action): kill the Run/Setup processes AND every per-leaf
       // shell PTY, so closing a tab can't orphan a dev server or a login shell.
       disposeWorkspaceRunners(id);
-      killWorkspaceLeaves(id);
+      for (const g of get().terminalGroups.filter((gr) => gr.workspaceId === id)) {
+        killTerminalGroupLeaves(g.id);
+      }
       useAgentStatusStore.getState().clearStatus(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
         const { [id]: _aspec, ...agentLaunchSpecs } = s.agentLaunchSpecs;
-        const { [id]: _tree, ...splitTrees } = s.splitTrees;
+        const groupIds = s.terminalGroups.filter((g) => g.workspaceId === id).map((g) => g.id);
+        const splitTrees = Object.fromEntries(
+          Object.entries(s.splitTrees).filter(([k]) => !groupIds.includes(k))
+        );
+        const { [id]: _ag, ...activeGroupByWorkspace } = s.activeGroupByWorkspace;
         return {
           workspaces: s.workspaces.filter((w) => w.id !== id),
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
           workspaceAccessOrder: s.workspaceAccessOrder.filter((wid) => wid !== id),
+          terminalGroups: s.terminalGroups.filter((g) => g.workspaceId !== id),
+          activeGroupByWorkspace,
           launchSpecs,
           agentLaunchSpecs,
           splitTrees,
@@ -295,10 +323,8 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         activeWorkspaceId: id,
         // Selecting a workspace switches the editor away from any system tab or
-        // standalone terminal tab, mirroring how opening one clears the active
-        // workspace.
+        // file tab, mirroring how opening one clears the active workspace.
         activeSystemTab: id ? null : s.activeSystemTab,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         activeFileTabId: id ? null : s.activeFileTabId,
         workspaceAccessOrder: id
           ? [id, ...s.workspaceAccessOrder.filter((wid) => wid !== id)]
@@ -306,6 +332,37 @@ export const useWorkbench = create<WorkbenchState>()(
       })),
     setSplitTree: (workspaceId, tree) =>
       set((s) => ({ splitTrees: { ...s.splitTrees, [workspaceId]: tree } })),
+    addTerminalGroup: (workspaceId) => {
+      const id = `term-${crypto.randomUUID()}`;
+      set((s) => {
+        const count = s.terminalGroups.filter((g) => g.workspaceId === workspaceId).length;
+        return {
+          terminalGroups: [...s.terminalGroups, { id, workspaceId, title: `Terminal ${count + 1}` }],
+          activeGroupByWorkspace: { ...s.activeGroupByWorkspace, [workspaceId]: id },
+        };
+      });
+      return id;
+    },
+    closeTerminalGroup: (groupId) => {
+      const group = get().terminalGroups.find((g) => g.id === groupId);
+      if (!group || group.id === group.workspaceId) return;   // primary not closable
+      killTerminalGroupLeaves(groupId);
+      set((s) => {
+        const siblings = s.terminalGroups.filter((g) => g.workspaceId === group.workspaceId && g.id !== groupId);
+        const fallback = siblings[siblings.length - 1]?.id ?? group.workspaceId;
+        const { [groupId]: _tree, ...splitTrees } = s.splitTrees;
+        return {
+          terminalGroups: s.terminalGroups.filter((g) => g.id !== groupId),
+          splitTrees,
+          activeGroupByWorkspace:
+            s.activeGroupByWorkspace[group.workspaceId] === groupId
+              ? { ...s.activeGroupByWorkspace, [group.workspaceId]: fallback }
+              : s.activeGroupByWorkspace,
+        };
+      });
+    },
+    setActiveGroup: (workspaceId, groupId) =>
+      set((s) => ({ activeGroupByWorkspace: { ...s.activeGroupByWorkspace, [workspaceId]: groupId } })),
     setLaunchSpec: (workspaceId, spec) =>
       set((s) => ({ launchSpecs: { ...s.launchSpecs, [workspaceId]: spec } })),
     consumeLaunchSpec: (workspaceId) => {
@@ -395,7 +452,6 @@ export const useWorkbench = create<WorkbenchState>()(
         systemTabs: s.systemTabs.includes(id) ? s.systemTabs : [...s.systemTabs, id],
         activeSystemTab: id,
         activeWorkspaceId: null,
-        activeTerminalTabId: null,
         activeFileTabId: null,
       })),
     closeSystemTab: (id) =>
@@ -407,31 +463,7 @@ export const useWorkbench = create<WorkbenchState>()(
       set((s) => ({
         activeSystemTab: id,
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         activeFileTabId: id ? null : s.activeFileTabId,
-      })),
-
-    addTerminalTab: (tab) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.some((t) => t.id === tab.id)
-          ? s.terminalTabs
-          : [...s.terminalTabs, tab],
-      })),
-    setTerminalTabPty: (id, ptyId) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.map((t) => (t.id === id ? { ...t, ptyId } : t)),
-      })),
-    removeTerminalTab: (id) =>
-      set((s) => ({
-        terminalTabs: s.terminalTabs.filter((t) => t.id !== id),
-        activeTerminalTabId: s.activeTerminalTabId === id ? null : s.activeTerminalTabId,
-      })),
-    setActiveTerminalTab: (id) =>
-      set(() => ({
-        activeTerminalTabId: id,
-        activeWorkspaceId: null,
-        activeSystemTab: null,
-        activeFileTabId: null,
       })),
 
     openFileTab: (input) =>
@@ -447,15 +479,16 @@ export const useWorkbench = create<WorkbenchState>()(
             activeFileTabId: id,
             activeWorkspaceId: null,
             activeSystemTab: null,
-            activeTerminalTabId: null,
             fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
           };
         }
+        const workspaceId = s.workspaces.find((w) => w.worktreePath === input.worktreePath)?.id ?? null;
         const tab: FileTab = {
           id,
           kind: input.kind,
           path: input.path,
           worktreePath: input.worktreePath,
+          workspaceId,
           viewerId: input.viewerId,
           preview: input.preview,
           dirty: false,
@@ -474,7 +507,6 @@ export const useWorkbench = create<WorkbenchState>()(
           activeFileTabId: id,
           activeWorkspaceId: null,
           activeSystemTab: null,
-          activeTerminalTabId: null,
           fileTabAccessOrder: [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)],
         };
       }),
@@ -484,7 +516,6 @@ export const useWorkbench = create<WorkbenchState>()(
         activeFileTabId: id,
         activeWorkspaceId: id ? null : s.activeWorkspaceId,
         activeSystemTab: id ? null : s.activeSystemTab,
-        activeTerminalTabId: id ? null : s.activeTerminalTabId,
         fileTabAccessOrder: id
           ? [id, ...s.fileTabAccessOrder.filter((fid) => fid !== id)]
           : s.fileTabAccessOrder,
