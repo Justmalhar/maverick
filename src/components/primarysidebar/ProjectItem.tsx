@@ -79,7 +79,7 @@ export function ProjectItem({ project, onAddWorkspace, onSettings }: Props) {
           <span className="truncate text-xs font-medium text-foreground">{project.name}</span>
         </button>
 
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <ActionButton
             icon={Settings2}
             label="Project settings"
