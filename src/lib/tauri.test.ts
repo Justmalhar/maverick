@@ -19,6 +19,12 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("project_list");
   });
 
+  it("projectDestroy", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
+    await api.projectDestroy("proj_1");
+    expect(invoke).toHaveBeenLastCalledWith("project_destroy", { projectId: "proj_1" });
+  });
+
   it("workspace lifecycle", async () => {
     await api.workspaceList("p1");
     expect(invoke).toHaveBeenLastCalledWith("workspace_list", { projectId: "p1" });
