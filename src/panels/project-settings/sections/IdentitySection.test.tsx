@@ -5,6 +5,11 @@ import { renderWithProviders, screen } from "@/test/utils";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import IdentitySection from "./IdentitySection";
 
+const removeProject = vi.fn();
+vi.mock("@/hooks/useWorkspace", () => ({
+  useWorkspace: () => ({ removeProject }),
+}));
+
 const STUB = {
   name: "demo",
   rootPath: "/p/demo",
@@ -16,6 +21,7 @@ const STUB = {
 };
 
 beforeEach(() => {
+  removeProject.mockReset();
   vi.mocked(invoke).mockRejectedValue(new Error("noop"));
   useProjectSettingsStore.setState({
     data: STUB,
@@ -40,5 +46,20 @@ describe("IdentitySection", () => {
     await userEvent.type(input, "alpha");
     await userEvent.tab();
     expect(useProjectSettingsStore.getState().dirty.name).toBe("alpha");
+  });
+
+  it("confirm dialog removes the project", async () => {
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    // Dialog confirm button (distinct from the trigger).
+    await userEvent.click(screen.getByTestId("confirm-remove-project"));
+    expect(removeProject).toHaveBeenCalledWith("p1");
+  });
+
+  it("cancel does not remove the project", async () => {
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    expect(removeProject).not.toHaveBeenCalled();
   });
 });

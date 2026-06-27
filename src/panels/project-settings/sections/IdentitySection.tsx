@@ -1,16 +1,37 @@
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { SettingsGroup } from "@/panels/settings/primitives/SettingsGroup";
 import { SettingsRow } from "@/panels/settings/primitives/SettingsRow";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { useWorkbench } from "@/state/store";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function IdentitySection() {
   const data = useProjectSettingsStore((s) => s.data);
+  const projectId = useProjectSettingsStore((s) => s.projectId);
   const patch = useProjectSettingsStore((s) => s.patch);
   const flush = useProjectSettingsStore((s) => s.flush);
+  const workspaceCount = useWorkbench(
+    (s) => s.workspaces.filter((w) => w.projectId === projectId).length,
+  );
+  const { removeProject } = useWorkspace();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!data) return null;
   const handleBlur = () => {
     void flush();
+  };
+  const handleRemove = () => {
+    if (projectId) void removeProject(projectId);
+    setConfirmOpen(false);
   };
 
   return (
@@ -42,6 +63,50 @@ export default function IdentitySection() {
           }
         />
       </SettingsGroup>
+
+      <SettingsGroup
+        title="Danger Zone"
+        description="Remove this project from Maverick. Your source folder is never deleted."
+      >
+        <SettingsRow
+          title="Remove project"
+          description="Removes the project, its workspaces, and their worktrees from Maverick. The original source folder stays on disk."
+          control={
+            <Button
+              variant="destructive"
+              size="sm"
+              data-testid="open-remove-project"
+              onClick={() => setConfirmOpen(true)}
+            >
+              Remove project
+            </Button>
+          }
+        />
+      </SettingsGroup>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{`Remove "${data.name}"?`}</DialogTitle>
+            <DialogDescription>
+              {`This removes the project and its ${workspaceCount} workspace${workspaceCount === 1 ? "" : "s"} (and their worktrees) from Maverick. Your source folder stays on disk — only Maverick's worktrees and records are removed.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              data-testid="confirm-remove-project"
+              onClick={handleRemove}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
