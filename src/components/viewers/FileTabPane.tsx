@@ -1,3 +1,4 @@
+/* v8 ignore next — import hoisted by ESM; V8 never records its execution range */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useWorkbench, type FileTab } from "@/state/store";
 import { viewerRegistry } from "@/lib/viewers";

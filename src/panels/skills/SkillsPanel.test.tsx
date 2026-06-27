@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { invoke } from "@tauri-apps/api/core";
+import * as framerMotion from "framer-motion";
 import SkillsPanel from "./SkillsPanel";
 import { useWorkbench } from "@/state/store";
 
@@ -75,5 +76,37 @@ describe("SkillsPanel", () => {
     await userEvent.click(await screen.findByTestId("skills-panel-row-refactor"));
     await waitFor(() => expect(useWorkbench.getState().systemTabs).toContain("skill-editor"));
     expect(useWorkbench.getState().editingSkill?.name).toBe("refactor");
+  });
+
+  it("skill row without a description omits the description paragraph", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { name: "nodesc", description: "", prompt: "p" },
+    ]);
+    renderWithProviders(<SkillsPanel />);
+    await waitFor(() => expect(screen.getByTestId("skills-panel-row-nodesc")).toBeInTheDocument());
+    // When description is empty the second <p> element is not rendered.
+    const row = screen.getByTestId("skills-panel-row-nodesc");
+    const paras = row.querySelectorAll("p");
+    // Only the name paragraph, not the description paragraph.
+    expect(paras).toHaveLength(1);
+  });
+
+  it("skill row with a description renders it", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { name: "withdesc", description: "Does something useful", prompt: "p" },
+    ]);
+    renderWithProviders(<SkillsPanel />);
+    await waitFor(() => expect(screen.getByText("Does something useful")).toBeInTheDocument());
+  });
+
+  it("renders with reduced-motion preference (animate undefined branch)", async () => {
+    const spy = vi.spyOn(framerMotion, "useReducedMotion").mockReturnValue(true);
+    vi.mocked(invoke).mockResolvedValue([]);
+    try {
+      renderWithProviders(<SkillsPanel />);
+      expect(screen.getByTestId("skills-panel")).toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

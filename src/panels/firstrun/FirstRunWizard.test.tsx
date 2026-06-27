@@ -101,4 +101,11 @@ describe("FirstRunWizard", () => {
     await userEvent.click(skip);
     expect(complete).toHaveBeenCalled();
   });
+
+  it("renders step 4 (InstructionsStep) correctly", () => {
+    withController({ step: 4 });
+    renderWizard();
+    expect(screen.getByTestId("firstrun-wizard")).toBeInTheDocument();
+    expect(screen.getByTestId("firstrun-step-indicator")).toHaveTextContent("Step 4 / 5");
+  });
 });

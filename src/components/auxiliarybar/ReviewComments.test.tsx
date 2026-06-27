@@ -58,6 +58,19 @@ describe("ReviewComments", () => {
     expect(useReviewComments.getState().comments[0].body).toBe("new body");
   });
 
+  it("cancels editing a comment without saving changes (cancel button, line 190)", async () => {
+    useReviewComments.getState().addComment({ workspaceId: "w1", file: "src/a.ts", line: 5, side: "new", body: "original" });
+    renderWithProviders(<ReviewComments workspaceId="w1" files={FILES} />);
+    const item = screen.getByTestId("review-comment-item-" + commentId());
+    await userEvent.click(within(item).getByTestId("review-comment-edit"));
+    const input = within(item).getByTestId("review-comment-edit-input");
+    await userEvent.clear(input);
+    await userEvent.type(input, "changed");
+    // Cancel — the body must revert to the original
+    await userEvent.click(within(item).getByRole("button", { name: /cancel edit/i }));
+    expect(useReviewComments.getState().comments[0].body).toBe("original");
+  });
+
   it("shows nothing to comment on when there are no changed files and no comments", () => {
     renderWithProviders(<ReviewComments workspaceId="w1" files={[]} />);
     expect(screen.getByTestId("review-comments-empty")).toBeInTheDocument();
