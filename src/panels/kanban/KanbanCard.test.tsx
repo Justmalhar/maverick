@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
+import { fireEvent, renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanCard from "./KanbanCard";
 import { useWorkbench } from "@/state/store";
 import { makeBackend, makeKanbanTask, makeProject, makeWorkspace } from "@/test/fixtures";
@@ -325,5 +325,65 @@ describe("KanbanCard", () => {
       />
     );
     expect(screen.queryByTestId("kanban-start")).not.toBeInTheDocument();
+  });
+
+  it("renders no actions menu when onDelete is not provided", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "t1" })} index={0} onEdit={vi.fn()} />
+    );
+    expect(screen.queryByTestId("kanban-card-menu")).not.toBeInTheDocument();
+  });
+
+  it("renders the three-dot actions menu when onDelete is provided", () => {
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "t1" })} index={0} onEdit={vi.fn()} onDelete={vi.fn()} />
+    );
+    expect(screen.getByTestId("kanban-card-menu")).toBeInTheDocument();
+  });
+
+  it("three-dot menu Delete calls onDelete with the task id after confirm", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "del-1" })} index={0} onEdit={vi.fn()} onDelete={onDelete} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-card-menu"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-delete"));
+    expect(onDelete).toHaveBeenCalledWith("del-1");
+    confirmSpy.mockRestore();
+  });
+
+  it("three-dot menu Delete does nothing when confirm is dismissed", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "del-2" })} index={0} onEdit={vi.fn()} onDelete={onDelete} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-card-menu"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-delete"));
+    expect(onDelete).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("three-dot menu Edit item calls onEdit", async () => {
+    const onEdit = vi.fn();
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "t1" })} index={0} onEdit={onEdit} onDelete={vi.fn()} />
+    );
+    await userEvent.click(screen.getByTestId("kanban-card-menu"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-edit"));
+    expect(onEdit).toHaveBeenCalled();
+  });
+
+  it("right-click opens the context menu and Delete calls onDelete", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "ctx-1" })} index={0} onEdit={vi.fn()} onDelete={onDelete} />
+    );
+    fireEvent.contextMenu(screen.getByTestId("kanban-card"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-delete"));
+    expect(onDelete).toHaveBeenCalledWith("ctx-1");
+    confirmSpy.mockRestore();
   });
 });
