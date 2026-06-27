@@ -386,4 +386,14 @@ describe("KanbanCard", () => {
     expect(onDelete).toHaveBeenCalledWith("ctx-1");
     confirmSpy.mockRestore();
   });
+
+  it("right-click context menu Edit item calls onEdit", async () => {
+    const onEdit = vi.fn();
+    renderWithProviders(
+      <KanbanCard task={makeKanbanTask({ id: "ctx-edit" })} index={0} onEdit={onEdit} onDelete={vi.fn()} />
+    );
+    fireEvent.contextMenu(screen.getByTestId("kanban-card"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-edit"));
+    expect(onEdit).toHaveBeenCalled();
+  });
 });

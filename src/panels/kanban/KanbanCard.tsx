@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Draggable } from "@hello-pangea/dnd";
 import { formatDistanceToNow } from "date-fns";
-import { Eye, GitPullRequest, Loader2, MoreVertical, Pencil, Play, Trash2 } from "lucide-react";
+import { Eye, GitPullRequest, Loader2, MoreVertical, Pencil, Play, Trash2, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,7 +110,7 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
   const menuActions: {
     key: string;
     label: string;
-    icon: typeof Pencil;
+    icon: LucideIcon;
     run: () => void;
     destructive?: boolean;
   }[] = [
