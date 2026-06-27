@@ -51,4 +51,22 @@ describe("KanbanColumn", () => {
     );
     expect(screen.getByText("Todo")).toBeInTheDocument();
   });
+
+  it("forwards onDelete to cards so a card delete reaches the handler", async () => {
+    const onDelete = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(
+      <KanbanColumn
+        status="todo"
+        tasks={[makeKanbanTask({ id: "col-del", status: "todo" })]}
+        diffStatCache={emptyCache}
+        onEdit={vi.fn()}
+        onDelete={onDelete}
+      />
+    );
+    await userEvent.click(screen.getByTestId("kanban-card-menu"));
+    await userEvent.click(await screen.findByTestId("kanban-menu-delete"));
+    expect(onDelete).toHaveBeenCalledWith("col-del");
+    confirmSpy.mockRestore();
+  });
 });
