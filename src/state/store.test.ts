@@ -339,6 +339,7 @@ describe("workbench store", () => {
     expect(useWorkbench.getState().projects.map((p) => p.id)).toEqual(["p-keep"]);
     expect(useWorkbench.getState().workspaces.map((w) => w.id)).toEqual(["w-c"]);
     expect(useWorkbench.getState().projectSettings.open).toBe(false);
+    expect(useWorkbench.getState().projectSettings.projectId).toBeNull();
   });
 
   it("removeProject leaves project settings open when a different project is removed", () => {

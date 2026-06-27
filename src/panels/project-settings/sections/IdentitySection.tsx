@@ -13,6 +13,7 @@ import { SettingsRow } from "@/panels/settings/primitives/SettingsRow";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { notifySend } from "@/lib/tauri";
 
 export default function IdentitySection() {
   const data = useProjectSettingsStore((s) => s.data);
@@ -24,15 +25,26 @@ export default function IdentitySection() {
   );
   const { removeProject } = useWorkspace();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   if (!data) return null;
   const handleBlur = () => {
     void flush();
   };
-  const handleRemove = () => {
-    if (projectId) void removeProject(projectId);
-    setConfirmOpen(false);
-  };
+  async function handleRemove() {
+    if (!projectId || removing) return;
+    setRemoving(true);
+    try {
+      await removeProject(projectId);
+      // On success the store closes the panel and this component unmounts — no state reset.
+    } catch (err) {
+      setRemoving(false);
+      setConfirmOpen(false);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("remove project failed", err);
+      void notifySend("Remove project failed", `${data.name}: ${message}`, undefined, "error").catch(() => {});
+    }
+  }
 
   return (
     <div data-testid="project-identity" className="space-y-5">
@@ -75,7 +87,6 @@ export default function IdentitySection() {
             <Button
               variant="destructive"
               size="sm"
-              data-testid="open-remove-project"
               onClick={() => setConfirmOpen(true)}
             >
               Remove project
@@ -100,7 +111,8 @@ export default function IdentitySection() {
               variant="destructive"
               size="sm"
               data-testid="confirm-remove-project"
-              onClick={handleRemove}
+              disabled={removing}
+              onClick={() => void handleRemove()}
             >
               Remove
             </Button>

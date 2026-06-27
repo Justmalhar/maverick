@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen } from "@/test/utils";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
@@ -89,6 +90,34 @@ describe("IdentitySection", () => {
     await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
     await userEvent.click(screen.getByTestId("confirm-remove-project"));
     expect(removeProject).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error notification when removeProject rejects with an Error", async () => {
+    removeProject.mockRejectedValueOnce(new Error("boom"));
+    vi.mocked(invoke).mockResolvedValueOnce({ ok: true }); // allow notify_send to resolve
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    await userEvent.click(screen.getByTestId("confirm-remove-project"));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "notify_send",
+        expect.objectContaining({ type: "error" }),
+      );
+    });
+  });
+
+  it("surfaces an error notification when removeProject rejects with a non-Error value", async () => {
+    removeProject.mockRejectedValueOnce("plain string error");
+    vi.mocked(invoke).mockResolvedValueOnce({ ok: true }); // allow notify_send to resolve
+    renderWithProviders(<IdentitySection />);
+    await userEvent.click(screen.getByRole("button", { name: /remove project/i }));
+    await userEvent.click(screen.getByTestId("confirm-remove-project"));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "notify_send",
+        expect.objectContaining({ type: "error" }),
+      );
+    });
   });
 
   it("uses the singular noun when the project has exactly one workspace", async () => {

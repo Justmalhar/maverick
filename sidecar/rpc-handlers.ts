@@ -449,6 +449,7 @@ export class RpcHandlers {
     if (project) {
       const settings = this.projectSettings.read(project.path);
       if (settings.scripts.archive.trim() !== "") {
+            // cmd.exe /c on Windows, /bin/sh -c on POSIX — /bin/sh doesn't exist on Windows.
         const [archiveCmd, ...archiveArgs] = shellCommandArgs(settings.scripts.archive);
         const { proc, exited } = this.process.spawnOnceHandle({
           cwd: ws.worktreePath,
@@ -458,7 +459,7 @@ export class RpcHandlers {
         const archive = exited
           .then((code) => ({ code }))
           .catch((err) => {
-            console.error(`[workspace.destroy] archive failed:`, err);
+            console.error(`[teardownWorkspace] archive failed:`, err);
             return { code: -1 };
           });
         let timer: ReturnType<typeof setTimeout> | undefined;
