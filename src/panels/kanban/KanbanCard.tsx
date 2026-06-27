@@ -102,9 +102,7 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
   };
 
   const confirmDelete = () => {
-    if (onDelete && window.confirm("Delete this task? This cannot be undone.")) {
-      onDelete(task.id);
-    }
+    if (window.confirm("Delete this task? This cannot be undone.")) onDelete!(task.id);
   };
 
   const menuActions: {
