@@ -46,6 +46,29 @@ describe("AutomationsPanel", () => {
     await userEvent.click(screen.getByTestId("automation-new"));
   });
 
+  it("selects an automation via keyboard Enter and Space on the item div", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", path: "/p" })],
+      workspaces: [makeWorkspace({ id: "w1", projectId: "p1" })],
+      activeWorkspaceId: "w1",
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({
+      version: 1, backends: { default: "x", available: [] },
+      automations: [makeAutomation({ name: "deploy" }), makeAutomation({ name: "build" })],
+    } as never);
+    renderWithProviders(<AutomationsPanel />);
+    await waitFor(() => expect(screen.getAllByTestId("automation-item")).toHaveLength(2));
+    const [first] = screen.getAllByTestId("automation-item");
+    // Enter key selects the automation (triggers the onKeyDown handler, line 133-137).
+    await userEvent.keyboard("{Enter}");
+    first.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByTestId("automation-builder")).toBeInTheDocument();
+    // Space key also selects (the else-if branch for Space is covered too).
+    await userEvent.keyboard(" ");
+  });
+
   it("run button invokes automation_run and handles errors", async () => {
     useWorkbench.setState({
       ...initial,

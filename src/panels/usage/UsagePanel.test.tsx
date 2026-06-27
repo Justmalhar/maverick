@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
+import * as framerMotion from "framer-motion";
 import UsagePanel from "./UsagePanel";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
@@ -216,5 +217,17 @@ describe("UsagePanel", () => {
   it("renders tips section", () => {
     renderWithProviders(<UsagePanel />);
     expect(screen.getByText("Tips")).toBeInTheDocument();
+  });
+
+  it("renders with reduced-motion preference (animate undefined branch)", () => {
+    // useReducedMotion returns true → the motion.div gets `animate={undefined}` instead of
+    // the normal object, exercising the `reduce ? undefined : { opacity: 1, y: 0 }` branch.
+    const spy = vi.spyOn(framerMotion, "useReducedMotion").mockReturnValue(true);
+    try {
+      renderWithProviders(<UsagePanel />);
+      expect(screen.getByTestId("usage-panel")).toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

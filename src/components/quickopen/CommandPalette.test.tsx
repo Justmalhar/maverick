@@ -53,6 +53,7 @@ describe("CommandPalette", () => {
   // preview.open command removed — files open as editor file tabs (B4).
 
   const cases: Array<[string, (s: ReturnType<typeof useWorkbench.getState>) => unknown]> = [
+    ["view.gitPanel", (s) => expect(s.systemTabs).toContain("git")],
     ["view.kanban", (s) => expect(s.systemTabs).toContain("kanban")],
     ["view.browser", (s) => expect(s.systemTabs).toContain("browser")],
     ["view.automations", (s) => expect(s.systemTabs).toContain("automations")],
