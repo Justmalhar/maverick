@@ -121,12 +121,9 @@ describe("useWorkspace", () => {
 
   it("removeProject kills child-workspace PTYs, calls projectDestroy, and clears the project", async () => {
     leafTesting.leafPtyCache.set("w-x-1", "pty-x");
-    useWorkbench.setState({
-      ...initial,
-      projects: [makeProject({ id: "p-x" }), makeProject({ id: "p-y" })],
-      workspaces: [makeWorkspace({ id: "w-x", projectId: "p-x" })],
-      activeWorkspaceId: null,
-    });
+    useWorkbench.getState().setProjects([makeProject({ id: "p-x" }), makeProject({ id: "p-y" })]);
+    // setWorkspaces creates the workspace's primary terminal group (id === "w-x").
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w-x", projectId: "p-x" })]);
     vi.mocked(invoke).mockResolvedValue(undefined as never);
     const { result } = renderHook(() => useWorkspace());
     await act(async () => {

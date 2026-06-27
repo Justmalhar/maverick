@@ -61,17 +61,11 @@ export function useWorkspace() {
     async (projectId: string) => {
       // Kill every child workspace's terminal PTYs first — their cwd is a
       // worktree project.destroy is about to remove. Mirrors `destroy`.
-      const childWorkspaceIds = useWorkbench
-        .getState()
-        .workspaces.filter((w) => w.projectId === projectId)
-        .map((w) => w.id);
-      for (const wsId of childWorkspaceIds) {
-        for (const g of useWorkbench.getState().terminalGroups.filter((gr) => gr.workspaceId === wsId)) {
-          killTerminalGroupLeaves(g.id);
-        }
-        // Primary group id === workspace id; kill its leaves directly so PTYs
-        // are evicted even when the store hasn't yet materialised the group entry.
-        killTerminalGroupLeaves(wsId);
+      const childIds = new Set(
+        useWorkbench.getState().workspaces.filter((w) => w.projectId === projectId).map((w) => w.id)
+      );
+      for (const g of useWorkbench.getState().terminalGroups.filter((gr) => childIds.has(gr.workspaceId))) {
+        killTerminalGroupLeaves(g.id);
       }
       await projectDestroy(projectId);
       removeProjectFromStore(projectId);
