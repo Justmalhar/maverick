@@ -11,7 +11,6 @@ import type {
   Skill,
   SplitNode,
   LaunchSpec,
-  AgentRunSpec,
   AuxiliaryView,
 } from "@/lib/ipc";
 
@@ -26,7 +25,7 @@ interface PanelLayout {
   auxiliaryView: AuxiliaryView;
 }
 
-export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "automations" | "mcps" | "skills" | "skill-editor" | "git";
+export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "mcps" | "skills" | "skill-editor" | "git";
 
 export interface TerminalGroup {
   id: string;
@@ -98,9 +97,6 @@ interface WorkbenchState {
   // workspace is opened for an agent (kanban / preset); consumed once by the
   // primary terminal leaf when its shell PTY is ready, then deleted.
   launchSpecs: Record<string, LaunchSpec>;
-  // Staged headless-agent runs (the "run in background" launch surface), consumed
-  // once by useAgentRun — the headless analogue of launchSpecs for the terminal.
-  agentLaunchSpecs: Record<string, AgentRunSpec>;
 
   // Layout
   layout: PanelLayout;
@@ -142,8 +138,6 @@ interface WorkbenchState {
   setActiveGroup: (workspaceId: string, groupId: string) => void;
   /** Stage a one-shot CLI launch for a workspace's primary terminal leaf. */
   setLaunchSpec: (workspaceId: string, spec: LaunchSpec) => void;
-  setAgentLaunchSpec: (workspaceId: string, spec: AgentRunSpec) => void;
-  consumeAgentLaunchSpec: (workspaceId: string) => AgentRunSpec | null;
   /** Return and remove a workspace's launch spec (single-shot); null if none. */
   consumeLaunchSpec: (workspaceId: string) => LaunchSpec | null;
   setBackends: (backends: Backend[]) => void;
@@ -155,7 +149,6 @@ interface WorkbenchState {
   // Layout actions
   showPrimarySideBar: () => void;
   openSourceControl: () => void;
-  openAgentOutput: () => void;
   setAuxiliaryView: (view: AuxiliaryView) => void;
   setActivitybarCollapsed: (collapsed: boolean) => void;
   toggleActivitybarCollapsed: () => void;
@@ -220,7 +213,6 @@ export const useWorkbench = create<WorkbenchState>()(
     terminalGroups: [],
     activeGroupByWorkspace: {},
     launchSpecs: {},
-    agentLaunchSpecs: {},
     pendingAiRename: [],
 
     layout: {
@@ -289,7 +281,6 @@ export const useWorkbench = create<WorkbenchState>()(
       useAgentStatusStore.getState().clearStatus(id);
       set((s) => {
         const { [id]: _spec, ...launchSpecs } = s.launchSpecs;
-        const { [id]: _aspec, ...agentLaunchSpecs } = s.agentLaunchSpecs;
         const groupIds = s.terminalGroups.filter((g) => g.workspaceId === id).map((g) => g.id);
         const splitTrees = Object.fromEntries(
           Object.entries(s.splitTrees).filter(([k]) => !groupIds.includes(k))
@@ -302,7 +293,6 @@ export const useWorkbench = create<WorkbenchState>()(
           terminalGroups: s.terminalGroups.filter((g) => g.workspaceId !== id),
           activeGroupByWorkspace,
           launchSpecs,
-          agentLaunchSpecs,
           splitTrees,
           pendingAiRename: s.pendingAiRename.filter((wid) => wid !== id),
         };
@@ -391,18 +381,6 @@ export const useWorkbench = create<WorkbenchState>()(
       }
       return spec;
     },
-    setAgentLaunchSpec: (workspaceId, spec) =>
-      set((s) => ({ agentLaunchSpecs: { ...s.agentLaunchSpecs, [workspaceId]: spec } })),
-    consumeAgentLaunchSpec: (workspaceId) => {
-      const spec = get().agentLaunchSpecs[workspaceId] ?? null;
-      if (spec) {
-        set((s) => {
-          const { [workspaceId]: _removed, ...rest } = s.agentLaunchSpecs;
-          return { agentLaunchSpecs: rest };
-        });
-      }
-      return spec;
-    },
     setBackends: (backends) => set({ backends }),
     setSkills: (skills) => set({ skills }),
     setEditingSkill: (editingSkill) => set({ editingSkill }),
@@ -426,10 +404,6 @@ export const useWorkbench = create<WorkbenchState>()(
     openSourceControl: () =>
       set((s) => ({
         layout: { ...s.layout, auxiliaryView: "scm", auxiliaryBarVisible: true },
-      })),
-    openAgentOutput: () =>
-      set((s) => ({
-        layout: { ...s.layout, auxiliaryView: "agent", auxiliaryBarVisible: true },
       })),
     setAuxiliaryView: (view) =>
       set((s) => ({ layout: { ...s.layout, auxiliaryView: view } })),

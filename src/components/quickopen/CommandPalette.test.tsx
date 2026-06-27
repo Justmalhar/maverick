@@ -56,7 +56,6 @@ describe("CommandPalette", () => {
     ["view.gitPanel", (s) => expect(s.systemTabs).toContain("git")],
     ["view.kanban", (s) => expect(s.systemTabs).toContain("kanban")],
     ["view.browser", (s) => expect(s.systemTabs).toContain("browser")],
-    ["view.automations", (s) => expect(s.systemTabs).toContain("automations")],
     ["view.mcps", (s) => expect(s.systemTabs).toContain("mcps")],
     ["global.settings", (s) => expect(s.settingsOpen).toBe(true)],
     ["global.presets", (s) => expect(s.presetLauncherOpen).toBe(true)],

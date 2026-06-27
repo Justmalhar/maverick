@@ -17,7 +17,6 @@ import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
-import { AutomationRunner } from "./automation-runner";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
@@ -79,7 +78,6 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
         backends: { default: "claude", available: [{ name: "claude", command: "claude", args: [] }] },
         skills: [{ name: "review", description: "d", prompt: "p {{x}}" }],
         presets: [{ name: "preset", layout: { type: "terminal", agent: "claude", cwd: "{{workspace_root}}", mode: "agent" } }],
-        automations: [{ name: "auto", trigger: "manual", steps: [{ type: "shell", command: "echo hi" }] }],
         mcps: [{ name: "fs", command: "mcp-fs", args: [] }],
       }),
     exists: () => true,
@@ -89,7 +87,6 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   const git = new GitModule({ shell });
   const presets = new PresetLauncher({ loader: config, worktree, process: proc });
   const kanban = new KanbanStore(store, { ids });
-  const automations = new AutomationRunner({ loader: config, shell, git, skills });
   const mcp = new MCPManager({ spawn: (() => fakeProc()) as Spawner, loader: config, projectPath: "/r" });
   const notifications = new NotificationService({ notifier: { write: () => {} } });
   const context = new ContextTracker(store, { ids });
@@ -109,7 +106,7 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   });
   return new RpcHandlers({
     store, process: proc, worktree, config, skills, diff, git,
-    presets, kanban, automations, mcp, notifications, context, usage, attachments, fileTree,
+    presets, kanban, mcp, notifications, context, usage, attachments, fileTree,
   });
 }
 
@@ -169,27 +166,6 @@ describe("RpcHandlers", () => {
     const got = (await handlers.dispatch("checks.get", { worktreePath: "/wt" })) as ChecksReport;
     expect(calls).toEqual([{ worktreePath: "/wt" }]);
     expect(got).toBe(report);
-  });
-
-  test("agent.run / agent.kill dispatch to the AgentRunner", async () => {
-    const runCalls: unknown[] = [];
-    const killCalls: unknown[] = [];
-    const agentRunner = {
-      run(p: unknown) { runCalls.push(p); return { agentId: "agent_x" }; },
-      kill(p: unknown) { killCalls.push(p); return { ok: true as const }; },
-      killWorkspace() {},
-    } as unknown as import("./agent-runner").AgentRunner;
-    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
-    const handlers = new RpcHandlers({ store, agentRunner });
-    const run = (await handlers.dispatch("agent.run", {
-      workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt",
-    })) as { agentId: string };
-    expect(run.agentId).toBe("agent_x");
-    expect(runCalls).toEqual([
-      { workspaceId: "w1", backend: "claude-code", prompt: "do it", cwd: "/wt", resumeSessionId: undefined, permissionMode: undefined, env: undefined },
-    ]);
-    await handlers.dispatch("agent.kill", { agentId: "agent_x" });
-    expect(killCalls).toEqual([{ agentId: "agent_x" }]);
   });
 
   test("workspace.create + list + destroy", async () => {
@@ -537,34 +513,6 @@ describe("RpcHandlers", () => {
     expect(r.ref).toBe("small");
   });
 
-  test("automation.run", async () => {
-    const r = (await h.dispatch("automation.run", {
-      automationName: "auto",
-      projectPath: "/r",
-      worktreePath: "/wt",
-    })) as { stepsRun: number };
-    expect(r.stepsRun).toBe(1);
-  });
-
-  test("automation.run accepts a null workspaceId with explicit paths", async () => {
-    // Mirrors the Rust automation_run(workspace_id: Option<String>) None → JSON
-    // null path; the schema's nullishOptional must coerce null away and run
-    // from the supplied projectPath + worktreePath.
-    const r = (await h.dispatch("automation.run", {
-      automationName: "auto",
-      workspaceId: null,
-      projectPath: "/r",
-      worktreePath: "/wt",
-    })) as { stepsRun: number };
-    expect(r.stepsRun).toBe(1);
-  });
-
-  test("automation.run reports its accepted inputs when none are resolvable", async () => {
-    await expect(
-      h.dispatch("automation.run", { automationName: "auto" })
-    ).rejects.toThrow(/workspaceId or projectPath \+ worktreePath/);
-  });
-
   describe("workspaceId → {projectPath, worktreePath} contract resolution", () => {
     // Pins the field names the frontend panels send (workspaceId) through to the
     // schema the sidecar engines require (projectPath/worktreePath). Each command
@@ -591,15 +539,6 @@ describe("RpcHandlers", () => {
       expect(r.prompt).toBe("p 1");
     });
 
-    test("automation.run resolves projectPath + worktreePath from workspaceId", async () => {
-      const { workspaceId } = await seedWorkspace();
-      const r = (await h.dispatch("automation.run", {
-        automationName: "auto",
-        workspaceId,
-      })) as { stepsRun: number };
-      expect(r.stepsRun).toBe(1);
-    });
-
     test("mcp.start resolves projectPath from workspaceId", async () => {
       const { workspaceId } = await seedWorkspace();
       const r = (await h.dispatch("mcp.start", { name: "fs", workspaceId })) as { pid?: number };
@@ -611,12 +550,6 @@ describe("RpcHandlers", () => {
       await expect(
         h.dispatch("skills.run", { skillName: "review", vars: {} })
       ).rejects.toThrow(/workspaceId or projectPath is required/);
-    });
-
-    test("automation.run throws when the workspace cannot be resolved", async () => {
-      await expect(
-        h.dispatch("automation.run", { automationName: "auto", workspaceId: "missing" })
-      ).rejects.toThrow(/workspace missing not found/);
     });
 
     test("mcp.start without a projectPath or workspaceId still starts (no project scope)", async () => {
@@ -814,13 +747,13 @@ describe("RpcHandlers", () => {
     return (async () => {
       const saved = (await handlers.dispatch("config.save", {
         projectPath: "/r",
-        patch: { automations: [{ name: "ship", trigger: "manual", steps: [] }] },
-      })) as { automations: Array<{ name: string }> };
-      expect(saved.automations[0].name).toBe("ship");
+        patch: { mcps: [{ name: "ship", command: "mcp-ship", args: [] }] },
+      })) as { mcps: Array<{ name: string }> };
+      expect(saved.mcps[0].name).toBe("ship");
       const reloaded = (await handlers.dispatch("config.load", { projectPath: "/r" })) as {
-        automations: Array<{ name: string }>;
+        mcps: Array<{ name: string }>;
       };
-      expect(reloaded.automations[0].name).toBe("ship");
+      expect(reloaded.mcps[0].name).toBe("ship");
     })();
   });
 
@@ -1552,18 +1485,4 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     expect(res).toEqual({ ok: true });
   });
 
-  test("automation.activateTriggers / deactivateTriggers delegate to TriggerManager", async () => {
-    const calls: string[] = [];
-    const triggers = {
-      activate: (p: { workspaceId: string }) => calls.push(`activate:${p.workspaceId}`),
-      deactivate: (id: string) => calls.push(`deactivate:${id}`),
-    };
-    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
-    const handlers = new RpcHandlers({ store, triggers: triggers as never, notifier: { write: () => {} } });
-    await handlers.dispatch("automation.activateTriggers", {
-      workspaceId: "w1", projectPath: "/p", worktreePath: "/wt",
-    });
-    await handlers.dispatch("automation.deactivateTriggers", { workspaceId: "w1" });
-    expect(calls).toEqual(["activate:w1", "deactivate:w1"]);
-  });
 });

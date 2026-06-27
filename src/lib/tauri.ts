@@ -2,10 +2,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
-  AgentRunSpec,
-  AgentStreamEvent,
-  AgentExitEvent,
-  AgentErrorEvent,
   BlameLine,
   BootstrapStatus,
   Branch,
@@ -417,27 +413,6 @@ export async function attachmentCreate(
   return invoke("attachment_create", { worktreePath, text });
 }
 
-export async function automationRun(
-  automationName: string,
-  workspaceId?: string,
-  projectPath?: string,
-  worktreePath?: string
-): Promise<void> {
-  return invoke("automation_run", { automationName, workspaceId, projectPath, worktreePath });
-}
-
-export async function automationActivateTriggers(
-  workspaceId: string,
-  projectPath: string,
-  worktreePath: string
-): Promise<void> {
-  return invoke("automation_activate_triggers", { workspaceId, projectPath, worktreePath });
-}
-
-export async function automationDeactivateTriggers(workspaceId: string): Promise<void> {
-  return invoke("automation_deactivate_triggers", { workspaceId });
-}
-
 export async function notifySend(
   title: string,
   body: string,
@@ -689,34 +664,6 @@ export function onWorkspaceStatus(
   return listen<{ workspaceId: string; status: string }>("workspace:status", (e) =>
     callback(e.payload)
   );
-}
-
-export async function agentRun(spec: AgentRunSpec): Promise<{ agentId: string }> {
-  return invoke("agent_run", {
-    workspaceId: spec.workspaceId,
-    backend: spec.backend,
-    prompt: spec.prompt,
-    cwd: spec.cwd,
-    resumeSessionId: spec.resumeSessionId,
-    permissionMode: spec.permissionMode,
-    env: spec.env,
-  });
-}
-
-export async function agentKill(agentId: string): Promise<{ ok: true }> {
-  return invoke("agent_kill", { agentId });
-}
-
-export function onAgentData(callback: (payload: AgentStreamEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentStreamEvent>("agent:data", (e) => callback(e.payload));
-}
-
-export function onAgentExit(callback: (payload: AgentExitEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentExitEvent>("agent:exit", (e) => callback(e.payload));
-}
-
-export function onAgentError(callback: (payload: AgentErrorEvent) => void): Promise<UnlistenFn> {
-  return listen<AgentErrorEvent>("agent:error", (e) => callback(e.payload));
 }
 
 export function onProjectSettingsChanged(

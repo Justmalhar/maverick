@@ -1,6 +1,4 @@
-pub mod agent;
 pub mod attachment;
-pub mod automation;
 pub mod bootstrap;
 pub mod browser;
 pub mod caffeinate;
@@ -26,9 +24,7 @@ pub mod skills;
 pub mod usage;
 pub mod workspace;
 
-pub use agent::{agent_kill, agent_run};
 pub use attachment::attachment_create;
-pub use automation::{automation_activate_triggers, automation_deactivate_triggers, automation_run};
 pub use bootstrap::{
     bootstrap_complete, bootstrap_status, bootstrap_update_settings, detect_backends,
     read_maverick_md, request_notification_permission, reset_first_run, write_maverick_md,

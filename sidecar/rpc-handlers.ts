@@ -14,19 +14,15 @@ import { DiffReader } from "./diff-reader";
 import { GitModule } from "./git-module";
 import { GitCredentials } from "./git-credentials";
 import { ChecksModule } from "./checks-module";
-import { AgentRunner } from "./agent-runner";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
-import { AutomationRunner } from "./automation-runner";
-import { TriggerManager } from "./trigger-manager";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
 import { FileTree } from "./file-tree";
-import { FsWatcher, SKIP_DIRS } from "./fs-watcher";
-import { watch as fsWatch } from "fs";
+import { FsWatcher } from "./fs-watcher";
 import { FileSearch } from "./file-search";
 import { FileReader } from "./file-reader";
 import { FileWriter } from "./file-writer";
@@ -211,19 +207,6 @@ const Schemas = {
     costEstimate: z.number().nonnegative(),
   }),
   attachmentCreate: z.object({ worktreePath: z.string(), text: z.string() }),
-  automationRun: z.object({
-    automationName: z.string(),
-    workspaceId: nullishOptional(z.string()),
-    projectPath: nullishOptional(z.string()),
-    worktreePath: nullishOptional(z.string()),
-    vars: nullishOptional(z.record(z.string(), z.string())),
-  }),
-  automationActivateTriggers: z.object({
-    workspaceId: z.string(),
-    projectPath: z.string(),
-    worktreePath: z.string(),
-  }),
-  automationDeactivateTriggers: z.object({ workspaceId: z.string() }),
   notifySend: z.object({
     title: z.string(),
     body: z.string(),
@@ -244,16 +227,6 @@ const Schemas = {
     remote: nullishOptional(z.string()),
   }),
   checksGet: z.object({ worktreePath: z.string() }),
-  agentRun: z.object({
-    workspaceId: z.string(),
-    backend: z.string(),
-    prompt: z.string(),
-    cwd: nullishOptional(z.string()),
-    resumeSessionId: nullishOptional(z.string()),
-    permissionMode: nullishOptional(z.string()),
-    env: nullishOptional(z.record(z.string(), z.string())),
-  }),
-  agentKill: z.object({ agentId: z.string() }),
   gitRemoteInfo: z.object({
     worktreePath: z.string(),
     remote: nullishOptional(z.string()),
@@ -291,12 +264,9 @@ export interface RpcHandlersOptions {
   diff?: DiffReader;
   git?: GitModule;
   checks?: ChecksModule;
-  agentRunner?: AgentRunner;
   presets?: PresetLauncher;
   kanban?: KanbanStore;
-  automations?: AutomationRunner;
   mcp?: MCPManager;
-  triggers?: TriggerManager;
   notifications?: NotificationService;
   context?: ContextTracker;
   usage?: UsageTracker;
@@ -315,30 +285,6 @@ export interface RpcHandlersOptions {
   notifier?: Notifier;
 }
 
-// Recursively watch a worktree, firing onChange for non-noise paths. fs.watch
-// `recursive` is supported on the desktop targets (Windows + macOS); returns an
-// unwatch fn. TriggerManager debounces on top of this.
-function watchWorktree(worktreePath: string, onChange: () => void): () => void {
-  try {
-    const w = fsWatch(worktreePath, { recursive: true }, (_event, filename) => {
-      if (filename) {
-        const segs = filename.toString().split(/[/\\]/);
-        if (segs.some((s) => SKIP_DIRS.has(s))) return;
-      }
-      onChange();
-    });
-    return () => {
-      try {
-        w.close();
-      } catch {
-        /* already closed */
-      }
-    };
-  } catch {
-    return () => {};
-  }
-}
-
 export class RpcHandlers {
   readonly store: SQLiteStore;
   readonly process: ProcessManager;
@@ -349,11 +295,8 @@ export class RpcHandlers {
   readonly diff: DiffReader;
   readonly git: GitModule;
   readonly checks: ChecksModule;
-  readonly agentRunner: AgentRunner;
   readonly presets: PresetLauncher;
   readonly kanban: KanbanStore;
-  readonly automations: AutomationRunner;
-  readonly triggers: TriggerManager;
   readonly mcp: MCPManager;
   readonly notifications: NotificationService;
   readonly context: ContextTracker;
@@ -384,7 +327,6 @@ export class RpcHandlers {
     this.diff = opts.diff ?? new DiffReader();
     this.git = opts.git ?? new GitModule();
     this.checks = opts.checks ?? new ChecksModule();
-    this.agentRunner = opts.agentRunner ?? new AgentRunner();
     this.presets =
       opts.presets ??
       new PresetLauncher({
@@ -394,15 +336,6 @@ export class RpcHandlers {
         store: this.store,
       });
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
-    this.automations =
-      opts.automations ?? new AutomationRunner({ loader: this.config, git: this.git, skills: this.skills });
-    this.triggers =
-      opts.triggers ??
-      new TriggerManager({
-        loadAutomations: (projectPath) => this.config.load(projectPath).automations ?? [],
-        runAutomation: (p) => this.automations.run(p),
-        watch: watchWorktree,
-      });
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
     this.notifications =
       opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
@@ -441,10 +374,8 @@ export class RpcHandlers {
   private async teardownWorkspace(workspaceId: string): Promise<void> {
     const ws = this.store.workspaceGet(workspaceId);
     if (!ws) return;
-    // A headless agent must not outlive its workspace. (Preset/terminal PTYs
-    // are Rust-owned and reaped by the frontend's killWorkspaceLeaves on
-    // removeWorkspace — the sidecar no longer spawns any.)
-    this.agentRunner.killWorkspace(workspaceId);
+    // Preset/terminal PTYs are Rust-owned and reaped by the frontend's
+    // killWorkspaceLeaves on removeWorkspace — the sidecar spawns none.
     const project = this.store.projectGet(ws.projectId);
     if (project) {
       const settings = this.projectSettings.read(project.path);
@@ -750,22 +681,6 @@ export class RpcHandlers {
         const p = Schemas.checksGet.parse(params);
         return this.checks.get(p);
       }
-      case "agent.run": {
-        const p = Schemas.agentRun.parse(params);
-        return this.agentRunner.run({
-          workspaceId: p.workspaceId,
-          backend: p.backend,
-          prompt: p.prompt,
-          cwd: p.cwd ?? undefined,
-          resumeSessionId: p.resumeSessionId ?? undefined,
-          permissionMode: p.permissionMode ?? undefined,
-          env: p.env ?? undefined,
-        });
-      }
-      case "agent.kill": {
-        const p = Schemas.agentKill.parse(params);
-        return this.agentRunner.kill(p);
-      }
       case "git.remote_info": {
         const p = Schemas.gitRemoteInfo.parse(params);
         return this.git.remoteInfo(p);
@@ -929,36 +844,6 @@ export class RpcHandlers {
       case "attachment.create": {
         const p = Schemas.attachmentCreate.parse(params);
         return this.attachments.create(p);
-      }
-      case "automation.run": {
-        const p = Schemas.automationRun.parse(params);
-        let { projectPath, worktreePath } = p;
-        if (!projectPath || !worktreePath) {
-          if (!p.workspaceId) {
-            throw new Error(
-              "automation.run requires workspaceId or projectPath + worktreePath"
-            );
-          }
-          const resolved = this.requireWorkspacePaths(p.workspaceId);
-          projectPath ??= resolved.projectPath;
-          worktreePath ??= resolved.worktreePath;
-        }
-        return this.automations.run({
-          automationName: p.automationName,
-          projectPath,
-          worktreePath,
-          vars: p.vars,
-        });
-      }
-      case "automation.activateTriggers": {
-        const p = Schemas.automationActivateTriggers.parse(params);
-        this.triggers.activate(p);
-        return { ok: true };
-      }
-      case "automation.deactivateTriggers": {
-        const p = Schemas.automationDeactivateTriggers.parse(params);
-        this.triggers.deactivate(p.workspaceId);
-        return { ok: true };
       }
       case "notify.send": {
         const p = Schemas.notifySend.parse(params);

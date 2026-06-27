@@ -8,7 +8,7 @@ import {
 import type {
   Project, Workspace, Backend, Skill, Message, KanbanTask, MCPServer,
   WorkspacePreset, DiffResult, Commit, Stash, FileEntry, MaverickConfig,
-  SplitNode, ContextUsage, Automation, AutomationStep,
+  SplitNode, ContextUsage,
   AuxiliaryView, ThemeDefinition, TerminalTheme, EditorMode, KeybindingMap,
   PresetNode, DiffFile, DiffHunk,
   Branch, BlameLine, ConflictHunk, ConflictResolution,
@@ -51,8 +51,6 @@ describe("ipc types", () => {
     const cfg: MaverickConfig = { version: 1, backends: { default: "x", available: [] } };
     const node: SplitNode = { type: "terminal", id: "1", backend: "shell", ptyId: "" };
     const ctx: ContextUsage = { workspaceId: "w", tokensUsed: 0, contextWindow: 0, sessionCostEstimate: 0 };
-    const auto: Automation = { name: "a", trigger: "manual", steps: [] };
-    const step: AutomationStep = { type: "shell" };
     const auxView: AuxiliaryView = "files";
     const mode: EditorMode = "agent";
     const km: KeybindingMap = {};
@@ -82,8 +80,6 @@ describe("ipc types", () => {
     expectTypeOf(cfg).toMatchTypeOf<MaverickConfig>();
     expectTypeOf(node).toMatchTypeOf<SplitNode>();
     expectTypeOf(ctx).toMatchTypeOf<ContextUsage>();
-    expectTypeOf(auto).toMatchTypeOf<Automation>();
-    expectTypeOf(step).toMatchTypeOf<AutomationStep>();
     expectTypeOf(auxView).toMatchTypeOf<AuxiliaryView>();
     expectTypeOf(mode).toMatchTypeOf<EditorMode>();
     expectTypeOf(km).toMatchTypeOf<KeybindingMap>();

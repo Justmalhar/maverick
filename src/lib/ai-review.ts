@@ -40,8 +40,8 @@ export interface SendReviewCommentsOptions {
 
 /**
  * Send a batched `Re:`-prompt of inline review comments to the workspace's agent
- * (terminal or headless). Returns `{ ran: false }` when there are no comments or
- * the agent is unreachable.
+ * terminal. Returns `{ ran: false }` when there are no comments or the agent is
+ * unreachable.
  */
 export async function sendReviewComments(
   opts: SendReviewCommentsOptions
@@ -60,8 +60,8 @@ export interface RunAiReviewOptions {
 
 /**
  * Fetch the worktree diff and send a review prompt to the workspace's agent
- * (terminal or headless). Returns `{ ran: false }` when the tree is clean or the
- * agent is unreachable.
+ * terminal. Returns `{ ran: false }` when the tree is clean or the agent is
+ * unreachable.
  */
 export async function runAiReview(opts: RunAiReviewOptions): Promise<{ ran: boolean }> {
   const diff = await diffGet(opts.worktreePath);

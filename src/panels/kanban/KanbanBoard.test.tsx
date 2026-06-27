@@ -11,7 +11,6 @@ const initial = useWorkbench.getState();
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
-  // Empty settings → agent launch mode defaults to "headless".
   useSettingsStore.setState({ values: {} });
   useWorkbench.setState({
     ...initial,
@@ -289,7 +288,7 @@ describe("KanbanBoard", () => {
     );
   });
 
-  it("handleStart creates workspace, stages a HEADLESS run (default) with title+description, opens the Agent tab", async () => {
+  it("handleStart creates workspace and stages a terminal launch with title+description", async () => {
     const project = makeProject({ id: "p1", path: "/p1" });
     useWorkbench.setState({
       ...initial,
@@ -327,15 +326,11 @@ describe("KanbanBoard", () => {
     );
 
     await waitFor(() =>
-      expect(useWorkbench.getState().agentLaunchSpecs["ws-new"]).toMatchObject({
-        workspaceId: "ws-new",
-        backend: "claude-code",
+      expect(useWorkbench.getState().launchSpecs["ws-new"]).toMatchObject({
+        command: "claude",
         prompt: "Implement auth\n\nUse JWT tokens",
       })
     );
-    // Headless staging opens the Agent Output tab and doesn't touch the terminal spec.
-    expect(useWorkbench.getState().layout.auxiliaryView).toBe("agent");
-    expect(useWorkbench.getState().launchSpecs["ws-new"]).toBeUndefined();
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
@@ -345,9 +340,7 @@ describe("KanbanBoard", () => {
     );
   });
 
-  it("handleStart (terminal mode) uses task.title only when description is absent and falls back to the backend command map", async () => {
-    // Force the terminal launch surface so this exercises command-map fallback.
-    useSettingsStore.setState({ values: { "general.agentLaunchMode": "terminal" } });
+  it("handleStart uses task.title only when description is absent and falls back to the backend command map", async () => {
     const project = makeProject({ id: "p2", path: "/p2" });
     useWorkbench.setState({
       ...initial,

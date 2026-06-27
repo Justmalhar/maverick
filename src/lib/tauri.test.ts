@@ -216,8 +216,8 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("mcp_add", {
       name: "fs", command: "npx", args: ["-y"], env: { K: "V" }, workspaceId: "w1", projectPath: "/p",
     });
-    await api.configSave("/p", { automations: [] });
-    expect(invoke).toHaveBeenLastCalledWith("config_save", { projectPath: "/p", patch: { automations: [] } });
+    await api.configSave("/p", { mcps: [] });
+    expect(invoke).toHaveBeenLastCalledWith("config_save", { projectPath: "/p", patch: { mcps: [] } });
     await api.contextUsage("s1");
     expect(invoke).toHaveBeenLastCalledWith("context_usage", { sessionId: "s1" });
     await api.contextRecord("s1", 1234, 0.05);
@@ -226,8 +226,6 @@ describe("tauri command wrappers", () => {
     });
     await api.attachmentCreate("/wt", "txt");
     expect(invoke).toHaveBeenLastCalledWith("attachment_create", { worktreePath: "/wt", text: "txt" });
-    await api.automationRun("build", "w1");
-    expect(invoke).toHaveBeenLastCalledWith("automation_run", { automationName: "build", workspaceId: "w1" });
     await api.notifySend("t", "b", "w1", "agent.complete");
     expect(invoke).toHaveBeenLastCalledWith("notify_send", {
       title: "t", body: "b", workspaceId: "w1", type: "agent.complete",
@@ -361,11 +359,5 @@ describe("tauri command wrappers", () => {
     await api.onFsChanged(fsChangedCb);
     captured["fs:changed"]({ payload: { root: "/wt", paths: ["/wt/a.ts"] } });
     expect(fsChangedCb).toHaveBeenCalledWith({ root: "/wt", paths: ["/wt/a.ts"] });
-  });
-
-  it("agentKill calls agent_kill with the agentId", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({ ok: true } as never);
-    await api.agentKill("agent-abc");
-    expect(invoke).toHaveBeenLastCalledWith("agent_kill", { agentId: "agent-abc" });
   });
 });

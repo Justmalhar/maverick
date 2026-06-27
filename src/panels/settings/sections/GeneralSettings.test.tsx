@@ -31,13 +31,6 @@ describe("GeneralSettings", () => {
     expect(useSettingsStore.getState().values["general.startupCommand"]).toBe("claude --dangerously-skip-permissions");
   });
 
-  it("exposes an agent launch mode control that updates the setting", async () => {
-    renderWithProviders(<GeneralSettings />);
-    await userEvent.click(screen.getByTestId("general-agent-launch-mode"));
-    await userEvent.click(await screen.findByRole("option", { name: "Terminal" }));
-    expect(useSettingsStore.getState().values["general.agentLaunchMode"]).toBe("terminal");
-  });
-
   it("shows custom binary path input when defaultBackend is 'other'", () => {
     // @ts-expect-error - test fixture intentionally bypasses the strict Status union
     useSettingsStore.setState({ values: { "general.defaultBackend": "other" }, status: "loaded", lastError: null, dirty: {} });

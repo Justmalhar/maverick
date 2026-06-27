@@ -146,25 +146,18 @@ describe("DiffView", () => {
     await waitFor(() => expect(errSpy).toHaveBeenCalledWith("AI review failed", expect.any(Error)));
   });
 
-  it("AI Code Review works for a headless workspace with no PTY (#31)", async () => {
+  it("disables AI Code Review when the workspace has no live agent PTY", async () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [makeWorkspace({ id: "w1", worktreePath: "/wt", agentBackend: "claude-code" })],
       activeWorkspaceId: "w1",
     });
-    // No PTY seeded — a headless backend reaches the agent via agent_run, so the
-    // button is enabled instead of an enabled-but-inert no-op.
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // initial diff_get
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // runAiReview diff_get
-      .mockResolvedValue({ agentId: "a1" } as never); // agent_run
+    // No PTY seeded — the agent is unreachable, so the action is gated off rather
+    // than presenting as enabled-but-inert.
+    vi.mocked(invoke).mockResolvedValue(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never);
     renderWithProviders(<DiffView />);
     await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    expect(screen.getByTestId("diff-ai-review")).not.toBeDisabled();
-    await userEvent.click(screen.getByTestId("diff-ai-review"));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("agent_run", expect.objectContaining({ workspaceId: "w1" }))
-    );
+    expect(screen.getByTestId("diff-ai-review")).toBeDisabled();
   });
 
   it("Create PR confirms, calls pr_create, and shows the resulting URL", async () => {

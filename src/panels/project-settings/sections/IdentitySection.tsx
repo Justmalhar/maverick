@@ -32,7 +32,7 @@ export default function IdentitySection() {
     void flush();
   };
   async function handleRemove() {
-    if (!projectId || removing) return;
+    if (!projectId || removing || !data) return;
     setRemoving(true);
     try {
       await removeProject(projectId);

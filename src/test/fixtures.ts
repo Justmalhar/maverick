@@ -14,8 +14,6 @@ import type {
   MCPServer,
   DiffResult,
   DiffFile,
-  Automation,
-  AutomationStep,
 } from "@/lib/ipc";
 
 export function makeProject(overrides: Partial<Project> = {}): Project {
@@ -173,19 +171,6 @@ export function makeMCPServer(overrides: Partial<MCPServer> = {}): MCPServer {
     args: ["-y", "@modelcontextprotocol/server-filesystem"],
     status: "stopped",
     restarts: 0,
-    ...overrides,
-  };
-}
-
-export function makeAutomationStep(overrides: Partial<AutomationStep> = {}): AutomationStep {
-  return { type: "shell", command: "echo hi", ...overrides } as AutomationStep;
-}
-
-export function makeAutomation(overrides: Partial<Automation> = {}): Automation {
-  return {
-    name: "build",
-    trigger: "manual",
-    steps: [makeAutomationStep()],
     ...overrides,
   };
 }

@@ -9,8 +9,7 @@ function comment(over: Partial<ReviewComment> = {}): ReviewComment {
   return { id: "c1", workspaceId: "w1", file: "src/a.ts", line: 1, side: "new", body: "fix", ...over };
 }
 
-// A headless backend (no PTY) reaches the agent; a non-headless one with no PTY
-// is genuinely unreachable — both used below to exercise both branches.
+// A workspace with a live agent PTY is reachable; one with no PTY is not.
 const PTY_TARGET = { workspaceId: "w1", backend: "claude-code", cwd: "/wt" };
 const UNREACHABLE_TARGET = { workspaceId: "wX", backend: "aider", cwd: "/wt" };
 
@@ -69,7 +68,7 @@ describe("sendReviewComments", () => {
     expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
   });
 
-  it("returns ran:false when the agent is unreachable (no PTY, non-headless)", async () => {
+  it("returns ran:false when the agent is unreachable (no PTY)", async () => {
     const r = await sendReviewComments({ target: UNREACHABLE_TARGET, comments: [comment()] });
     expect(r.ran).toBe(false);
     expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
@@ -90,13 +89,6 @@ describe("sendReviewComments", () => {
     expect((call?.[1] as { data: string }).data).toContain("Re: src/a.ts:9 — tidy");
   });
 
-  it("dispatches a headless run when there is no PTY (#31)", async () => {
-    vi.mocked(invoke).mockResolvedValue({ agentId: "a1" } as never);
-    const r = await sendReviewComments({ target: PTY_TARGET, comments: [comment({ body: "fix it" })] });
-    expect(r.ran).toBe(true);
-    const call = vi.mocked(invoke).mock.calls.find((c) => c[0] === "agent_run");
-    expect((call?.[1] as { prompt: string }).prompt).toContain("fix it");
-  });
 });
 
 describe("runAiReview", () => {

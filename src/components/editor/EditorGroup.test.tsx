@@ -111,12 +111,6 @@ describe("EditorGroup", () => {
     await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument(), { timeout: 5000 });
   });
 
-  it("renders automations system tab (AutomationsPanel)", async () => {
-    useWorkbench.setState({ ...initial, systemTabs: ["automations"], activeSystemTab: "automations", activeWorkspaceId: null });
-    renderWithProviders(<EditorGroup />);
-    await waitFor(() => expect(screen.getByTestId("automations-panel")).toBeInTheDocument());
-  });
-
   it("renders mcps system tab (MCPsPanel)", async () => {
     useWorkbench.setState({ ...initial, systemTabs: ["mcps"], activeSystemTab: "mcps", activeWorkspaceId: null });
     renderWithProviders(<EditorGroup />);

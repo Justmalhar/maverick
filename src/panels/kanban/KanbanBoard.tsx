@@ -12,8 +12,6 @@ import {
 import { buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
 import { resolveTaskBranch } from "@/lib/feature-name";
-import { getAgentLaunchMode } from "@/lib/stores/settings";
-import { supportsHeadlessLaunch } from "@/lib/agent-launch";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
@@ -28,18 +26,11 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
   "done",
 ];
 
-// Stage a task's agent: headless (background run streamed to the Agent Output
-// panel — the default) when the mode is headless and the backend supports it,
-// else the interactive terminal launch surface. Headless opens the Agent tab.
-function stageLaunch(workspaceId: string, backend: string, launchPrompt: string, cwd: string): void {
-  const wb = useWorkbench.getState();
-  if (getAgentLaunchMode() === "headless" && supportsHeadlessLaunch(backend)) {
-    wb.setAgentLaunchSpec(workspaceId, { workspaceId, backend, prompt: launchPrompt, cwd });
-    wb.openAgentOutput();
-  } else {
-    const { command, args } = resolveStartupLaunch(backend);
-    wb.setLaunchSpec(workspaceId, { command, args, prompt: launchPrompt });
-  }
+// Stage a task's agent for launch in the workspace's interactive terminal: the
+// primary terminal leaf consumes the spec once its shell PTY is ready.
+function stageLaunch(workspaceId: string, backend: string, launchPrompt: string): void {
+  const { command, args } = resolveStartupLaunch(backend);
+  useWorkbench.getState().setLaunchSpec(workspaceId, { command, args, prompt: launchPrompt });
 }
 
 
@@ -192,7 +183,7 @@ export default function KanbanBoard() {
       });
       const ws = await create(task.projectId, branch, backend, baseBranch);
       const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
-      stageLaunch(ws.id, backend, launchPrompt, ws.worktreePath);
+      stageLaunch(ws.id, backend, launchPrompt);
       // Link the task to the workspace it just spawned — without this the card's
       // View button (and the diff-stat lookup) can't find the workspace.
       await kanbanUpsert({
@@ -246,7 +237,7 @@ export default function KanbanBoard() {
       });
       const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
       const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
-      stageLaunch(ws.id, payload.agentBackend, prompt, ws.worktreePath);
+      stageLaunch(ws.id, payload.agentBackend, prompt);
 
       // Spread the persisted task so the description (and every other field) is
       // carried through — listing the fields by hand dropped `description`,
