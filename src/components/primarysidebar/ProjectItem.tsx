@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Settings2, Link2, Plus } from "lucide-react";
+import { ChevronRight, Settings2, Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useWorkbench } from "@/state/store";
 import type { Project } from "@/lib/ipc";
@@ -11,7 +11,6 @@ interface Props {
   project: Project;
   onAddWorkspace?: (projectId: string) => void;
   onSettings?: (projectId: string) => void;
-  onCreateFrom?: (projectId: string) => void;
 }
 
 function ActionButton({
@@ -53,7 +52,7 @@ function ActionButton({
   );
 }
 
-export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom }: Props) {
+export function ProjectItem({ project, onAddWorkspace, onSettings }: Props) {
   const [expanded, setExpanded] = useState(true);
   const workspaces = useWorkbench(
     useShallow((s) => s.workspaces.filter((w) => w.projectId === project.id))
@@ -86,12 +85,6 @@ export function ProjectItem({ project, onAddWorkspace, onSettings, onCreateFrom 
             label="Project settings"
             onClick={() => onSettings?.(project.id)}
             testId={`project-${project.id}-settings`}
-          />
-          <ActionButton
-            icon={Link2}
-            label="Create from"
-            onClick={() => onCreateFrom?.(project.id)}
-            testId={`project-${project.id}-createfrom`}
           />
           <ActionButton
             icon={Plus}

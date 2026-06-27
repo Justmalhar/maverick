@@ -51,11 +51,9 @@ describe("ProjectItem", () => {
     expect(onSettings).toHaveBeenCalledWith("p1");
   });
 
-  it("calls onCreateFrom via the create-from button", async () => {
-    const onCreateFrom = vi.fn();
-    renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} onCreateFrom={onCreateFrom} />);
-    await userEvent.click(screen.getByLabelText("Create from"));
-    expect(onCreateFrom).toHaveBeenCalledWith("p1");
+  it("does not render a 'Create from' action", () => {
+    renderWithProviders(<ProjectItem project={makeProject({ id: "p1" })} />);
+    expect(screen.queryByLabelText("Create from")).not.toBeInTheDocument();
   });
 
   it("keeps the new-workspace button persistent while settings/create-from reveal on hover", () => {
