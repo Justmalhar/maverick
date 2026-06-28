@@ -218,6 +218,7 @@ const Schemas = {
     unreadOnly: nullishOptional(z.boolean()),
   }),
   notifyMarkRead: z.object({ id: z.string() }),
+  notifyDelete: z.object({ id: z.string() }),
   instructionsResolve: z.object({ worktreePath: z.string() }),
   prCreate: z.object({
     worktreePath: z.string(),
@@ -859,6 +860,13 @@ export class RpcHandlers {
       }
       case "notify.markAllRead": {
         return this.notifications.markAllRead();
+      }
+      case "notify.delete": {
+        const p = Schemas.notifyDelete.parse(params);
+        return this.notifications.delete(p);
+      }
+      case "notify.clear": {
+        return this.notifications.clear();
       }
       case "notify.unreadCount": {
         return { count: this.notifications.unreadCount() };

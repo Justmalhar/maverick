@@ -616,6 +616,16 @@ describe("RpcHandlers", () => {
 
     const unreadOnly = (await handlers.dispatch("notify.list", { unreadOnly: true })) as unknown[];
     expect(unreadOnly).toHaveLength(0);
+
+    const remaining = (await handlers.dispatch("notify.list", {})) as Array<{ id: string }>;
+    expect(remaining).toHaveLength(3);
+    await handlers.dispatch("notify.delete", { id: remaining[0].id });
+    const afterDelete = (await handlers.dispatch("notify.list", {})) as Array<{ id: string }>;
+    expect(afterDelete).toHaveLength(2);
+    expect(afterDelete.some((n) => n.id === remaining[0].id)).toBe(false);
+
+    await handlers.dispatch("notify.clear", {});
+    expect((await handlers.dispatch("notify.list", {})) as unknown[]).toHaveLength(0);
   });
 
   test("caffeinate start/status/stop lifecycle", async () => {

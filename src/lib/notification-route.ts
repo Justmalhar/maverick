@@ -7,6 +7,14 @@ import type { Notification } from "@/lib/ipc";
  */
 export type NotificationAction = "os" | "toast" | "suppress";
 
+/**
+ * Notification types that always warrant an OS-native banner, even while the app
+ * is focused: an agent waiting for input or one that errored is easy to miss
+ * when you're looking at a different window/space, and the in-app toast alone
+ * isn't enough. Routine completions stay focus-aware (toast/suppress).
+ */
+const ALWAYS_OS_TYPES = new Set(["agent.attention", "agent.error"]);
+
 export interface RouteInput {
   notification: Notification;
   /** Tauri Window currently has OS focus. */
@@ -20,6 +28,8 @@ export interface RouteInput {
 /**
  * Focus/visibility-aware routing policy (ported from terax's route.ts):
  *
+ * - Agent attention/error (see ALWAYS_OS_TYPES) → always fire an OS-native
+ *   notification, regardless of focus, so a prompt or crash is never missed.
  * - Unfocused or hidden → fire an OS-native notification (the user is away).
  * - Focused + visible, and the notification targets the workspace the user is
  *   already looking at → suppress entirely (they can see the result).
@@ -34,6 +44,7 @@ export function routeNotification({
   visible,
   activeWorkspaceId,
 }: RouteInput): NotificationAction {
+  if (ALWAYS_OS_TYPES.has(notification.type)) return "os";
   if (!focused || !visible) return "os";
   const target = notification.workspaceId;
   if (target !== null && target === activeWorkspaceId) return "suppress";

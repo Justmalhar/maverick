@@ -71,3 +71,21 @@ pub async fn notify_unread_count(state: State<'_, AppState>) -> Result<Value, St
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn notify_delete(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("notify.delete", json!({ "id": id }))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn notify_clear(state: State<'_, AppState>) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("notify.clear", json!({}))
+        .await
+        .map_err(|e| e.to_string())
+}

@@ -389,6 +389,16 @@ export class SQLiteStore {
     return { ok: true };
   }
 
+  notificationDelete(input: { id: string }): { ok: true } {
+    this.db.query("DELETE FROM notifications WHERE id = ?").run(input.id);
+    return { ok: true };
+  }
+
+  notificationClearAll(): { ok: true } {
+    this.db.run("DELETE FROM notifications");
+    return { ok: true };
+  }
+
   notificationUnreadCount(): number {
     const row = this.db
       .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM notifications WHERE read = 0")

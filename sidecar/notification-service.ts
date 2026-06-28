@@ -58,6 +58,16 @@ export class NotificationService {
     return this.store.notificationMarkAllRead();
   }
 
+  delete(params: { id: string }): { ok: true } {
+    if (!this.store) return { ok: true };
+    return this.store.notificationDelete(params);
+  }
+
+  clear(): { ok: true } {
+    if (!this.store) return { ok: true };
+    return this.store.notificationClearAll();
+  }
+
   unreadCount(): number {
     if (!this.store) return 0;
     return this.store.notificationUnreadCount();
