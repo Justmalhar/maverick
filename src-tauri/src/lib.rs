@@ -320,6 +320,8 @@ pub fn run() {
             notify_mark_read,
             notify_mark_all_read,
             notify_unread_count,
+            notify_delete,
+            notify_clear,
             caffeinate_start,
             caffeinate_stop,
             caffeinate_status,

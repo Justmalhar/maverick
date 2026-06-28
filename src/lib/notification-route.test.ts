@@ -81,4 +81,29 @@ describe("routeNotification", () => {
       })
     ).toBe("toast");
   });
+
+  it.each(["agent.attention", "agent.error"])(
+    "fires an OS notification for %s even when focused on the target workspace",
+    (type) => {
+      expect(
+        routeNotification({
+          notification: makeNotification({ type, workspaceId: "ws-1" }),
+          focused: true,
+          visible: true,
+          activeWorkspaceId: "ws-1",
+        })
+      ).toBe("os");
+    }
+  );
+
+  it("keeps focus-aware routing for routine agent completions", () => {
+    expect(
+      routeNotification({
+        notification: makeNotification({ type: "agent.done", workspaceId: "ws-1" }),
+        focused: true,
+        visible: true,
+        activeWorkspaceId: "ws-1",
+      })
+    ).toBe("suppress");
+  });
 });

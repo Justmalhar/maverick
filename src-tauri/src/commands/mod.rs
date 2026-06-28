@@ -55,7 +55,8 @@ pub use kanban::{kanban_delete, kanban_list, kanban_upsert};
 pub use mcp::{mcp_add, mcp_list, mcp_logs, mcp_start, mcp_stop};
 pub use messages::{message_append, messages_list};
 pub use notify::{
-    notify_list, notify_mark_all_read, notify_mark_read, notify_send, notify_unread_count,
+    notify_clear, notify_delete, notify_list, notify_mark_all_read, notify_mark_read, notify_send,
+    notify_unread_count,
 };
 pub use pr::pr_create;
 pub use preset::{preset_launch, preset_list, preset_save_current};

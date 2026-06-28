@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, Check, CheckCheck } from "lucide-react";
+import { Bell, Check, CheckCheck, Trash2, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import {
   DropdownMenu,
@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  notifyClear,
+  notifyDelete,
   notifyList,
   notifyMarkAllRead,
   notifyMarkRead,
@@ -69,6 +71,24 @@ export function NotificationBell() {
     }
   }
 
+  async function deleteOne(id: string) {
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    try {
+      await notifyDelete(id);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  async function clearAll() {
+    setItems([]);
+    try {
+      await notifyClear();
+    } catch {
+      /* best-effort */
+    }
+  }
+
   return (
     <DropdownMenu>
       <Tooltip>
@@ -101,23 +121,36 @@ export function NotificationBell() {
       <DropdownMenuContent
         align="end"
         sideOffset={6}
+        alignOffset={-32}
+        collisionPadding={8}
         className="w-80 max-w-[90vw] p-0"
         data-testid="notification-bell-popover"
       >
-        <header className="flex items-center justify-between border-b border-border px-3 py-2">
+        <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Notifications
           </span>
           {items.length > 0 && (
-            <button
-              type="button"
-              onClick={markAll}
-              data-testid="notification-mark-all"
-              className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <CheckCheck className="h-3 w-3" />
-              Mark all read
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={markAll}
+                data-testid="notification-mark-all"
+                className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <CheckCheck className="h-3 w-3" />
+                Mark all read
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                data-testid="notification-clear-all"
+                className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3" />
+                Clear all
+              </button>
+            </div>
           )}
         </header>
 
@@ -164,17 +197,28 @@ export function NotificationBell() {
                       <p className="mt-0.5 line-clamp-2 text-muted-foreground">{n.body}</p>
                     )}
                   </div>
-                  {!n.read && (
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {!n.read && (
+                      <button
+                        type="button"
+                        onClick={() => markRead(n.id)}
+                        aria-label="Mark as read"
+                        data-testid={`notification-mark-${n.id}`}
+                        className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => markRead(n.id)}
-                      aria-label="Mark as read"
-                      data-testid={`notification-mark-${n.id}`}
-                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                      onClick={() => deleteOne(n.id)}
+                      aria-label="Delete notification"
+                      data-testid={`notification-delete-${n.id}`}
+                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                     >
-                      <Check className="h-3 w-3" />
+                      <X className="h-3 w-3" />
                     </button>
-                  )}
+                  </div>
                 </div>
               </li>
             ))

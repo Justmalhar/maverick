@@ -185,6 +185,20 @@ describe("SQLiteStore", () => {
     expect(store.notificationList().filter((n) => n.workspaceId === ws.id)).toHaveLength(0);
   });
 
+  test("notificationDelete removes one and notificationClearAll empties the table", () => {
+    const a = store.notificationInsert({ workspaceId: null, type: "info", title: "a", body: "" });
+    const b = store.notificationInsert({ workspaceId: null, type: "info", title: "b", body: "" });
+    expect(store.notificationList()).toHaveLength(2);
+
+    store.notificationDelete({ id: a.id });
+    const afterDelete = store.notificationList();
+    expect(afterDelete).toHaveLength(1);
+    expect(afterDelete[0].id).toBe(b.id);
+
+    store.notificationClearAll();
+    expect(store.notificationList()).toHaveLength(0);
+  });
+
   test("workspaceDestroy throws on missing id", () => {
     expect(() => store.workspaceDestroy("nope")).toThrow();
   });

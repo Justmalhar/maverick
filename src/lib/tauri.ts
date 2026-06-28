@@ -442,6 +442,14 @@ export async function notifyUnreadCount(): Promise<number> {
   return result.count;
 }
 
+export async function notifyDelete(id: string): Promise<void> {
+  await invoke("notify_delete", { id });
+}
+
+export async function notifyClear(): Promise<void> {
+  await invoke("notify_clear");
+}
+
 export function onNotificationSend(
   callback: (n: Notification) => void
 ): Promise<UnlistenFn> {

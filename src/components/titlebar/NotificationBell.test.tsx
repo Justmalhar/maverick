@@ -132,6 +132,65 @@ describe("NotificationBell", () => {
     );
   });
 
+  it("deletes a single notification via its row action", async () => {
+    const items = [
+      makeNotification({ id: "n1", read: true }),
+      makeNotification({ id: "n2", read: true }),
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(items as never);
+    renderWithProviders(<NotificationBell />);
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
+
+    vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
+    await userEvent.click(screen.getByTestId("notification-delete-n1"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("notify_delete", { id: "n1" })
+    );
+    expect(screen.queryByTestId("notification-item-n1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("notification-item-n2")).toBeInTheDocument();
+  });
+
+  it("clears all notifications via the header action", async () => {
+    const items = [
+      makeNotification({ id: "n1", read: true }),
+      makeNotification({ id: "n2", read: false }),
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(items as never);
+    renderWithProviders(<NotificationBell />);
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
+
+    vi.mocked(invoke).mockResolvedValueOnce(undefined as never);
+    await userEvent.click(screen.getByTestId("notification-clear-all"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("notify_clear"));
+    expect(await screen.findByTestId("notification-empty")).toBeInTheDocument();
+  });
+
+  it("swallows errors when deleting a single notification fails", async () => {
+    const items = [makeNotification({ id: "n1", read: true })];
+    vi.mocked(invoke).mockResolvedValueOnce(items as never);
+    renderWithProviders(<NotificationBell />);
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
+
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("nope"));
+    await userEvent.click(screen.getByTestId("notification-delete-n1"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("notification-item-n1")).not.toBeInTheDocument()
+    );
+  });
+
+  it("swallows errors when clearing all fails", async () => {
+    const items = [makeNotification({ id: "n1", read: true })];
+    vi.mocked(invoke).mockResolvedValueOnce(items as never);
+    renderWithProviders(<NotificationBell />);
+    await userEvent.click(await screen.findByTestId("titlebar-notifications"));
+
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("nope"));
+    await userEvent.click(screen.getByTestId("notification-clear-all"));
+    await waitFor(() =>
+      expect(screen.getByTestId("notification-empty")).toBeInTheDocument()
+    );
+  });
+
   it("ignores a late notify_list resolve after unmount", async () => {
     let resolveList!: (v: Notification[]) => void;
     vi.mocked(invoke).mockReset().mockImplementationOnce(

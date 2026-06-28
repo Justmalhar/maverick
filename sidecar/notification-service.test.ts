@@ -15,4 +15,32 @@ describe("NotificationService", () => {
   test("default constructor builds without DI", () => {
     expect(new NotificationService()).toBeInstanceOf(NotificationService);
   });
+
+  test("delete and clear are no-ops without a store", () => {
+    const svc = new NotificationService({ notifier: { write: () => {} } });
+    expect(svc.delete({ id: "n1" }).ok).toBe(true);
+    expect(svc.clear().ok).toBe(true);
+  });
+
+  test("delete and clear delegate to the store", () => {
+    const calls: string[] = [];
+    const store = {
+      notificationDelete: (input: { id: string }) => {
+        calls.push(`delete:${input.id}`);
+        return { ok: true } as const;
+      },
+      notificationClearAll: () => {
+        calls.push("clear");
+        return { ok: true } as const;
+      },
+    };
+    const svc = new NotificationService({
+      notifier: { write: () => {} },
+      // The service only touches the two methods exercised here.
+      store: store as unknown as ConstructorParameters<typeof NotificationService>[0]["store"],
+    });
+    expect(svc.delete({ id: "n1" }).ok).toBe(true);
+    expect(svc.clear().ok).toBe(true);
+    expect(calls).toEqual(["delete:n1", "clear"]);
+  });
 });
