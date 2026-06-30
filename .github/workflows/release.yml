@@ -32,6 +32,10 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    # CI runners (esp. the 7GB macOS arm runner) OOM `vite build` at node's
+    # default heap cap — the bundle pulls in Monaco/Shiki/pdfjs/xlsx. Raise it.
+    env:
+      NODE_OPTIONS: "--max-old-space-size=6144"
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +80,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Run the Tauri CLI directly via Bun. tauri-action's package-manager
+          # detection misses the text-format `bun.lock` and falls back to npm,
+          # which then runs the repo's dev-only `scripts/tauri.mjs` wrapper that
+          # has no Windows `.bin/tauri.cmd` to resolve. Going through bunx skips
+          # both: cargo is already on PATH from the rust-toolchain step.
+          tauriScript: bunx tauri
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: "Maverick ${{ github.event.inputs.tag || github.ref_name }}"
           releaseBody: |
