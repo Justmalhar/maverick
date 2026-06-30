@@ -93,13 +93,21 @@ jobs:
 
             Native Tauri desktop IDE that orchestrates AI coding CLIs.
 
-            **Installers**
-            - macOS (Apple Silicon): `.dmg`
-            - Windows (x64): `.exe` (NSIS installer) and `.msi`
+            ## ⚠️ First launch — read this (unsigned alpha)
 
-            > ⚠️ **Unsigned alpha build.** These installers are not code-signed yet.
-            > - **macOS:** Gatekeeper will block the first launch — right-click the app → **Open**, then confirm. Or run `xattr -dr com.apple.quarantine /Applications/Maverick.app`.
-            > - **Windows:** SmartScreen may warn — click **More info → Run anyway**.
+            These builds are **not code-signed or notarized yet**, so the OS blocks them on first launch.
+
+            **macOS** — if you see *"Maverick is damaged and can't be opened"*, that's just the download-quarantine flag, not corruption. Clear it once (right-click → Open does **not** fix the "damaged" variant):
+            ```bash
+            xattr -dr com.apple.quarantine /Applications/Maverick.app
+            ```
+            Adjust the path if you launch it from `~/Downloads`. Then open normally.
+
+            **Windows** — on the SmartScreen prompt, click **More info → Run anyway**.
+
+            ## Installers
+            - macOS (Apple Silicon): `.dmg`
+            - Windows (x64): `.exe` (NSIS) or `.msi`
 
             Auto-update is disabled in this build.
           prerelease: true
