@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, test, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
@@ -42,12 +42,21 @@ function mockInvoke(overrides: Record<string, (args?: unknown) => unknown> = {})
       case "git_pull":
       case "git_push":
         return { ok: true } as never;
+      case "git_branch_create":
+      case "git_checkout":
+        return { ok: true } as never;
       case "git_credential_status":
         return { provider: "bitbucket", connected: false } as never;
       default:
         return undefined as never;
     }
   });
+}
+
+// Open the Git actions dropdown so its menu items become reachable.
+async function openActions(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId("scm-actions-trigger"));
+  await screen.findByTestId("scm-action-push");
 }
 
 beforeEach(() => {
@@ -120,6 +129,22 @@ describe("SourceControlView", () => {
     );
   });
 
+  test("generates a commit message via the workspace agent backend", async () => {
+    const calls: unknown[] = [];
+    mockInvoke({
+      ai_commit_message: (args) => {
+        calls.push(args);
+        return { message: "feat: x" };
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.click(screen.getByTestId("scm-generate"));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    // aiCommitMessage(worktreePath, agentBackend) → invoke args carry both.
+    expect(calls[0]).toEqual({ worktreePath: "/wt", backend: "claude-code" });
+  });
+
   it("surfaces a generation error as feedback", async () => {
     mockInvoke({
       ai_commit_message: () => {
@@ -134,31 +159,56 @@ describe("SourceControlView", () => {
     );
   });
 
-  it("refuses to commit without a message", async () => {
+  it("refuses to commit without a message (via Git actions Commit)", async () => {
+    const user = userEvent.setup();
     mockInvoke();
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    await userEvent.click(screen.getByTestId("scm-commit"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-commit"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/commit message/i)
     );
   });
 
   it("refuses to commit with no files selected", async () => {
+    const user = userEvent.setup();
     mockInvoke();
     renderWithProviders(<SourceControlView />);
     const a = await screen.findByTestId("scm-file-src/a.ts");
     const b = screen.getByTestId("scm-file-src/b.ts");
-    await userEvent.click(a);
-    await userEvent.click(b);
-    await userEvent.type(screen.getByTestId("scm-message"), "msg");
-    await userEvent.click(screen.getByTestId("scm-commit"));
+    await user.click(a);
+    await user.click(b);
+    await user.type(screen.getByTestId("scm-message"), "msg");
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-commit"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/at least one file/i)
     );
   });
 
-  it("commits the selected files and reports the short sha", async () => {
+  test("primary action commits with the entered message", async () => {
+    const calls: unknown[] = [];
+    mockInvoke({
+      git_commit: (args) => {
+        calls.push(args);
+        return { sha: "abc1234def5678" };
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.type(screen.getByTestId("scm-message"), "feat: x");
+    await userEvent.click(screen.getByTestId("scm-primary"));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      worktreePath: "/wt",
+      message: "feat: x",
+      files: ["src/a.ts", "src/b.ts"],
+    });
+  });
+
+  it("commits the selected files via Git actions Commit and reports the short sha", async () => {
+    const user = userEvent.setup();
     const calls: unknown[] = [];
     mockInvoke({
       git_commit: (args) => {
@@ -168,26 +218,51 @@ describe("SourceControlView", () => {
     });
     renderWithProviders(<SourceControlView />);
     const b = await screen.findByTestId("scm-file-src/b.ts");
-    await userEvent.click(b); // commit only a.ts
-    await userEvent.type(screen.getByTestId("scm-message"), "fix: a");
-    await userEvent.click(screen.getByTestId("scm-commit"));
+    await user.click(b); // commit only a.ts
+    await user.type(screen.getByTestId("scm-message"), "fix: a");
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-commit"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Committed abcdef1")
     );
     expect(calls[0]).toEqual({ worktreePath: "/wt", message: "fix: a", files: ["src/a.ts"] });
   });
 
-  it("pushes via the source-control hook and reports success", async () => {
+  it("Commit & Push primary action commits then pushes", async () => {
+    const commits: unknown[] = [];
+    mockInvoke({
+      git_commit: (args) => {
+        commits.push(args);
+        return { sha: "abcdef1234567890" };
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    // Branch has an upstream → primary label is "Commit & Push".
+    await waitFor(() => expect(screen.getByTestId("scm-primary")).toHaveTextContent("Commit & Push"));
+    await userEvent.type(screen.getByTestId("scm-message"), "fix: cp");
+    await userEvent.click(screen.getByTestId("scm-primary"));
+    await waitFor(() =>
+      expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Committed abcdef1 · pushed")
+    );
+    expect(commits).toHaveLength(1);
+    expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === "git_push")).toBe(true);
+  });
+
+  it("pushes via the Git actions menu and reports success", async () => {
+    const user = userEvent.setup();
     mockInvoke();
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    await userEvent.click(screen.getByTestId("scm-push"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-push"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Pushed.")
     );
   });
 
   it("surfaces a push failure", async () => {
+    const user = userEvent.setup();
     mockInvoke({
       git_push: () => {
         throw new Error("auth required");
@@ -195,26 +270,29 @@ describe("SourceControlView", () => {
     });
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    // Wait for the branch (with upstream) to load before pushing.
     await waitFor(() => expect(screen.getByTestId("scm-ahead")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("scm-push"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-push"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/auth required/)
     );
   });
 
   it("pulls and refreshes the file list", async () => {
+    const user = userEvent.setup();
     mockInvoke();
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
     await waitFor(() => expect(screen.getByTestId("scm-ahead")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("scm-pull"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-pull"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Pulled.")
     );
   });
 
   it("surfaces a pull failure", async () => {
+    const user = userEvent.setup();
     mockInvoke({
       git_pull: () => {
         throw new Error("merge conflict");
@@ -223,17 +301,20 @@ describe("SourceControlView", () => {
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
     await waitFor(() => expect(screen.getByTestId("scm-ahead")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("scm-pull"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-pull"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/merge conflict/)
     );
   });
 
-  it("creates a PR and links the returned URL", async () => {
+  it("creates a PR via the Git actions menu and links the returned URL", async () => {
+    const user = userEvent.setup();
     mockInvoke({ pr_create: () => ({ url: "https://bitbucket.org/o/r/pull-requests/new?source=viper" }) });
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    await userEvent.click(screen.getByTestId("scm-pr"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-pr-direct"));
     const link = await screen.findByTestId("scm-pr-link");
     expect(link).toHaveAttribute(
       "href",
@@ -242,6 +323,7 @@ describe("SourceControlView", () => {
   });
 
   it("surfaces a PR failure", async () => {
+    const user = userEvent.setup();
     mockInvoke({
       pr_create: () => {
         throw new Error("no supported provider");
@@ -249,7 +331,8 @@ describe("SourceControlView", () => {
     });
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    await userEvent.click(screen.getByTestId("scm-pr"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-pr-direct"));
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/no supported provider/)
     );
@@ -284,16 +367,12 @@ describe("SourceControlView", () => {
       activeFileTabId: null,
     });
     renderWithProviders(<SourceControlView />);
-    // Wait for files to load
     await screen.findByTestId("scm-file-src/a.ts");
-    // The staging button should start as selected (aria-pressed="true")
     expect(screen.getByTestId("scm-file-src/a.ts")).toHaveAttribute("aria-pressed", "true");
 
-    // Click the file name span (not the outer staging button)
     const openDiffBtn = screen.getByTestId("scm-open-diff-src/a.ts");
     await userEvent.click(openDiffBtn);
 
-    // A diff tab should have been opened
     const state = useWorkbench.getState();
     expect(state.fileTabs).toHaveLength(1);
     expect(state.fileTabs[0]).toMatchObject({
@@ -303,10 +382,6 @@ describe("SourceControlView", () => {
       worktreePath: "/wt",
       preview: true,
     });
-    // Staging selection state was NOT toggled — the click opened a diff via the
-    // file-name button, which does not call toggle().
-    // Opening the diff clears activeWorkspaceId, but the SCM view stays mounted:
-    // selectContextWorkspace recovers the worktree from the active file tab.
     expect(screen.queryByTestId("scm-empty")).not.toBeInTheDocument();
   });
 
@@ -319,6 +394,7 @@ describe("SourceControlView", () => {
   });
 
   it("shows a Connect shortcut when a push fails with an auth error", async () => {
+    const user = userEvent.setup();
     mockInvoke({
       git_push: () => {
         throw new Error("authentication required: could not read Username for https://bitbucket.org");
@@ -326,10 +402,11 @@ describe("SourceControlView", () => {
     });
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
-    await userEvent.click(screen.getByTestId("scm-push"));
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-push"));
     const shortcut = await screen.findByTestId("scm-feedback-connect");
     expect(shortcut).toHaveTextContent("Connect Bitbucket");
-    await userEvent.click(shortcut);
+    await user.click(shortcut);
     expect(await screen.findByTestId("connect-host-dialog")).toBeInTheDocument();
   });
 
@@ -349,7 +426,6 @@ describe("SourceControlView", () => {
       },
     });
     renderWithProviders(<SourceControlView />);
-    // The catch branch sets connected=false, so the button reads "Connect …"
     await waitFor(() =>
       expect(screen.getByTestId("scm-connect")).toHaveTextContent("Connect Bitbucket")
     );
@@ -365,43 +441,62 @@ describe("SourceControlView", () => {
       },
     });
     renderWithProviders(<SourceControlView />);
-    // Wait for SCM to load
     await screen.findByTestId("scm-file-src/a.ts");
 
-    // Open the Connect dialog
     await userEvent.click(await screen.findByTestId("scm-connect"));
     expect(await screen.findByTestId("connect-host-dialog")).toBeInTheDocument();
 
-    // Fill in credentials and submit — dialog calls git_credential_connect, then onChanged
     await userEvent.type(await screen.findByTestId("connect-username"), "alice");
     await userEvent.type(screen.getByTestId("connect-password"), "mytoken");
     await userEvent.click(screen.getByTestId("connect-submit"));
 
-    // After onChanged fires → refreshAuth → git_credential_status → setConnected(true)
     await waitFor(() =>
       expect(screen.getByTestId("scm-connect")).toHaveTextContent("Bitbucket")
     );
     expect(screen.getByTestId("scm-connect")).not.toHaveTextContent("Connect Bitbucket");
   });
 
-  it("renames the branch with AI and reports it when pendingAiRename is set", async () => {
+  it("renames the branch with AI when pendingAiRename is set", async () => {
     useWorkbench.setState({
       ...useWorkbench.getState(),
       pendingAiRename: ["w1"],
     });
+    const renames: unknown[] = [];
     mockInvoke({
       git_commit: () => ({ sha: "abc1234def5678" }),
       ai_branch_name_from_diff: () => ({ name: "feat/smart-name" }),
-      git_rename_branch: () => ({ ok: true, branch: "feat/smart-name" }),
+      git_rename_branch: (args) => {
+        renames.push(args);
+        return { ok: true, branch: "feat/smart-name" };
+      },
     });
     renderWithProviders(<SourceControlView />);
     await screen.findByTestId("scm-file-src/a.ts");
     await userEvent.type(screen.getByTestId("scm-message"), "fix: ai rename");
-    await userEvent.click(screen.getByTestId("scm-commit"));
-    await waitFor(() =>
-      expect(screen.getByTestId("scm-feedback")).toHaveTextContent(/branch →/)
-    );
+    await userEvent.click(screen.getByTestId("scm-primary"));
+    await waitFor(() => expect(renames).toHaveLength(1));
     // pendingAiRename cleared after commit
     expect(useWorkbench.getState().pendingAiRename).not.toContain("w1");
+  });
+
+  it("creates a branch via the Git actions menu", async () => {
+    const user = userEvent.setup();
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("feat/new");
+    const created: unknown[] = [];
+    mockInvoke({
+      git_branch_create: (args) => {
+        created.push(args);
+        return { ok: true };
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await openActions(user);
+    await user.click(screen.getByTestId("scm-action-branch"));
+    await waitFor(() =>
+      expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Created feat/new")
+    );
+    expect(created[0]).toEqual({ worktreePath: "/wt", name: "feat/new" });
+    promptSpy.mockRestore();
   });
 });

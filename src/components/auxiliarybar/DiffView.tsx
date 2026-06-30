@@ -52,6 +52,7 @@ export function DiffView() {
   const openFileTab = useWorkbench((s) => s.openFileTab);
   const reviewPref = useProjectSettingsStore((s) => s.data?.preferences?.review);
   const createPrPref = useProjectSettingsStore((s) => s.data?.preferences?.createPr);
+  const generalPref = useProjectSettingsStore((s) => s.data?.preferences?.general);
   const fixErrorsPref = useProjectSettingsStore((s) => s.data?.preferences?.fixErrors);
   const allComments = useReviewComments((s) => s.comments);
   const clearComments = useReviewComments((s) => s.clearForWorkspace);
@@ -114,7 +115,7 @@ export function DiffView() {
     try {
       await sendAgentPrompt({
         target: agentTarget,
-        prompt: buildCreatePrPrompt(diff, createPrPref),
+        prompt: buildCreatePrPrompt(diff, createPrPref, generalPref, { remote: "origin" }),
         onAgentFocus: () => setActiveWorkspace(active.id),
       });
     } catch (e) {
@@ -154,7 +155,7 @@ export function DiffView() {
     if (!window.confirm("Push this branch and open a pull request?")) return;
     setPrStatus({ kind: "running" });
     try {
-      const { url } = await prCreate(active.worktreePath);
+      const { url } = await prCreate(active.worktreePath, { backend: active.agentBackend, instructions: createPrPref });
       setPrStatus({ kind: "done", url });
     } catch (e) {
       setPrStatus({ kind: "error", message: String(e) });
