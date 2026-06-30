@@ -151,6 +151,21 @@ describe("DiffViewer", () => {
     expect(writeText).toHaveBeenCalledWith("new");
   });
 
+  it("creates the diff editor in forced side-by-side mode", async () => {
+    const tab = diffTab();
+    render(
+      <DiffViewer tab={tab} meta={fileMetaForPath(tab.path)} onDirtyChange={vi.fn()} registerActions={vi.fn()} />
+    );
+    await waitFor(() => {
+      const monaco = (globalThis as unknown as Record<string, { editor: { createDiffEditor: ReturnType<typeof vi.fn> } }>).__monaco;
+      expect(monaco.editor.createDiffEditor).toHaveBeenCalled();
+    });
+    const monaco = (globalThis as unknown as Record<string, { editor: { createDiffEditor: ReturnType<typeof vi.fn> } }>).__monaco;
+    const opts = monaco.editor.createDiffEditor.mock.calls.at(-1)?.[1];
+    expect(opts.renderSideBySide).toBe(true);
+    expect(opts.useInlineViewWhenSpaceIsLimited).toBe(false);
+  });
+
   it("disposes original model and releases cache if component unmounts after getOrCreateModel resolves", async () => {
     // Delay getOrCreateModel to allow unmount to happen in between.
     let resolveModel!: (v: ReturnType<typeof modelCache.getOrCreateModel> extends Promise<infer T> ? T : never) => void;
