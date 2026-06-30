@@ -29,6 +29,8 @@ import { FileWriter } from "./file-writer";
 import { ProjectSettingsStore } from "./project-settings-store";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
+import { PrTextGenerator } from "./pr-text-generator";
+import { oneShotSpecFor } from "./agent-oneshot";
 import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
@@ -225,22 +227,30 @@ const Schemas = {
     body: nullishOptional(z.string()),
     base: nullishOptional(z.string()),
     remote: nullishOptional(z.string()),
+    backend: nullishOptional(z.string()),
+    instructions: nullishOptional(z.string()),
   }),
   checksGet: z.object({ worktreePath: z.string() }),
   gitRemoteInfo: z.object({
     worktreePath: z.string(),
     remote: nullishOptional(z.string()),
   }),
-  aiCommitMessage: z.object({ worktreePath: z.string() }),
+  aiCommitMessage: z.object({
+    worktreePath: z.string(),
+    backend: nullishOptional(z.string()),
+  }),
   aiBranchName: z.object({
     prompt: z.string(),
     cwd: nullishOptional(z.string()),
     instructions: nullishOptional(z.string()),
+    backend: nullishOptional(z.string()),
   }),
   aiBranchNameFromDiff: z.object({
     cwd: z.string(),
     instructions: nullishOptional(z.string()),
+    backend: nullishOptional(z.string()),
   }),
+  gitBranchCreate: z.object({ worktreePath: z.string(), name: z.string() }),
   gitRenameBranch: z.object({ worktreePath: z.string(), newBranch: z.string() }),
   credentialProvider: z.object({ provider: CredentialProviderSchema }),
   credentialConnect: z.object({
@@ -281,6 +291,7 @@ export interface RpcHandlersOptions {
   instructions?: InstructionsResolver;
   commitMessage?: CommitMessageGenerator;
   branchName?: BranchNameGenerator;
+  prText?: PrTextGenerator;
   credentials?: GitCredentials;
   notifier?: Notifier;
 }
@@ -312,6 +323,7 @@ export class RpcHandlers {
   readonly instructions: InstructionsResolver;
   readonly commitMessage: CommitMessageGenerator;
   readonly branchName: BranchNameGenerator;
+  readonly prText: PrTextGenerator;
   readonly credentials: GitCredentials;
   readonly notifier: Notifier;
 
@@ -353,6 +365,7 @@ export class RpcHandlers {
     this.instructions = opts.instructions ?? new InstructionsResolver();
     this.commitMessage = opts.commitMessage ?? new CommitMessageGenerator();
     this.branchName = opts.branchName ?? new BranchNameGenerator();
+    this.prText = opts.prText ?? new PrTextGenerator();
     this.credentials = opts.credentials ?? new GitCredentials();
   }
 
@@ -675,7 +688,29 @@ export class RpcHandlers {
       }
       case "pr.create": {
         const p = Schemas.prCreate.parse(params);
-        return this.git.prCreate(p);
+        let title = p.title ?? undefined;
+        let body = p.body ?? undefined;
+        if (!title) {
+          try {
+            const generated = await this.prText.generate({
+              worktreePath: p.worktreePath,
+              base: p.base ?? "HEAD@{upstream}",
+              instructions: p.instructions ?? undefined,
+              agent: oneShotSpecFor(p.backend ?? undefined),
+            });
+            title = generated.title;
+            body = generated.body;
+          } catch {
+            // Generation failed — leave title/body undefined so prCreate uses --fill.
+          }
+        }
+        return this.git.prCreate({
+          worktreePath: p.worktreePath,
+          title,
+          body,
+          base: p.base ?? undefined,
+          remote: p.remote ?? undefined,
+        });
       }
       case "checks.get": {
         const p = Schemas.checksGet.parse(params);
@@ -687,7 +722,10 @@ export class RpcHandlers {
       }
       case "ai.commit_message": {
         const p = Schemas.aiCommitMessage.parse(params);
-        return this.commitMessage.generate(p);
+        return this.commitMessage.generate({
+          worktreePath: p.worktreePath,
+          agent: oneShotSpecFor(p.backend ?? undefined),
+        });
       }
       case "ai.branch_name": {
         const p = Schemas.aiBranchName.parse(params);
@@ -695,11 +733,20 @@ export class RpcHandlers {
           prompt: p.prompt,
           cwd: p.cwd ?? undefined,
           instructions: p.instructions ?? undefined,
+          agent: oneShotSpecFor(p.backend ?? undefined),
         });
       }
       case "ai.branch_name_from_diff": {
         const p = Schemas.aiBranchNameFromDiff.parse(params);
-        return this.branchName.generateFromDiff({ cwd: p.cwd, instructions: p.instructions ?? undefined });
+        return this.branchName.generateFromDiff({
+          cwd: p.cwd,
+          instructions: p.instructions ?? undefined,
+          agent: oneShotSpecFor(p.backend ?? undefined),
+        });
+      }
+      case "git.branch_create": {
+        const p = Schemas.gitBranchCreate.parse(params);
+        return this.git.branchCreate({ worktreePath: p.worktreePath, name: p.name });
       }
       case "git.rename_branch": {
         const p = Schemas.gitRenameBranch.parse(params);
