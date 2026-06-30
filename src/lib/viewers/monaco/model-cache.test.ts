@@ -5,6 +5,7 @@ import {
   disposeModelForPath,
   __resetModelCache,
 } from "./model-cache";
+import * as loader from "./loader";
 
 // Use unique paths per test so models from different tests don't share the
 // same Monaco mock URI→model entry (and its dispose spy call count).
@@ -85,6 +86,26 @@ describe("model cache", () => {
     expect(Object.is(first, second)).toBe(true);
     // Value must still be the original (cache hit, content arg ignored).
     expect(second.getValue()).toBe("original content");
+  });
+
+  it("Fix B — creates the model synchronously without awaiting grammar load", async () => {
+    // ensureLanguage hangs forever. If getOrCreateModel awaited it (the old
+    // behavior), this would never resolve. It must resolve immediately with the
+    // model created using the synchronous language id.
+    const ensureSpy = vi
+      .spyOn(loader, "ensureLanguage")
+      .mockReturnValue(new Promise<string>(() => {}));
+    try {
+      const path = "/wt/fixb.rs";
+      const model = await getOrCreateModel(path, "fn main() {}");
+      expect(model.getValue()).toBe("fn main() {}");
+      // Synchronous id from the extension, not "plaintext" or a resolved grammar.
+      expect(model.getLanguageId()).toBe("rust");
+      // Grammar load was kicked off fire-and-forget (not awaited).
+      expect(ensureSpy).toHaveBeenCalledWith(path);
+    } finally {
+      ensureSpy.mockRestore();
+    }
   });
 
   it("two concurrent calls return the same model, createModel called once, disposal requires two releases then disposeModelForPath", async () => {

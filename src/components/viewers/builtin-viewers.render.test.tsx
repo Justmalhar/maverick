@@ -70,6 +70,24 @@ describe("MarkdownViewer", () => {
     expect(await screen.findByTestId("markdown")).toBeInTheDocument();
   });
 
+  it("Fix A — seeds content from `initial` and issues no file_read", async () => {
+    const readsBefore = invokeMock.mock.calls.filter(([c]) => c === "file_read").length;
+    const tab = makeFileTab("/wt/readme.md", "view");
+    const meta = fileMetaForPath("/wt/readme.md");
+    render(
+      <MarkdownViewer
+        tab={tab}
+        meta={meta}
+        initial={{ content: "# seeded", mtime: 1, encoding: "utf8" }}
+        onDirtyChange={vi.fn()}
+        registerActions={vi.fn()}
+      />
+    );
+    expect(await screen.findByTestId("markdown")).toBeInTheDocument();
+    // No additional file_read — the preview rendered straight from the seed.
+    expect(invokeMock.mock.calls.filter(([c]) => c === "file_read").length).toBe(readsBefore);
+  });
+
   it("calls registerActions with a copyContents function that writes to clipboard", async () => {
     const tab = makeFileTab("/wt/readme.md", "view");
     const meta = fileMetaForPath("/wt/readme.md");

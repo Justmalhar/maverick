@@ -1,7 +1,16 @@
 import type { ComponentType } from "react";
 import type { FileTab } from "@/state/store";
+import type { TextEncoding } from "@/lib/ipc";
 
 export type ViewerIntent = "preview" | "edit" | "diff";
+
+/** The disk read FileTabPane already performed for viewer selection, handed to
+ *  text viewers so they don't issue a second redundant file_read on open. */
+export interface ViewerInitialContent {
+  content: string;
+  mtime: number;
+  encoding: TextEncoding;
+}
 
 export interface FileMeta {
   /** Absolute path. */
@@ -23,6 +32,9 @@ export interface ViewerActions {
 export interface ViewerProps {
   tab: FileTab;
   meta: FileMeta;
+  /** Content from FileTabPane's mount read; text viewers use it instead of
+   *  re-reading. Absent when the read failed or yielded no usable text. */
+  initial?: ViewerInitialContent;
   onDirtyChange: (dirty: boolean) => void;
   /** Viewers register imperative actions; the toolbar binds its buttons to them. */
   registerActions: (actions: ViewerActions) => void;

@@ -74,6 +74,33 @@ describe("CodeViewer", () => {
     expect(invokeMock).toHaveBeenCalledWith("file_read", { filePath: "/wt/src/a.ts" });
   });
 
+  it("Fix A — uses the initial content prop and issues NO second file_read", async () => {
+    const tab = tabFor();
+    let actions: { save?: () => Promise<void> } = {};
+    render(
+      <CodeViewer
+        tab={tab}
+        meta={fileMetaForPath(tab.path)}
+        initial={{ content: "seed = 1", mtime: 55, encoding: "utf8" }}
+        onDirtyChange={vi.fn()}
+        registerActions={(a) => { actions = a; }}
+      />
+    );
+    await waitFor(() => expect(actions.save).toBeDefined());
+    const monaco = (globalThis as unknown as Record<string, { editor: { create: ReturnType<typeof vi.fn> } }>).__monaco;
+    expect(monaco.editor.create).toHaveBeenCalled();
+    // The seed content satisfied the load — no file_read round trip on the critical path.
+    expect(invokeMock).not.toHaveBeenCalledWith("file_read", expect.anything());
+    // Save round-trips the seed's mtime + encoding, proving they were adopted.
+    await actions.save?.();
+    expect(invokeMock).toHaveBeenCalledWith("file_write", {
+      filePath: "/wt/src/a.ts",
+      content: "seed = 1",
+      expectedMtime: 55,
+      encoding: "utf8",
+    });
+  });
+
   it("registers save/copy actions; save calls file_write with expectedMtime", async () => {
     const tab = tabFor();
     let actions: { save?: () => Promise<void> } = {};
