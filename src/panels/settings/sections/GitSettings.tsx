@@ -122,8 +122,7 @@ export default function GitSettings() {
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
               rows={3}
-              className="w-full max-w-lg resize-none rounded-sm bg-input p-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              style={{ border: "1px solid hsl(var(--border))" }}
+              className="w-full max-w-lg resize-none rounded-sm border border-border bg-input p-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           }
         />

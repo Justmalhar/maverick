@@ -117,10 +117,7 @@ export function SettingsJsonEditor({ onClose }: Props) {
         </p>
       </div>
 
-      <div
-        className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-card/40"
-        style={{ border: "1px solid hsl(var(--border))" }}
-      >
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card/40">
         <pre
           ref={preRef}
           aria-hidden="true"

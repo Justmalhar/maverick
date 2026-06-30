@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import type { ThemeDefinition } from "@/lib/ipc";
+import type { SettingsKey, ThemeDefinition } from "@/lib/ipc";
+import { useSettingsStore } from "@/lib/stores/settings";
 import { ThemeContext } from "./theme-context";
 import MaverickDark from "./definitions/maverick-dark.json";
 import MaverickLight from "./definitions/maverick-light.json";
@@ -222,14 +223,45 @@ function applyToRoot(def: ThemeDefinition) {
   }
 }
 
+// Per-token color overrides from Appearance → Custom colors. Applied as an
+// overlay ON TOP of the active theme. ThemeProvider is the single owner of the
+// inline custom properties on :root, so the overlay must live here: applying it
+// from elsewhere on the same channel would clobber the theme (clearing a value
+// would fall back to the tokens.css default instead of the theme value).
+const CUSTOM_COLOR_OVERRIDES: ReadonlyArray<readonly [SettingsKey, string]> = [
+  ["appearance.customColors.background", "--background"],
+  ["appearance.customColors.foreground", "--foreground"],
+  ["appearance.customColors.accent", "--accent"],
+  ["appearance.customColors.muted", "--muted"],
+  ["appearance.customColors.border", "--border"],
+  ["appearance.customColors.card", "--card"],
+  ["appearance.customColors.sidebar", "--sidebar-bg"],
+];
+
+function applyCustomColorOverrides(root: HTMLElement) {
+  const { values } = useSettingsStore.getState();
+  for (const [key, cssVar] of CUSTOM_COLOR_OVERRIDES) {
+    const hex = values[key];
+    const hsl = typeof hex === "string" && hex ? colorToHsl(hex) : null;
+    // Empty → leave the theme's value untouched (no removeProperty).
+    if (hsl) root.style.setProperty(cssVar, hsl);
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeDefinition>(BUILTIN_THEMES[0]!);
+  // Re-apply whenever the active theme OR any custom-color override changes, so
+  // the overlay always sits on top of freshly-applied theme tokens.
+  const customColorSignature = useSettingsStore((s) =>
+    CUSTOM_COLOR_OVERRIDES.map(([key]) => s.values[key] ?? "").join("|"),
+  );
 
   useLayoutEffect(() => {
     applyToRoot(theme);
-  }, [theme]);
+    applyCustomColorOverrides(document.documentElement);
+  }, [theme, customColorSignature]);
 
   const setTheme = useCallback((def: ThemeDefinition) => {
     setThemeState(def);

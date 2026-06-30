@@ -66,8 +66,7 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
           handleSearchKey(e as unknown as KeyboardEvent<HTMLInputElement>);
         }
       }}
-      className="flex h-full w-full flex-col gap-2 bg-sidebar px-2 py-3"
-      style={{ borderRight: "1px solid hsl(var(--border))" }}
+      className="flex h-full w-full flex-col gap-2 border-r border-border bg-sidebar px-2 py-3"
     >
       <div className="px-1">
         <SettingsSearchInput value={query} onChange={setQuery} placeholder="Search…" />
@@ -111,7 +110,7 @@ export function SettingsNavRail({ section, onSelect, onOpenFile }: Props) {
         )}
       </div>
       {onOpenFile ? (
-        <div className="pt-2" style={{ borderTop: "1px solid hsl(var(--border) / 0.4)" }}>
+        <div className="border-t border-border/40 pt-2">
           <button
             type="button"
             onClick={onOpenFile}

@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { SettingsGroup } from "../primitives/SettingsGroup";
 import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsToggle } from "../primitives/SettingsToggle";
@@ -12,38 +11,6 @@ interface CustomColor {
   key: SettingsKey;
   cssVar: string;
   label: string;
-}
-
-// Hex → "h s% l%" string for our HSL-based CSS variables.
-function hexToHslTriple(hex: string): string | null {
-  const m = /^#?([a-f\d]{6})$/i.exec(hex.trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 255) / 255;
-  const g = ((n >> 8) & 255) / 255;
-  const b = (n & 255) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  let h = 0;
-  let s = 0;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h *= 60;
-  }
-  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
 const CUSTOM_COLORS: CustomColor[] = [
@@ -91,7 +58,7 @@ export default function AppearanceSettings() {
               value={uiFontSize}
               data-testid="ui-font-size"
               onChange={(e) => setUiFontSize(Number(e.target.value))}
-              className="w-full max-w-sm"
+              className="w-full max-w-sm accent-accent"
             />
           }
         />
@@ -105,7 +72,7 @@ export default function AppearanceSettings() {
               value={terminalFontSize}
               data-testid="terminal-font-size"
               onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-              className="w-full max-w-sm"
+              className="w-full max-w-sm accent-accent"
             />
           }
         />
@@ -143,21 +110,9 @@ export default function AppearanceSettings() {
 }
 
 function CustomColorsGroup() {
-  // Apply any saved overrides to the live :root on mount + on change.
-  useEffect(() => {
-    const apply = () => {
-      const values = useSettingsStore.getState().values;
-      for (const c of CUSTOM_COLORS) {
-        const hex = (values[c.key] as string | undefined) ?? "";
-        const hsl = hex ? hexToHslTriple(hex) : null;
-        if (hsl) document.documentElement.style.setProperty(c.cssVar, hsl);
-        else document.documentElement.style.removeProperty(c.cssVar);
-      }
-    };
-    apply();
-    return useSettingsStore.subscribe(apply);
-  }, []);
-
+  // Overrides are applied to :root by ThemeProvider (the single owner of the
+  // inline custom properties), which reacts to these settings changes. This
+  // component only edits the values.
   return (
     <SettingsGroup
       title="Custom colors"

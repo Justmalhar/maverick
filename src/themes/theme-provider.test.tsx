@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { ThemeProvider } from "./theme-provider";
 import { useThemeContext } from "./theme-context";
+import { useSettingsStore, _resetSettingsStoreForTests } from "@/lib/stores/settings";
 import type { ReactNode } from "react";
 import type { ThemeDefinition } from "@/lib/ipc";
 
@@ -28,6 +29,8 @@ const LEGACY_THEME: ThemeDefinition = {
 };
 
 describe("ThemeProvider", () => {
+  beforeEach(() => _resetSettingsStoreForTests());
+
   it("provides a default theme and applies CSS variables to <html>", () => {
     const { result } = renderHook(() => useThemeContext(), { wrapper: Wrapper });
     expect(result.current.theme.name).toBeTypeOf("string");
@@ -133,6 +136,26 @@ describe("ThemeProvider", () => {
     // It will be set to the derived value from "#ffcc00" (a bright yellow → dark fg),
     // but the key point is the branch that short-circuits was exercised without crash.
     expect(sv).toBeTruthy();
+  });
+
+  it("overlays a custom color override on top of the active theme", () => {
+    const { result } = renderHook(() => useThemeContext(), { wrapper: Wrapper });
+    act(() => result.current.setTheme(LEGACY_THEME));
+    act(() => useSettingsStore.getState().set("appearance.customColors.accent", "#00ff00"));
+    // #00ff00 → "120 100% 50%" overrides the theme's accent.
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("120 100% 50%");
+  });
+
+  it("clearing a custom color restores the theme value (no clobber to default)", () => {
+    const { result } = renderHook(() => useThemeContext(), { wrapper: Wrapper });
+    act(() => result.current.setTheme(LEGACY_THEME));
+    const themeAccent = document.documentElement.style.getPropertyValue("--accent");
+    act(() => useSettingsStore.getState().set("appearance.customColors.accent", "#00ff00"));
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("120 100% 50%");
+    // Clearing must fall back to the THEME value, never strip the property.
+    act(() => useSettingsStore.getState().set("appearance.customColors.accent", ""));
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(themeAccent);
+    expect(themeAccent).toBeTruthy();
   });
 
   it("colorToHsl handles an empty value (returns null → skipped)", () => {
