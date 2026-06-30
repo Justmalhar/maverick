@@ -5,10 +5,7 @@ export default function SkillsSettings() {
   const platform = useOSPlatform();
   return (
     <div data-testid="skills-settings" className="space-y-5">
-      <div
-        className="rounded-xl bg-card/30 px-5 py-4 text-xs text-muted-foreground"
-        style={{ border: "1px solid hsl(var(--border))" }}
-      >
+      <div className="rounded-xl border border-border bg-card/30 px-5 py-4 text-xs text-muted-foreground">
         Skills are reusable prompt + tool bundles loaded into every workspace. Drop a
         <code className="mx-1 rounded bg-muted/40 px-1 font-mono">skill.md</code>
         into{" "}

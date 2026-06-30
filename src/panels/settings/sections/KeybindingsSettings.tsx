@@ -39,8 +39,8 @@ export default function KeybindingsSettings() {
       />
       <div className="space-y-2">
         {byCategory.map(([cat, items]) => (
-          <div key={cat} className="rounded-sm" style={{ border: "1px solid hsl(var(--border))" }}>
-            <div className="bg-card/40 px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+          <div key={cat} className="rounded-sm border border-border">
+            <div className="border-b border-border bg-card/40 px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
               {cat}
             </div>
             <table className="w-full text-xs">
@@ -49,7 +49,7 @@ export default function KeybindingsSettings() {
                   <tr
                     key={k.id}
                     data-testid={`keybinding-${k.id}`}
-                    style={{ borderTop: "1px solid hsl(var(--border))" }}
+                    className="border-t border-border"
                   >
                     <td className="w-[40%] truncate px-2 py-1 text-foreground">
                       {k.label}

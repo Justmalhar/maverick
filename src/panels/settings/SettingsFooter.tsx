@@ -10,7 +10,7 @@ interface Props {
 const STATUS_LABEL: Record<Status, string> = {
   idle: "All changes saved",
   saving: "Saving…",
-  saved: "Saved · just now",
+  saved: "Saved",
   error: "Save failed · retry",
 };
 
@@ -23,10 +23,7 @@ const STATUS_VARIANT: Record<Status, StatusDotProps["variant"]> = {
 
 export function SettingsFooter({ status, errorMessage }: Props) {
   return (
-    <footer
-      className="flex h-9 items-center justify-end bg-muted/50 px-4"
-      style={{ borderTop: "1px solid hsl(var(--border))" }}
-    >
+    <footer className="flex h-9 items-center justify-end border-t border-border bg-muted/50 px-4">
       <div
         className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
         title={errorMessage}
