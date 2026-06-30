@@ -35,8 +35,7 @@ export function ChangesSection({
             return (
               <li key={f.path}>
                 <div
-                  className="group/row flex w-full items-center gap-2 px-3 text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
-                  style={{ height: "22px" }}
+                  className="group/row flex h-[22px] w-full items-center gap-2 px-3 text-xs text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
                 >
                   <button
                     type="button"

@@ -21,6 +21,7 @@ export interface CommitActionsProps {
   primaryLabel: "Commit" | "Commit & Push";
   canCommit: boolean;
   busy: boolean;
+  anyBusy: boolean;
   canAgentPr: boolean;
   onCommit: () => void;
   onCommitAndPush: () => void;
@@ -59,32 +60,32 @@ export function CommitActions(props: CommitActionsProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">Git actions</DropdownMenuLabel>
-          <DropdownMenuItem data-testid="scm-action-commit" onSelect={props.onCommit} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-commit" disabled={props.anyBusy} onSelect={props.onCommit} className="text-xs">
             <GitCommitVertical className="mr-2 h-3.5 w-3.5" /> Commit
           </DropdownMenuItem>
-          <DropdownMenuItem data-testid="scm-action-pull" onSelect={props.onPull} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-pull" disabled={props.anyBusy} onSelect={props.onPull} className="text-xs">
             <ArrowDownToLine className="mr-2 h-3.5 w-3.5" /> Pull
           </DropdownMenuItem>
-          <DropdownMenuItem data-testid="scm-action-push" onSelect={props.onPush} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-push" disabled={props.anyBusy} onSelect={props.onPush} className="text-xs">
             <ArrowUpFromLine className="mr-2 h-3.5 w-3.5" /> Push
           </DropdownMenuItem>
-          <DropdownMenuItem data-testid="scm-action-sync" onSelect={props.onSync} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-sync" disabled={props.anyBusy} onSelect={props.onSync} className="text-xs">
             <RefreshCw className="mr-2 h-3.5 w-3.5" /> Sync
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">Pull request</DropdownMenuLabel>
-          <DropdownMenuItem data-testid="scm-action-pr-direct" onSelect={props.onCreatePr} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-pr-direct" disabled={props.anyBusy} onSelect={props.onCreatePr} className="text-xs">
             <GitPullRequest className="mr-2 h-3.5 w-3.5" /> Create PR
           </DropdownMenuItem>
           <DropdownMenuItem
             data-testid="scm-action-pr-agent"
-            disabled={!props.canAgentPr}
-            onSelect={() => props.canAgentPr && props.onCreatePrWithAgent()}
+            disabled={!props.canAgentPr || props.anyBusy}
+            onSelect={() => props.canAgentPr && !props.anyBusy && props.onCreatePrWithAgent()}
             className="text-xs"
           >
             <GitPullRequest className="mr-2 h-3.5 w-3.5" /> Create PR with Agent
           </DropdownMenuItem>
-          <DropdownMenuItem data-testid="scm-action-branch" onSelect={props.onCreateBranch} className="text-xs">
+          <DropdownMenuItem data-testid="scm-action-branch" disabled={props.anyBusy} onSelect={props.onCreateBranch} className="text-xs">
             <GitBranchPlus className="mr-2 h-3.5 w-3.5" /> Create Branch
           </DropdownMenuItem>
         </DropdownMenuContent>

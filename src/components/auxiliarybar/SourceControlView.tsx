@@ -121,7 +121,7 @@ export function SourceControlView() {
     await scm.refresh();
     const wb = useWorkbench.getState();
     if (wb.pendingAiRename.includes(ws.id)) {
-      const newBranch = await renameWorkspaceBranchWithAI({ worktreePath: ws.worktreePath, instructions: prefs?.branchRename });
+      const newBranch = await renameWorkspaceBranchWithAI({ worktreePath: ws.worktreePath, instructions: prefs?.branchRename, backend: ws.agentBackend });
       wb.clearPendingAiRename(ws.id);
       if (newBranch) { wb.updateWorkspace(ws.id, { branch: newBranch }); await scm.refresh({ remote: "never" }); }
     }
@@ -238,6 +238,7 @@ export function SourceControlView() {
           primaryLabel={primaryLabel}
           canCommit={!anyBusy && files.length > 0}
           busy={busy === "commit"}
+          anyBusy={anyBusy}
           canAgentPr={canAgentPr}
           onCommit={() => void onCommit()}
           onCommitAndPush={() => void onCommitAndPush()}

@@ -46,7 +46,7 @@ export async function resolveTaskBranch(args: {
 }): Promise<string> {
   const instructions = args.instructions?.trim() || undefined;
   if (getAiBranchNames()) {
-    const aiName = await resolveAiName(args.prompt, args.cwd, instructions);
+    const aiName = await resolveAiName(args.prompt, args.cwd, instructions, args.backend);
     if (aiName) {
       return instructions
         ? aiName
@@ -60,13 +60,14 @@ async function resolveAiName(
   prompt: string,
   cwd?: string,
   instructions?: string,
+  backend?: string,
 ): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error("ai-branch-name timeout")), AI_TIMEOUT_MS);
     });
-    const result = await Promise.race([aiBranchName(prompt, cwd, instructions), timeout]);
+    const result = await Promise.race([aiBranchName(prompt, cwd, instructions, backend), timeout]);
     return result?.name?.trim() ?? "";
   } catch {
     return "";

@@ -356,12 +356,13 @@ pub async fn ai_branch_name(
     prompt: String,
     cwd: Option<String>,
     instructions: Option<String>,
+    backend: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.branch_name",
-            json!({ "prompt": prompt, "cwd": cwd, "instructions": instructions }),
+            json!({ "prompt": prompt, "cwd": cwd, "instructions": instructions, "backend": backend }),
             std::time::Duration::from_secs(60),
         )
         .await
@@ -375,12 +376,13 @@ pub async fn ai_branch_name_from_diff(
     state: State<'_, AppState>,
     cwd: String,
     instructions: Option<String>,
+    backend: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.branch_name_from_diff",
-            json!({ "cwd": cwd, "instructions": instructions }),
+            json!({ "cwd": cwd, "instructions": instructions, "backend": backend }),
             std::time::Duration::from_secs(60),
         )
         .await

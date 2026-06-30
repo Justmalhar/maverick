@@ -8,6 +8,7 @@ function setup(over: Partial<React.ComponentProps<typeof CommitActions>> = {}) {
     primaryLabel: "Commit & Push" as const,
     canCommit: true,
     busy: false,
+    anyBusy: false,
     canAgentPr: true,
     onCommit: vi.fn(),
     onCommitAndPush: vi.fn(),
@@ -53,5 +54,13 @@ describe("CommitActions", () => {
     await user.click(screen.getByTestId("scm-actions-trigger"));
     await waitFor(() => expect(screen.getByTestId("scm-action-pr-agent")).toBeInTheDocument());
     expect(screen.getByTestId("scm-action-pr-agent")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("dropdown git-op items are disabled when anyBusy", async () => {
+    const user = userEvent.setup();
+    setup({ anyBusy: true });
+    await user.click(screen.getByTestId("scm-actions-trigger"));
+    await waitFor(() => expect(screen.getByTestId("scm-action-push")).toBeInTheDocument());
+    expect(screen.getByTestId("scm-action-push")).toHaveAttribute("aria-disabled", "true");
   });
 });

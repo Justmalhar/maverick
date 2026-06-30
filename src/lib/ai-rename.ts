@@ -7,9 +7,10 @@ import { aiBranchNameFromDiff, gitRenameBranch } from "@/lib/tauri";
 export async function renameWorkspaceBranchWithAI(args: {
   worktreePath: string;
   instructions?: string;
+  backend?: string;
 }): Promise<string | null> {
   try {
-    const { name } = await aiBranchNameFromDiff(args.worktreePath, args.instructions);
+    const { name } = await aiBranchNameFromDiff(args.worktreePath, args.instructions, args.backend);
     if (!name) return null;
     await gitRenameBranch(args.worktreePath, name);
     return name;

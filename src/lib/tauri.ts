@@ -494,16 +494,18 @@ export async function aiCommitMessage(
 export async function aiBranchName(
   prompt: string,
   cwd?: string,
-  instructions?: string
+  instructions?: string,
+  backend?: string
 ): Promise<{ name: string }> {
-  return invoke("ai_branch_name", { prompt, cwd, instructions });
+  return invoke("ai_branch_name", { prompt, cwd, instructions, backend });
 }
 
 export async function aiBranchNameFromDiff(
   cwd: string,
-  instructions?: string
+  instructions?: string,
+  backend?: string
 ): Promise<{ name: string }> {
-  return invoke("ai_branch_name_from_diff", { cwd, instructions });
+  return invoke("ai_branch_name_from_diff", { cwd, instructions, backend });
 }
 
 export async function gitRenameBranch(
