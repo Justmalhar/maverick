@@ -468,6 +468,38 @@ describe("useSourceControl", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it("explicit push with no upstream still calls gitPush (sets upstream)", async () => {
+    mockGit({
+      branchList: () => [{ name: "feat/x", isRemote: false, isCurrent: true }],
+      push: () => ({ ok: true }),
+    });
+    const { result } = renderHook(() => useSourceControl("/w"));
+    await act(async () => {
+      await result.current.refresh({ remote: "never" });
+    });
+    let res: Awaited<ReturnType<typeof result.current.runRemoteAction>>;
+    await act(async () => {
+      res = await result.current.runRemoteAction("push");
+    });
+    expect(invoke).toHaveBeenCalledWith("git_push", expect.objectContaining({ worktreePath: "/w" }));
+    expect(res!.ok).toBe(true);
+  });
+
+  it("contextual action with no upstream is still blocked", async () => {
+    mockGit({
+      branchList: () => [{ name: "feat/x", isRemote: false, isCurrent: true }],
+    });
+    const { result } = renderHook(() => useSourceControl("/w"));
+    await act(async () => {
+      await result.current.refresh({ remote: "never" });
+    });
+    let res: Awaited<ReturnType<typeof result.current.runRemoteAction>>;
+    await act(async () => {
+      res = await result.current.runRemoteAction("contextual");
+    });
+    expect(res!.blocked).toBe("missing-upstream");
+  });
+
   it("LRU evicts oldest auto-fetch entries beyond limit", async () => {
     // The auto-fetch throttle map is module-level and bounded to 16 entries.
     // Mounting 18 distinct paths (each auto-fetches once) evicts /p0 + /p1.
