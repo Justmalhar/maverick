@@ -1,0 +1,97 @@
+name: Release
+
+# Build signed-less alpha installers (macOS DMG + Windows NSIS/MSI) on their
+# native runners and attach them to a GitHub prerelease. Each runner compiles
+# its own per-platform `maverick-sidecar` externalBin via beforeBuildCommand,
+# so no cross-compilation is attempted (the Bun sidecar + Tauri shell both need
+# the host toolchain).
+#
+# Trigger by pushing a tag, e.g.  git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
+# Or run manually from the Actions tab (workflow_dispatch) against a chosen tag.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist, e.g. v0.1.0-alpha.1)"
+        required: true
+        type: string
+
+# tauri-action needs write access to create the release and upload assets.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (Apple Silicon)
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - os: windows-latest
+            label: Windows (x64)
+            target: x86_64-pc-windows-msvc
+            args: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install sidecar dependencies
+        working-directory: sidecar
+        run: bun install --frozen-lockfile
+
+      - name: Build & publish (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: "Maverick ${{ github.event.inputs.tag || github.ref_name }}"
+          releaseBody: |
+            ### Maverick — Alpha
+
+            Native Tauri desktop IDE that orchestrates AI coding CLIs.
+
+            **Installers**
+            - macOS (Apple Silicon): `.dmg`
+            - Windows (x64): `.exe` (NSIS installer) and `.msi`
+
+            > ⚠️ **Unsigned alpha build.** These installers are not code-signed yet.
+            > - **macOS:** Gatekeeper will block the first launch — right-click the app → **Open**, then confirm. Or run `xattr -dr com.apple.quarantine /Applications/Maverick.app`.
+            > - **Windows:** SmartScreen may warn — click **More info → Run anyway**.
+
+            Auto-update is disabled in this build.
+          prerelease: true
+          releaseDraft: true
+          args: ${{ matrix.args }}
