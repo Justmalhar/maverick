@@ -167,13 +167,16 @@ describe("GitModule methods", () => {
       { stdout: "feature-x\n" }, // rev-parse --abbrev-ref HEAD
       {}, // git push -u origin feature-x
       { stdout: "git@github.com:o/r.git\n" }, // remote get-url origin
+      { stdout: "refs/remotes/origin/main\n" }, // symbolic-ref for defaultBase
       { stdout: "https://github.com/o/r/pull/3\n" }, // gh pr create
     ]);
     const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
     expect(calls[0]).toEqual(["git", "-C", "/w", "rev-parse", "--abbrev-ref", "HEAD"]);
     expect(calls[1]).toEqual(["git", "-C", "/w", "push", "-u", "origin", "feature-x"]);
     expect(calls[2]).toEqual(["git", "-C", "/w", "remote", "get-url", "origin"]);
-    expect(calls[3]).toEqual(["gh", "pr", "create", "--head", "feature-x", "--fill"]);
+    expect(calls[3]).toEqual(["git", "-C", "/w", "symbolic-ref", "refs/remotes/origin/HEAD"]);
+    // base is always included; defaultBase resolved "main" from origin/HEAD
+    expect(calls[4]).toEqual(["gh", "pr", "create", "--head", "feature-x", "--base", "main", "--fill"]);
     expect(result.url).toBe("https://github.com/o/r/pull/3");
   });
 
@@ -220,6 +223,7 @@ describe("GitModule methods", () => {
       { stdout: "feature-q\n" },
       {},
       { stdout: "git@github.com:o/r.git\n" },
+      { stdout: "refs/remotes/origin/main\n" }, // symbolic-ref for defaultBase
       { exitCode: 1, stderr: "gh: validation failed" },
     ]);
     await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(/validation failed/);
@@ -246,8 +250,8 @@ describe("GitModule methods", () => {
       },
     };
     const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
-    // No base → single-ref compare form (GitHub auto-resolves the default branch).
-    expect(result.url).toBe("https://github.com/o/r/compare/feature-q?expand=1");
+    // No caller-supplied base; symbolic-ref returned "" so defaultBase falls back to "main".
+    expect(result.url).toBe("https://github.com/o/r/compare/main...feature-q?expand=1");
   });
 
   test("prCreate rethrows non-ENOENT spawn errors from gh", async () => {
@@ -288,10 +292,12 @@ describe("GitModule methods", () => {
       { stdout: "feature-g\n" },
       {},
       { stdout: "https://gitlab.com/team/repo.git\n" },
+      { stdout: "refs/remotes/origin/main\n" }, // symbolic-ref for defaultBase
     ]);
     const result = await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
+    // base resolves to "main" via defaultBase so target_branch is included
     expect(result.url).toBe(
-      "https://gitlab.com/team/repo/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature-g"
+      "https://gitlab.com/team/repo/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature-g&merge_request%5Btarget_branch%5D=main"
     );
   });
 
@@ -304,6 +310,56 @@ describe("GitModule methods", () => {
     await expect(new GitModule({ shell }).prCreate({ worktreePath: "/w" })).rejects.toThrow(
       /no supported provider/
     );
+  });
+
+  test("prCreate passes provided title/body to gh and detects the default base", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      text: async (cmd) => {
+        calls.push(cmd);
+        if (cmd.includes("rev-parse")) return "feature/x\n";
+        if (cmd.includes("symbolic-ref")) return "origin/main\n";
+        if (cmd.includes("get-url")) return "git@github.com:o/r.git\n";
+        return "";
+      },
+      run: async (cmd) => {
+        calls.push(cmd);
+        if (cmd.includes("push")) return { stdout: "", stderr: "", exitCode: 0 };
+        return { stdout: "https://github.com/o/r/pull/1\n", stderr: "", exitCode: 0 };
+      },
+    };
+    const r = await new GitModule({ shell }).prCreate({
+      worktreePath: "/w",
+      title: "My title",
+      body: "My body",
+    });
+    expect(r.url).toBe("https://github.com/o/r/pull/1");
+    const gh = calls.find((c) => c[0] === "gh");
+    expect(gh).toContain("--title");
+    expect(gh).toContain("My title");
+    expect(gh).toContain("--base");
+    expect(gh).toContain("main");
+    expect(gh).not.toContain("--fill");
+  });
+
+  test("prCreate falls back to --fill when no title is provided", async () => {
+    const calls: string[][] = [];
+    const shell: Shell = {
+      text: async (cmd) => {
+        if (cmd.includes("rev-parse")) return "feature/x\n";
+        if (cmd.includes("symbolic-ref")) return "origin/main\n";
+        if (cmd.includes("get-url")) return "git@github.com:o/r.git\n";
+        return "";
+      },
+      run: async (cmd) => {
+        calls.push(cmd);
+        if (cmd.includes("push")) return { stdout: "", stderr: "", exitCode: 0 };
+        return { stdout: "https://github.com/o/r/pull/2\n", stderr: "", exitCode: 0 };
+      },
+    };
+    await new GitModule({ shell }).prCreate({ worktreePath: "/w" });
+    const gh = calls.find((c) => c[0] === "gh");
+    expect(gh).toContain("--fill");
   });
 
   test("remoteInfo parses the origin URL", async () => {

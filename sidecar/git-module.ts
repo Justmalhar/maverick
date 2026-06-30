@@ -595,6 +595,24 @@ export class GitModule {
     return info;
   }
 
+  // The PR base branch: caller-provided, else the remote's default branch
+  // (origin/HEAD → "main"/"master"/…), else "main".
+  private async defaultBase(worktreePath: string, remote: string): Promise<string> {
+    try {
+      const ref = (
+        await this.shell.text(
+          ["git", "-C", worktreePath, "symbolic-ref", `refs/remotes/${remote}/HEAD`],
+          undefined
+        )
+      ).trim();
+      const stripped = ref.replace(/^refs\/remotes\//, "").replace(new RegExp(`^${remote}/`), "");
+      if (stripped) return stripped;
+    } catch {
+      // origin/HEAD may be unset; fall through.
+    }
+    return "main";
+  }
+
   async prCreate(params: {
     worktreePath: string;
     title?: string;
@@ -618,10 +636,10 @@ export class GitModule {
     if (push.exitCode !== 0) throw new Error(push.stderr || "git push failed");
 
     const info = await this.remoteInfo({ worktreePath: params.worktreePath, remote });
+    const base = params.base ?? (await this.defaultBase(params.worktreePath, remote));
 
     if (info.provider === "github") {
-      const cmd = ["gh", "pr", "create", "--head", branch];
-      if (params.base) cmd.push("--base", params.base);
+      const cmd = ["gh", "pr", "create", "--head", branch, "--base", base];
       if (params.title) {
         cmd.push("--title", params.title);
         cmd.push("--body", params.body ?? "");
@@ -633,20 +651,20 @@ export class GitModule {
         if (exitCode === 0) return { url: stdout.trim() };
         // gh unauthenticated/misconfigured: the compare URL still gets the PR made.
         if (/not found|command not found|auth/i.test(stderr)) {
-          return { url: prWebUrl(info, branch, params.base) };
+          return { url: prWebUrl(info, branch, base) };
         }
         throw new Error(stderr || "gh pr create failed");
       } catch (err) {
         // Bun.spawn throws ENOENT when gh is not installed at all.
         if (err instanceof Error && /enoent|no such file/i.test(err.message)) {
-          return { url: prWebUrl(info, branch, params.base) };
+          return { url: prWebUrl(info, branch, base) };
         }
         throw err;
       }
     }
 
     if (info.provider === "bitbucket" || info.provider === "gitlab") {
-      return { url: prWebUrl(info, branch, params.base) };
+      return { url: prWebUrl(info, branch, base) };
     }
 
     throw new Error(
