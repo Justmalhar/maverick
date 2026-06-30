@@ -54,6 +54,8 @@ export default function DiffViewer({ tab, onDirtyChange, registerActions }: View
         fontSize: 12,
         automaticLayout: true,
         renderSideBySide: true,
+        useInlineViewWhenSpaceIsLimited: false,
+        renderSideBySideInlineBreakpoint: 0,
         originalEditable: false,
         minimap: { enabled: false },
       });

@@ -26,6 +26,18 @@ describe("buildCreatePrPrompt", () => {
   it("omits the file list when the diff is empty", () => {
     expect(buildCreatePrPrompt(makeDiff({ files: [] }))).not.toContain("Changed files");
   });
+
+  test("buildCreatePrPrompt instructs pushing to remote and opening against base", () => {
+    const prompt = buildCreatePrPrompt({ files: [] }, undefined, undefined, { remote: "origin", base: "main" });
+    expect(prompt).toContain("origin");
+    expect(prompt).toContain("main");
+  });
+
+  test("buildCreatePrPrompt appends the general project preference", () => {
+    const prompt = buildCreatePrPrompt({ files: [] }, "Use ticket id in title", "Never force-push");
+    expect(prompt).toContain("Use ticket id in title");
+    expect(prompt).toContain("Never force-push");
+  });
 });
 
 describe("buildFixErrorsPrompt", () => {

@@ -13,9 +13,9 @@ describe("renameWorkspaceBranchWithAI", () => {
       if (cmd === "git_rename_branch") return { ok: true, branch: "feature/login-page" };
       return undefined;
     }) as unknown as typeof invoke);
-    const branch = await renameWorkspaceBranchWithAI({ worktreePath: "/wt", instructions: "use feature/<name>" });
+    const branch = await renameWorkspaceBranchWithAI({ worktreePath: "/wt", instructions: "use feature/<name>", backend: "codex" });
     expect(branch).toBe("feature/login-page");
-    expect(invoke).toHaveBeenCalledWith("ai_branch_name_from_diff", { cwd: "/wt", instructions: "use feature/<name>" });
+    expect(invoke).toHaveBeenCalledWith("ai_branch_name_from_diff", { cwd: "/wt", instructions: "use feature/<name>", backend: "codex" });
     expect(invoke).toHaveBeenCalledWith("git_rename_branch", { worktreePath: "/wt", newBranch: "feature/login-page" });
   });
 

@@ -290,7 +290,10 @@ export function useSourceControl(
       if (!worktreePath || !branch) {
         return { ok: false, action: null, blocked: "no-repo" };
       }
-      if (!branch.upstream) {
+      // An explicit Push must be allowed even with no upstream: the sidecar pushes
+      // with `-u`, which *sets* the upstream. Only contextual/auto actions (and
+      // fetch/pull, which need a remote ref to act on) require an existing upstream.
+      if (!branch.upstream && mode !== "push") {
         return { ok: false, action: null, blocked: "missing-upstream" };
       }
 

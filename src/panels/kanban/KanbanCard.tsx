@@ -56,7 +56,7 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
     setStartError(null);
     setCreatingPr(true);
     try {
-      const { url } = await prCreate(ws.worktreePath, task.title);
+      const { url } = await prCreate(ws.worktreePath, { title: task.title });
       void import("@tauri-apps/plugin-shell").then((m) => m.open(url));
     } catch (e) {
       setStartError(String(e));

@@ -12,7 +12,7 @@ describe("resolveFeatureName", () => {
   it("uses the AI name when aiBranchNames is on (the default)", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({ name: "login-auth-fix" } as never);
     expect(await resolveFeatureName("Fix login", "Fix the login bug", "/p")).toBe("login-auth-fix");
-    expect(invoke).toHaveBeenCalledWith("ai_branch_name", { prompt: "Fix the login bug", cwd: "/p" });
+    expect(invoke).toHaveBeenCalledWith("ai_branch_name", { prompt: "Fix the login bug", cwd: "/p", instructions: undefined, backend: undefined });
   });
 
   it("falls back to the title when the AI returns an empty name", async () => {
@@ -39,6 +39,7 @@ describe("resolveTaskBranch", () => {
       title: "Fix login",
       prompt: "Fix the login page",
       cwd: "/p",
+      backend: "codex",
       instructions: "always use feature/feature-name",
     });
     expect(branch).toBe("feature/login-page");
@@ -46,6 +47,7 @@ describe("resolveTaskBranch", () => {
       prompt: "Fix the login page",
       cwd: "/p",
       instructions: "always use feature/feature-name",
+      backend: "codex",
     });
   });
 

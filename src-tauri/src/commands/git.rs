@@ -105,6 +105,22 @@ pub async fn git_checkout(
 }
 
 #[tauri::command]
+pub async fn git_branch_create(
+    state: State<'_, AppState>,
+    worktree_path: String,
+    name: String,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "git.branch_create",
+            json!({ "worktreePath": worktree_path, "name": name }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn git_blame(
     state: State<'_, AppState>,
     worktree_path: String,
@@ -321,12 +337,13 @@ pub async fn git_remote_info(
 pub async fn ai_commit_message(
     state: State<'_, AppState>,
     worktree_path: String,
+    backend: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.commit_message",
-            json!({ "worktreePath": worktree_path }),
+            json!({ "worktreePath": worktree_path, "backend": backend }),
             std::time::Duration::from_secs(180),
         )
         .await
@@ -339,12 +356,13 @@ pub async fn ai_branch_name(
     prompt: String,
     cwd: Option<String>,
     instructions: Option<String>,
+    backend: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.branch_name",
-            json!({ "prompt": prompt, "cwd": cwd, "instructions": instructions }),
+            json!({ "prompt": prompt, "cwd": cwd, "instructions": instructions, "backend": backend }),
             std::time::Duration::from_secs(60),
         )
         .await
@@ -358,12 +376,13 @@ pub async fn ai_branch_name_from_diff(
     state: State<'_, AppState>,
     cwd: String,
     instructions: Option<String>,
+    backend: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
         .request_with_timeout(
             "ai.branch_name_from_diff",
-            json!({ "cwd": cwd, "instructions": instructions }),
+            json!({ "cwd": cwd, "instructions": instructions, "backend": backend }),
             std::time::Duration::from_secs(60),
         )
         .await

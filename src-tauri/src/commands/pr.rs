@@ -10,6 +10,8 @@ pub async fn pr_create(
     title: Option<String>,
     body: Option<String>,
     base: Option<String>,
+    backend: Option<String>,
+    instructions: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -20,6 +22,8 @@ pub async fn pr_create(
                 "title": title,
                 "body": body,
                 "base": base,
+                "backend": backend,
+                "instructions": instructions,
             }),
         )
         .await

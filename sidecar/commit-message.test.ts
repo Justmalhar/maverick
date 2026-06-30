@@ -98,4 +98,47 @@ describe("CommitMessageGenerator", () => {
       new CommitMessageGenerator({ shell }).generate({ worktreePath: "/w" })
     ).rejects.toThrow(/empty message/);
   });
+
+  test("strips a markdown code fence", async () => {
+    const { shell } = transcript([
+      { stdout: " a | 1 +\n" },
+      { stdout: "diff\n" },
+      { stdout: "```\nfeat: add thing\n```\n" },
+    ]);
+    const r = await new CommitMessageGenerator({ shell }).generate({ worktreePath: "/w" });
+    expect(r.message).toBe("feat: add thing");
+  });
+
+  test("strips a leading preamble line", async () => {
+    const { shell } = transcript([
+      { stdout: " a | 1 +\n" },
+      { stdout: "diff\n" },
+      { stdout: "Here is the commit message:\n\nfix(api): handle null\n" },
+    ]);
+    const r = await new CommitMessageGenerator({ shell }).generate({ worktreePath: "/w" });
+    expect(r.message).toBe("fix(api): handle null");
+  });
+
+  test("preserves a multi-line subject + body", async () => {
+    const { shell } = transcript([
+      { stdout: " a | 1 +\n" },
+      { stdout: "diff\n" },
+      { stdout: "feat: thing\n\nBody line one.\nBody line two.\n" },
+    ]);
+    const r = await new CommitMessageGenerator({ shell }).generate({ worktreePath: "/w" });
+    expect(r.message).toBe("feat: thing\n\nBody line one.\nBody line two.");
+  });
+
+  test("runs the injected agent spec instead of claude", async () => {
+    const { shell, calls } = transcript([
+      { stdout: " a | 1 +\n" },
+      { stdout: "diff\n" },
+      { stdout: "feat: x\n" },
+    ]);
+    await new CommitMessageGenerator({ shell }).generate({
+      worktreePath: "/w",
+      agent: { command: "codex", args: ["exec"] },
+    });
+    expect(calls[2]).toEqual(["codex", "exec"]);
+  });
 });
