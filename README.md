@@ -1,17 +1,62 @@
-![Maverick](./public/maverick-logo.svg)# Maverick
+<div align="center">
 
-**A native desktop IDE for orchestrating AI coding agents** \
-Run Claude Code, Codex, Gemini, Aider, Ollama, and any CLI agent side by side\
-in a single workspace — each isolated in its own git worktree.
+<img src="./public/app-icon.png" alt="Maverick" width="120" height="120" />
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [Configuration](#-configuration) • [Project Layout](#-project-layout) • [Development](#-development)
+# Maverick
 
-![Tauri v2](https://img.shields.io/badge/Tauri-v2-blueviolet)![React 19](https://img.shields.io/badge/React-19-61DAFB)![Bun 1.3+](https://img.shields.io/badge/Bun-%5E1.3-black)![Rust stable](https://img.shields.io/badge/Rust-stable-orange)![MIT License](https://img.shields.io/badge/license-MIT-blue)---
+**A native desktop IDE for orchestrating AI coding agents**
+
+Run Claude Code, Codex, Gemini, Aider, Ollama, and any CLI agent side by side —
+each isolated in its own git worktree.
+
+[![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
+&nbsp;[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
+&nbsp;[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.3-000000?logo=bun&logoColor=white)](https://bun.sh)
+&nbsp;[![Rust](https://img.shields.io/badge/Rust-stable-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
+&nbsp;![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555555)
+&nbsp;[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+[**Features**](#-features) • [**Demo**](#-demo) • [**Quick Start**](#-quick-start) • [**Architecture**](#-architecture) • [**Configuration**](#-configuration) • [**Project Layout**](#-project-layout) • [**Development**](#-development)
+
+</div>
+
+---
 
 **Maverick is the OS layer above every AI coding CLI.**\
 Stop juggling terminal tabs. Stop losing context when you switch agents. Start running multiple AI agents in parallel — each in its own isolated workspace — without them stepping on each other.
 
 Bare metal. Keyboard-first. Locally owned.
+
+---
+
+## ✦ Demo
+
+A full VSCode-style workbench wrapped around your AI CLIs — multiple agents in parallel, each in its own worktree, every CLI running live in a full PTY beside a file tree, diff viewer, and Setup panel.
+
+![Maverick workspace — an AI CLI running in a terminal with file tree, diff, and Setup panel](./docs/screenshots/workspace.png)
+
+<table>
+<tr>
+<td width="50%">
+
+**Dashboard** — every project and agent workspace at a glance, with active / idle counts and one-click resume.
+
+![Maverick dashboard](./docs/screenshots/dashboard.png)
+
+</td>
+<td width="50%">
+
+**Tasks (Kanban)** — compose a task, pick the project, branch, and backend, and dispatch it straight to an agent on a per-project board.
+
+![Maverick Kanban task board](./docs/screenshots/tasks.png)
+
+</td>
+</tr>
+</table>
+
+**Usage** — today's tokens, sessions, and cost estimates read straight from each CLI's own logs, broken down per backend. Maverick never bills you — it only surfaces what your CLIs report.
+
+![Maverick usage dashboard](./docs/screenshots/usage.png)
 
 ---
 
@@ -23,7 +68,7 @@ Bare metal. Keyboard-first. Locally owned.
 | --- | --- |
 | **Multi-agent** | Run Claude Code, Codex, Gemini CLI, Aider, Ollama, or any custom CLI in parallel — up to 6 agent workspaces visible in a single window |
 | **Workspace isolation** | Every agent run gets its own `git worktree` — isolated working copy, isolated branch, no cross-contamination |
-| **Agent ↔ Terminal mode** | Toggle between the agent's conversation interface and a live PTY grid with `⌘T` — both stay alive across switches |
+| **Terminal-native** | Each agent runs as a real CLI process in a full PTY — complete TUI fidelity (colours, keybindings, interactive prompts), launched with your own command and flags. Split the grid with `⌘D` / `⌘⇧D`; everything stays alive across workspace switches |
 | **Instruction injection** | First prompt of every session is automatically prefixed with your project's `MAVERICK.md` (falls back to `CLAUDE.md` → `AGENTS.md`) plus a global `~/.maverick/MAVERICK.md` |
 
 ### VSCode-Style Workbench
@@ -31,7 +76,7 @@ Bare metal. Keyboard-first. Locally owned.
 |  |  |
 | --- | --- |
 | **Full shortcut coverage** | Every action reachable without a mouse — Command Palette (`⌘⇧P`), Quick Open (`⌘P`), workspace jumps (`⌘1`–`⌘9`), and 60+ configurable bindings |
-| **ActivityBar + PrimarySideBar** | Projects, Kanban, Automations, MCPs — icon-driven navigation with keyboard shortcuts |
+| **ActivityBar + PrimarySideBar** | Projects, Kanban, MCPs — icon-driven navigation with keyboard shortcuts |
 | **EditorArea** | Keep-alive mounted editor groups — workspace switches at &lt;10ms, PTYs survive tab changes, LRU suspension beyond 20 open workspaces |
 | **AuxiliaryBar** | File tree with M/A/D/R indicators, syntax-highlighted diff viewer with hunk-level stage/unstage |
 | **Panel** | Setup scripts, run output, and a raw PTY shell — all scoped to the active worktree |
@@ -67,7 +112,6 @@ Template variables: `{{file}}`, `{{selection}}`, `{{branch}}`, `{{project}}`, `{
 | **Kanban** | `⌘⇧K` | Per-project task board (Backlog → In Progress → Review → Done). Drag-and-drop, markdown descriptions, agent-linked workspaces |
 | **Browser** | `⌘⇧B` | Embedded webview with element inspector — click an element to capture its HTML and inject it into the active agent's context |
 | **Git** | `⌘⇧G` | Full git UI: log, stage/commit, stash, blame, conflict resolver, cherry-pick |
-| **Automations** | `⌘⇧A` | Saved multi-step sequences — shell commands, skill runs, git operations, URL opens |
 | **MCP Servers** | Sidebar | Lifecycle-managed Model Context Protocol servers (filesystem, fetch, custom) |
 | **File Previewers** | Click to preview | Markdown (rendered), PDF (pdfjs), images, video, raw/hex |
 | **Workspace Presets** | `⌘⇧Space` | Saved layout configurations — define once, launch instantly with all PTYs and agents |
@@ -156,7 +200,6 @@ curl -fsSL https://getmaverick.sh | bash
 │                         │  - ConfigLoader          │      │
 │                         │  - SkillsEngine          │      │
 │                         │  - MCPManager            │      │
-│                         │  - AutomationRunner      │      │
 │                         └───────────┬──────────────┘      │
 │                                     │ Bun.spawn()         │
 │           ┌─────────────────────────┼────────────────┐    │
@@ -187,7 +230,7 @@ React (src/) ──Tauri invoke──▶ Rust (src-tauri/) ──JSON-RPC/stdio�
 | File | Purpose |
 | --- | --- |
 | `maverick.json` | Scripts (setup/dev/test), workspace path, base branch, preview URL, AI preferences |
-| `maverick.yaml` | Backend definitions, skills presets, automations, MCP servers, workspace presets |
+| `maverick.yaml` | Backend definitions, skills presets, MCP servers, workspace presets |
 | `MAVERICK.md` | Project instructions automatically prepended to every prompt (falls back to `CLAUDE.md` → `AGENTS.md`) |
 
 ### Global
@@ -216,7 +259,7 @@ React (src/) ──Tauri invoke──▶ Rust (src-tauri/) ──JSON-RPC/stdio�
 ```plaintext
 src/                   React 19 webview
   components/          Workbench shell, editor, UI primitives
-  panels/              Git, Kanban, Browser, automations, MCPs, settings
+  panels/              Git, Kanban, Browser, MCPs, settings
   hooks/               useWorkspace, usePty, useShortcuts, useSkills
   lib/                 IPC types, terminal providers, stores
   state/               Zustand store (useWorkbench)
