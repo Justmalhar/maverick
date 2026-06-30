@@ -468,11 +468,9 @@ export async function instructionsResolve(
 
 export async function prCreate(
   worktreePath: string,
-  title?: string,
-  body?: string,
-  base?: string
+  opts: { title?: string; body?: string; base?: string; backend?: string; instructions?: string } = {}
 ): Promise<{ url: string }> {
-  return invoke("pr_create", { worktreePath, title, body, base });
+  return invoke("pr_create", { worktreePath, ...opts });
 }
 
 export async function gitRemoteInfo(
@@ -487,9 +485,10 @@ export async function checksGet(worktreePath: string): Promise<ChecksReport> {
 }
 
 export async function aiCommitMessage(
-  worktreePath: string
+  worktreePath: string,
+  backend?: string
 ): Promise<{ message: string }> {
-  return invoke("ai_commit_message", { worktreePath });
+  return invoke("ai_commit_message", { worktreePath, backend });
 }
 
 export async function aiBranchName(
@@ -593,6 +592,10 @@ export async function gitBranchList(worktreePath: string): Promise<Branch[]> {
 
 export async function gitCheckout(worktreePath: string, branch: string): Promise<{ ok: true }> {
   return invoke("git_checkout", { worktreePath, branch });
+}
+
+export async function gitBranchCreate(worktreePath: string, name: string): Promise<{ ok: true }> {
+  return invoke("git_branch_create", { worktreePath, name });
 }
 
 export async function gitBlame(worktreePath: string, filePath: string): Promise<BlameLine[]> {

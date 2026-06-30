@@ -271,6 +271,7 @@ pub fn run() {
             git_branches,
             git_diff_stat,
             git_branch_list,
+            git_branch_create,
             git_checkout,
             git_blame,
             git_cherry_pick,

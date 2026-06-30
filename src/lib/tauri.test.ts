@@ -257,10 +257,8 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("instructions_resolve", { worktreePath: "/wt" });
 
     await api.prCreate("/wt");
-    expect(invoke).toHaveBeenLastCalledWith("pr_create", {
-      worktreePath: "/wt", title: undefined, body: undefined, base: undefined,
-    });
-    await api.prCreate("/wt", "T", "B", "main");
+    expect(invoke).toHaveBeenLastCalledWith("pr_create", { worktreePath: "/wt" });
+    await api.prCreate("/wt", { title: "T", body: "B", base: "main" });
     expect(invoke).toHaveBeenLastCalledWith("pr_create", {
       worktreePath: "/wt", title: "T", body: "B", base: "main",
     });
