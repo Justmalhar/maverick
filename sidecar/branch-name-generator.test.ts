@@ -72,6 +72,15 @@ describe("BranchNameGenerator", () => {
     const { shell } = fakeShell({ stdout: sentence });
     await expect(new BranchNameGenerator({ shell }).generate({ prompt: "x" })).rejects.toThrow();
   });
+
+  test("runs the injected agent spec", async () => {
+    const { shell, calls } = fakeShell({ stdout: "fix-thing\n" });
+    await new BranchNameGenerator({ shell }).generate({
+      prompt: "x",
+      agent: { command: "gemini", args: [] },
+    });
+    expect(calls[0]).toEqual(["gemini"]);
+  });
 });
 
 describe("BranchNameGenerator.generateFromDiff", () => {

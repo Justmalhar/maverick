@@ -1,5 +1,6 @@
 import { defaultShell } from "./deps";
 import type { Shell } from "./types";
+import { DEFAULT_ONESHOT, type OneShotSpec } from "./agent-oneshot";
 
 // Generates a concise branch name for a workspace from the task text, via the
 // same `claude -p` path the commit-message generator uses (the CLI authenticates
@@ -32,6 +33,7 @@ export interface GenerateParams {
   // "always use feature/feature-name". When present it replaces DEFAULT_RULES so
   // the model can return a full convention-following name (slashes allowed).
   instructions?: string;
+  agent?: OneShotSpec;
 }
 
 export class BranchNameGenerator {
@@ -42,21 +44,22 @@ export class BranchNameGenerator {
   }
 
   async generate(params: GenerateParams): Promise<{ name: string }> {
+    const agent = params.agent ?? DEFAULT_ONESHOT;
     const rules = params.instructions?.trim()
       ? `Follow this naming convention: ${params.instructions.trim()}. Still output ONLY the branch name.`
       : DEFAULT_RULES;
     const input = `${BASE_PROMPT} ${rules}\n\nTask:\n${params.prompt.slice(0, MAX_TASK_CHARS)}`;
     const { stdout, stderr, exitCode } = await this.shell.run(
-      ["claude", "-p", "--output-format", "text"],
+      [agent.command, ...agent.args],
       params.cwd,
       input,
       { timeoutMs: CLAUDE_TIMEOUT_MS }
     );
     if (exitCode !== 0) {
-      throw new Error(stderr.trim() || "claude CLI failed — is it installed and logged in?");
+      throw new Error(stderr.trim() || "agent CLI failed — is it installed and logged in?");
     }
     const name = BranchNameGenerator.sanitizeBranchName(stdout);
-    if (!name) throw new Error("claude CLI returned an empty name");
+    if (!name) throw new Error("agent CLI returned an empty name");
     return { name };
   }
 
@@ -65,9 +68,9 @@ export class BranchNameGenerator {
    * files), for the "let AI name it later" flow. Reuses generate()'s prompt +
    * sanitize + instructions path. Falls back to a generic summary if git is quiet.
    */
-  async generateFromDiff(params: { cwd: string; instructions?: string }): Promise<{ name: string }> {
+  async generateFromDiff(params: { cwd: string; instructions?: string; agent?: OneShotSpec }): Promise<{ name: string }> {
     const summary = await this.diffSummary(params.cwd);
-    return this.generate({ prompt: summary, cwd: params.cwd, instructions: params.instructions });
+    return this.generate({ prompt: summary, cwd: params.cwd, instructions: params.instructions, agent: params.agent });
   }
 
   private async diffSummary(cwd: string): Promise<string> {
