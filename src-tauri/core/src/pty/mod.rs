@@ -128,6 +128,30 @@ pub struct SpawnParams {
     pub rows: u16,
 }
 
+/// Build a spawned PTY child's environment.
+///
+/// GUI launches (Finder/Dock on macOS, Explorer on Windows) hand the app a
+/// minimal environment with no `TERM`, so terminfo-driven programs (`clear`,
+/// `tput`, `vim`) abort with "TERM environment variable not set". Seed sane
+/// terminal defaults first, then inherit the app's environment (so CLIs resolve
+/// their own deps) and finally layer explicit overrides — a real `TERM` from
+/// either source still wins over the default.
+fn apply_child_env<I>(cmd: &mut CommandBuilder, inherited: I, overrides: Option<&HashMap<String, String>>)
+where
+    I: IntoIterator<Item = (String, String)>,
+{
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    for (k, v) in inherited {
+        cmd.env(k, v);
+    }
+    if let Some(envs) = overrides {
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+    }
+}
+
 /// Owns real OS pseudo-terminals. Per PTY: a reader thread decodes + filters
 /// bytes into a coalesce buffer, a flusher thread emits batched `pty:data`
 /// events at most every ~4ms, and a waiter thread emits `pty:exit` and reaps
@@ -164,16 +188,7 @@ impl PtyManager {
         if let Some(cwd) = &params.cwd {
             cmd.cwd(cwd);
         }
-        // Inherit the app's environment so spawned CLIs resolve their own deps,
-        // then layer any explicit overrides on top.
-        for (k, v) in std::env::vars() {
-            cmd.env(k, v);
-        }
-        if let Some(envs) = &params.env {
-            for (k, v) in envs {
-                cmd.env(k, v);
-            }
-        }
+        apply_child_env(&mut cmd, std::env::vars(), params.env.as_ref());
 
         let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
         let killer = child.clone_killer();
@@ -560,6 +575,47 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         false
+    }
+
+    // GUI launches (Finder/Dock) hand the app a minimal environment with no
+    // TERM, which made spawned shells abort terminfo programs (clear/tput/vim)
+    // with "TERM environment variable not set". The child must always get one.
+    // `CommandBuilder::new` pre-seeds its env from the live process environment
+    // (`get_base_env`), so tests clear it first to assert the helper's behavior
+    // independent of the runner's own TERM.
+    #[test]
+    fn child_env_defaults_term_when_not_inherited() {
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.env_clear();
+        apply_child_env(&mut cmd, vec![("PATH".into(), "/usr/bin".into())], None);
+        assert_eq!(cmd.get_env("TERM"), Some(std::ffi::OsStr::new("xterm-256color")));
+        assert_eq!(cmd.get_env("COLORTERM"), Some(std::ffi::OsStr::new("truecolor")));
+    }
+
+    #[test]
+    fn inherited_term_overrides_default() {
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.env_clear();
+        apply_child_env(
+            &mut cmd,
+            vec![("TERM".into(), "screen-256color".into())],
+            None,
+        );
+        assert_eq!(cmd.get_env("TERM"), Some(std::ffi::OsStr::new("screen-256color")));
+    }
+
+    #[test]
+    fn explicit_env_override_beats_inherited_and_default() {
+        let mut overrides = HashMap::new();
+        overrides.insert("TERM".to_string(), "vt100".to_string());
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.env_clear();
+        apply_child_env(
+            &mut cmd,
+            vec![("TERM".into(), "screen-256color".into())],
+            Some(&overrides),
+        );
+        assert_eq!(cmd.get_env("TERM"), Some(std::ffi::OsStr::new("vt100")));
     }
 
     #[test]
