@@ -51,13 +51,24 @@ function withPref(def: string, pref?: string): string {
   return pref?.trim() ? pref.trim() : def;
 }
 
-/** Create-PR action prompt, shaped by the project's `createPr` preference. */
-export function buildCreatePrPrompt(diff: DiffResult, createPrPref?: string): string {
+/** Create-PR action prompt, shaped by the project's `createPr` + `general` prefs. */
+export function buildCreatePrPrompt(
+  diff: DiffResult,
+  createPrPref?: string,
+  generalPref?: string,
+  remoteInfo?: { remote?: string; base?: string }
+): string {
   const instruction = withPref(DEFAULT_CREATE_PR, createPrPref);
+  const remote = remoteInfo?.remote ?? "origin";
+  const base = remoteInfo?.base ?? "the default branch";
+  const where = `Push the current branch to ${remote} and open the pull request against ${base}.`;
   const fileList = diff.files
     .map((f) => `- ${f.status} ${f.path} (+${f.additions} −${f.deletions})`)
     .join("\n");
-  return fileList ? `${instruction}\n\nChanged files:\n${fileList}` : instruction;
+  const parts = [instruction, where];
+  if (generalPref?.trim()) parts.push(generalPref.trim());
+  if (fileList) parts.push(`Changed files:\n${fileList}`);
+  return parts.join("\n\n");
 }
 
 /** Fix-errors action prompt, shaped by the project's `fixErrors` preference. */
