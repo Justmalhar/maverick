@@ -42,6 +42,74 @@ describe("FileTabPane", () => {
     expect(await screen.findByTestId("test-viewer-body")).toBeInTheDocument();
   });
 
+  it("Fix A — hands the mount-read content to the viewer as `initial`", async () => {
+    invokeMock.mockResolvedValue({
+      content: "seed body", size: 9, binary: false, unreadable: false, mtime: 42, encoding: "utf8",
+    });
+    let captured: ViewerProps["initial"];
+    const ID = "capture-initial-viewer";
+    if (!viewerRegistry.get(ID)) {
+      viewerRegistry.register({
+        id: ID,
+        displayName: "CaptureInitial",
+        priority: 0,
+        capabilities: {},
+        canHandle: () => false, // reached via viewerId override only
+        load: async () => (props: ViewerProps) => {
+          captured = props.initial;
+          return <div data-testid="capture-initial-body" />;
+        },
+      });
+    }
+    lazyViewerCache.delete(ID);
+    const tab = makeTab("/wt/seed.zzz");
+    useWorkbench.getState().setFileTabViewer(tab.id, ID);
+    render(<FileTabPane tab={useWorkbench.getState().fileTabs[0]} active />);
+    await screen.findByTestId("capture-initial-body");
+    expect(captured).toEqual({ content: "seed body", mtime: 42, encoding: "utf8" });
+  });
+
+  it("Fix A — binary/unreadable reads leave `initial` undefined (viewer falls back to its own read)", async () => {
+    invokeMock.mockResolvedValue({
+      content: "", size: 4096, binary: true, unreadable: false, mtime: 7, encoding: "utf8",
+    });
+    let captured: ViewerProps["initial"] = { content: "x", mtime: 0, encoding: "utf8" };
+    const ID = "capture-binary-viewer";
+    if (!viewerRegistry.get(ID)) {
+      viewerRegistry.register({
+        id: ID,
+        displayName: "CaptureBinary",
+        priority: 0,
+        capabilities: {},
+        canHandle: () => false,
+        load: async () => (props: ViewerProps) => {
+          captured = props.initial;
+          return <div data-testid="capture-binary-body" />;
+        },
+      });
+    }
+    lazyViewerCache.delete(ID);
+    const tab = makeTab("/wt/blob.bin");
+    useWorkbench.getState().setFileTabViewer(tab.id, ID);
+    render(<FileTabPane tab={useWorkbench.getState().fileTabs[0]} active />);
+    await screen.findByTestId("capture-binary-body");
+    expect(captured).toBeUndefined();
+  });
+
+  it("Fix D — shows a quiet editor-colored placeholder before meta resolves", async () => {
+    let resolveRead!: (v: unknown) => void;
+    invokeMock.mockReturnValue(new Promise((res) => { resolveRead = res; }));
+    const tab = makeTab("/wt/pending.zzz");
+    render(<FileTabPane tab={tab} active />);
+    // Placeholder is present while the read is in flight — no "Loading…" text.
+    expect(screen.getByTestId("file-tab-loading")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).toBeNull();
+    await act(async () => {
+      resolveRead({ content: "hi", size: 2, binary: false, unreadable: false, mtime: 1, encoding: "utf8" });
+    });
+    await waitFor(() => expect(screen.queryByTestId("file-tab-loading")).toBeNull());
+  });
+
   it("honors tab.viewerId override", async () => {
     const tab = makeTab("/wt/b.zzz");
     if (!viewerRegistry.get("override-viewer")) {

@@ -9,8 +9,13 @@ import type { TextEncoding } from "@/lib/ipc";
 import type { ViewerProps } from "@/lib/viewers/types";
 import { Button } from "@/components/ui/button";
 
-export default function CodeViewer({ tab, onDirtyChange, registerActions }: ViewerProps) {
+export default function CodeViewer({ tab, initial, onDirtyChange, registerActions }: ViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // FileTabPane already read this file to select the viewer; reuse that payload
+  // instead of a second file_read. Held in a ref so the main effect's deps stay
+  // [tab.path, …] — it's populated before mount and never changes the editor.
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
   const editorRef = useRef<MonacoApi.editor.IStandaloneCodeEditor | null>(null);
   const modelRef = useRef<MonacoApi.editor.ITextModel | null>(null);
   // The content the disk had when we last loaded/saved; dirty = model differs.
@@ -28,7 +33,11 @@ export default function CodeViewer({ tab, onDirtyChange, registerActions }: View
     const disposables: Array<{ dispose(): void }> = [];
 
     (async () => {
-      const [monaco, res] = await Promise.all([getMonaco(), fileRead(tab.path)]);
+      const seed = initialRef.current;
+      const [monaco, res] = await Promise.all([
+        getMonaco(),
+        seed ? Promise.resolve(seed) : fileRead(tab.path),
+      ]);
       if (disposed || !hostRef.current) return;
       baselineRef.current = res.content;
       mtimeRef.current = res.mtime;

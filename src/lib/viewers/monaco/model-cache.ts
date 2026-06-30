@@ -1,6 +1,7 @@
 // Refcounted text models keyed by absolute path. CodeViewer and DiffViewer
 // share one model per file so edits persist across Diff⟷Edit mode switches.
 import { getMonaco, ensureLanguage } from "./loader";
+import { languageForPath } from "./languages";
 import type * as MonacoApi from "monaco-editor";
 
 type TextModel = MonacoApi.editor.ITextModel;
@@ -30,11 +31,15 @@ export async function getOrCreateModel(path: string, content: string): Promise<T
 
   const work = (async (): Promise<TextModel> => {
     const monaco = await getMonaco();
-    const lang = await ensureLanguage(path);
+    // Use the language id synchronously — it is registered as an empty shell at
+    // boot, so the model and editor can paint immediately. The TextMate grammar
+    // loads off the critical path; ensureLanguage() re-tokenizes when it lands.
+    const lang = languageForPath(path);
     const uri = monaco.Uri.file(path);
     const model =
       monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, lang, uri);
     cache.set(path, { model, refs: 1 });
+    void ensureLanguage(path);
     return model;
   })();
 

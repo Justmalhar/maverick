@@ -6,6 +6,7 @@ import {
   fileMetaForPath,
   type FileMeta,
   type ViewerActions,
+  type ViewerInitialContent,
   type ViewerIntent,
   type ViewerProps,
 } from "@/lib/viewers/types";
@@ -28,6 +29,7 @@ export default function FileTabPane({ tab }: FileTabPaneProps) {
   const live = useWorkbench((s) => s.fileTabs.find((t) => t.id === tab.id)) ?? tab;
   const setFileTabDirty = useWorkbench((s) => s.setFileTabDirty);
   const [meta, setMeta] = useState<FileMeta | null>(null);
+  const [initial, setInitial] = useState<ViewerInitialContent | undefined>(undefined);
   const [actions, setActions] = useState<ViewerActions>({});
 
   // Stable callback identity — prevents CodeViewer/DiffViewer main effects from
@@ -42,7 +44,16 @@ export default function FileTabPane({ tab }: FileTabPaneProps) {
     let cancelled = false;
     fileRead(live.path)
       .then((res) => {
-        if (!cancelled) setMeta(fileMetaForPath(live.path, { binary: res.binary, size: res.size }));
+        if (cancelled) return;
+        setMeta(fileMetaForPath(live.path, { binary: res.binary, size: res.size }));
+        // Hand the text to the viewer so it skips its own read. Binary/unreadable
+        // payloads carry no usable content — leave initial undefined so a text
+        // viewer (if somehow chosen) falls back to reading.
+        setInitial(
+          res.binary || res.unreadable
+            ? undefined
+            : { content: res.content, mtime: res.mtime, encoding: res.encoding }
+        );
       })
       .catch(() => {
         if (!cancelled) setMeta(fileMetaForPath(live.path));
@@ -77,11 +88,9 @@ export default function FileTabPane({ tab }: FileTabPaneProps) {
   }, [descriptor]);
 
   if (!meta) {
-    return (
-      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Loading…
-      </div>
-    );
+    // Quiet editor-colored placeholder, not centered "Loading…" text — the read
+    // resolves in roughly one IPC, so a text flash reads as jank.
+    return <div data-testid="file-tab-loading" className="h-full w-full bg-editor" />;
   }
 
   return (
@@ -93,6 +102,7 @@ export default function FileTabPane({ tab }: FileTabPaneProps) {
             <Viewer
               tab={live}
               meta={meta}
+              initial={initial}
               onDirtyChange={onDirtyChange}
               registerActions={setActions}
             />
