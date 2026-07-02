@@ -236,6 +236,53 @@ describe("useLaunchSpec", () => {
     expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "claude --foo\r" });
   });
 
+  it("does not arm the prompt paste on pre-launch shell output while the settings RPC is pending", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: [], prompt: "do the task" });
+
+    let resolveSettings: (v: { path: string }) => void = () => {};
+    const pending = new Promise<{ path: string }>((resolve) => {
+      resolveSettings = resolve;
+    });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") return pending;
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    await mount(ws, "pty-1", true);
+
+    // The settings RPC hasn't resolved yet, so the launch command has not been
+    // written. Shell noise (e.g. a login banner) arriving now must not arm the
+    // IdleWatcher — otherwise the prompt would get pasted into the bare shell.
+    expect(writeCalls()).toHaveLength(0);
+    act(() => emitData("pty-1", "Last login: Wed Jul  2 10:00:00 on ttys000\n"));
+    act(() => vi.advanceTimersByTime(400));
+    expect(
+      writeCalls().some((c) => String((c[1] as { data: string }).data).includes("do the task"))
+    ).toBe(false);
+
+    // Resolve the RPC: the launch command is written and the watcher is armed.
+    await act(async () => {
+      resolveSettings({ path: "/tmp/ws.json" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "claude --settings /tmp/ws.json\r",
+    });
+
+    // Now that the command has actually been written, real CLI output should
+    // arm the watcher and the prompt should get pasted after it goes idle.
+    act(() => emitData("pty-1", "Welcome to Claude"));
+    act(() => vi.advanceTimersByTime(400));
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "\x1b[200~do the task\x1b[201~\r",
+    });
+  });
+
   it("does not fetch settings or inject --settings for non-claude commands", async () => {
     const ws = makeWorkspace({ id: "w1", sessionId: undefined });
     useWorkbench.getState().setLaunchSpec("w1", { command: "codex", args: ["--foo"] });

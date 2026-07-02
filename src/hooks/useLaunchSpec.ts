@@ -68,6 +68,14 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
     launched.add(workspaceId);
 
     useAgentStatusStore.getState().setStatus(workspaceId, "working");
+
+    let cancelled = false;
+    // The prompt IdleWatcher must not treat pre-launch shell output (the prompt,
+    // a login banner) as the CLI's output — otherwise it could fire and paste the
+    // staged prompt into a bare shell during the async settings-path fetch. Only
+    // arm it once the launch command has actually been written.
+    let launchWritten = false;
+
     void (async () => {
       let args = spec.args;
       if (isClaudeLaunchCommand(spec.command)) {
@@ -78,7 +86,9 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
           // Fail open: launch Claude without hook notifications rather than block.
         }
       }
-      await ptyWrite(ptyId, buildLaunchCommandLine({ ...spec, args }, launchShell()));
+      if (cancelled) return;
+      await ptyWrite(ptyId, buildLaunchCommandLine({ ...spec, args }, launchShell())).catch(() => {});
+      launchWritten = true;
     })().catch(() => {});
 
     let watcher: IdleWatcher | null = null;
@@ -94,10 +104,9 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
       }
     }
 
-    let cancelled = false;
     const unlistenData = onPtyData(({ ptyId: id, data }) => {
       if (id !== ptyId || cancelled) return;
-      watcher?.push();
+      if (launchWritten) watcher?.push();
       reportOutput(data);
     });
     const unlistenExit = onPtyExit(({ ptyId: id, code }) => {
