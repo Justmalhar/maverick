@@ -11,6 +11,8 @@ import type {
   Notification,
   WorkspacePreset,
   PresetNode,
+  Checkpoint,
+  WorkspaceMode,
 } from "./types";
 
 export function defaultDbPath(): string {
@@ -43,6 +45,7 @@ interface WorkspaceRow {
   status: string;
   created_at: number;
   title: string | null;
+  mode: string;
 }
 
 interface MessageRow {
@@ -52,6 +55,8 @@ interface MessageRow {
   content: string;
   tool_calls_json: string | null;
   created_at: number;
+  parts_json: string | null;
+  turn_id: string | null;
 }
 
 interface SessionRow {
@@ -208,6 +213,7 @@ export class SQLiteStore {
       status: row.status as Workspace["status"],
       sessionId: this.latestSession(row.id) ?? "",
       title: row.title ?? undefined,
+      mode: (row.mode as WorkspaceMode) ?? "terminal",
     };
   }
 
@@ -218,14 +224,15 @@ export class SQLiteStore {
     agentBackend: string;
     worktreePath: string;
     title?: string;
+    mode?: WorkspaceMode;
   }): Workspace {
     const id = input.id ?? this.ids.uuid("ws");
     const createdAt = Math.floor(this.ids.now() / 1000);
     this.db
       .query(
-        "INSERT INTO workspaces (id, project_id, branch, agent_backend, worktree_path, status, created_at, title) VALUES (?, ?, ?, ?, ?, 'idle', ?, ?)"
+        "INSERT INTO workspaces (id, project_id, branch, agent_backend, worktree_path, status, created_at, title, mode) VALUES (?, ?, ?, ?, ?, 'idle', ?, ?, ?)"
       )
-      .run(id, input.projectId, input.branch, input.agentBackend, input.worktreePath, createdAt, input.title ?? null);
+      .run(id, input.projectId, input.branch, input.agentBackend, input.worktreePath, createdAt, input.title ?? null, input.mode ?? "terminal");
     const sessionId = this.sessionCreate(id);
     return {
       id,
@@ -236,11 +243,92 @@ export class SQLiteStore {
       status: "idle",
       sessionId,
       title: input.title,
+      mode: input.mode ?? "terminal",
     };
   }
 
   workspaceSetStatus(id: string, status: Workspace["status"]): { ok: true } {
     this.db.query("UPDATE workspaces SET status = ? WHERE id = ?").run(status, id);
+    return { ok: true };
+  }
+
+  sessionMetaGet(sessionId: string): { workspaceId: string; providerSessionId: string | null; model: string | null; reasoningLevel: string | null } | null {
+    const row = this.db
+      .query<{ workspace_id: string; provider_session_id: string | null; model: string | null; reasoning_level: string | null }, [string]>(
+        "SELECT workspace_id, provider_session_id, model, reasoning_level FROM sessions WHERE id = ?"
+      )
+      .get(sessionId);
+    if (!row) return null;
+    return {
+      workspaceId: row.workspace_id,
+      providerSessionId: row.provider_session_id,
+      model: row.model,
+      reasoningLevel: row.reasoning_level,
+    };
+  }
+
+  sessionMetaSet(
+    sessionId: string,
+    patch: { providerSessionId?: string | null; model?: string | null; reasoningLevel?: string | null }
+  ): { ok: true } {
+    const sets: string[] = [];
+    const vals: (string | null)[] = [];
+    if ("providerSessionId" in patch) { sets.push("provider_session_id = ?"); vals.push(patch.providerSessionId ?? null); }
+    if ("model" in patch) { sets.push("model = ?"); vals.push(patch.model ?? null); }
+    if ("reasoningLevel" in patch) { sets.push("reasoning_level = ?"); vals.push(patch.reasoningLevel ?? null); }
+    if (sets.length > 0) {
+      this.db.query(`UPDATE sessions SET ${sets.join(", ")} WHERE id = ?`).run(...vals, sessionId);
+    }
+    return { ok: true };
+  }
+
+  agentMessageAppend(msg: { id: string; sessionId: string; role: string; content: string; partsJson: string; turnId: string; createdAt: number }): { id: string } {
+    this.db
+      .query(
+        "INSERT INTO messages (id, session_id, role, content, parts_json, turn_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(msg.id, msg.sessionId, msg.role, msg.content, msg.partsJson, msg.turnId, msg.createdAt);
+    return { id: msg.id };
+  }
+
+  messagesTruncateFrom(sessionId: string, messageId: string): { ok: true } {
+    const anchor = this.db
+      .query<{ created_at: number; rowid: number }, [string, string]>(
+        "SELECT created_at, rowid FROM messages WHERE session_id = ? AND id = ?"
+      )
+      .get(sessionId, messageId);
+    if (anchor) {
+      this.db
+        .query("DELETE FROM messages WHERE session_id = ? AND (created_at > ? OR (created_at = ? AND rowid >= ?))")
+        .run(sessionId, anchor.created_at, anchor.created_at, anchor.rowid);
+    }
+    return { ok: true };
+  }
+
+  checkpointCreate(cp: Checkpoint): { ok: true } {
+    this.db
+      .query(
+        "INSERT INTO agent_checkpoints (id, session_id, message_id, git_sha, provider_session_id, provider_line_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(cp.id, cp.sessionId, cp.messageId, cp.gitSha, cp.providerSessionId, cp.providerLineCount, cp.createdAt);
+    return { ok: true };
+  }
+
+  checkpointByMessage(sessionId: string, messageId: string): Checkpoint | null {
+    const r = this.db
+      .query<{ id: string; session_id: string; message_id: string; git_sha: string; provider_session_id: string | null; provider_line_count: number; created_at: number }, [string, string]>(
+        "SELECT * FROM agent_checkpoints WHERE session_id = ? AND message_id = ?"
+      )
+      .get(sessionId, messageId);
+    if (!r) return null;
+    return {
+      id: r.id, sessionId: r.session_id, messageId: r.message_id, gitSha: r.git_sha,
+      providerSessionId: r.provider_session_id, providerLineCount: r.provider_line_count, createdAt: r.created_at,
+    };
+  }
+
+  checkpointsTruncateFrom(sessionId: string, createdAt: number): { ok: true } {
+    this.db.query("DELETE FROM agent_checkpoints WHERE session_id = ? AND created_at >= ?").run(sessionId, createdAt);
     return { ok: true };
   }
 
@@ -261,6 +349,7 @@ export class SQLiteStore {
       status: r.status as Workspace["status"],
       sessionId: this.latestSession(r.id) ?? "",
       title: r.title ?? undefined,
+      mode: (r.mode as WorkspaceMode) ?? "terminal",
     }));
   }
 
@@ -275,6 +364,7 @@ export class SQLiteStore {
     // so every table referencing workspaces(id) must be handled here or the
     // final DELETE throws. Kanban tasks outlive their workspace (detach), the
     // rest are workspace-scoped (delete).
+    this.db.query("DELETE FROM agent_checkpoints WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)").run(workspaceId);
     this.db.query("DELETE FROM context_usage WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)").run(workspaceId);
     this.db.query("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)").run(workspaceId);
     this.db.query("DELETE FROM sessions WHERE workspace_id = ?").run(workspaceId);
@@ -307,7 +397,7 @@ export class SQLiteStore {
     const offset = input.offset ?? 0;
     const rows = this.db
       .query<MessageRow, [string, number, number]>(
-        "SELECT id, session_id, role, content, tool_calls_json, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
+        "SELECT id, session_id, role, content, tool_calls_json, created_at, parts_json, turn_id FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
       )
       .all(input.sessionId, limit, offset);
     return rows.map((r) => ({
@@ -317,6 +407,8 @@ export class SQLiteStore {
       content: r.content,
       toolCallsJson: r.tool_calls_json ?? undefined,
       createdAt: r.created_at,
+      partsJson: r.parts_json ?? undefined,
+      turnId: r.turn_id ?? undefined,
     }));
   }
 

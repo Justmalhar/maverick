@@ -25,6 +25,8 @@ export interface Project {
   createdAt: number;
 }
 
+export type WorkspaceMode = "terminal" | "agent";
+
 export interface Workspace {
   id: string;
   projectId: string;
@@ -34,6 +36,7 @@ export interface Workspace {
   status: "active" | "idle" | "error";
   sessionId: string;
   title?: string;
+  mode: WorkspaceMode;
 }
 
 export interface Message {
@@ -42,6 +45,18 @@ export interface Message {
   role: "user" | "assistant" | "tool";
   content: string;
   toolCallsJson?: string;
+  createdAt: number;
+  partsJson?: string;
+  turnId?: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  sessionId: string;
+  messageId: string;
+  gitSha: string;
+  providerSessionId: string | null;
+  providerLineCount: number;
   createdAt: number;
 }
 
