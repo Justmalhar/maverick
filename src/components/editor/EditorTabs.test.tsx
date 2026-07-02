@@ -46,11 +46,11 @@ function seed() {
   });
 }
 
-it("shows both workspace chips but only the active workspace's group + file tabs", () => {
+it("shows only the active workspace's chip + group + file tabs", () => {
   seed();
   renderWithProviders(<EditorTabs />);
   expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
-  expect(screen.getByTestId("editor-tab-w2")).toBeInTheDocument();
+  expect(screen.queryByTestId("editor-tab-w2")).toBeNull();
   expect(screen.getByTestId("editor-tab-group-w1")).toBeInTheDocument();
   expect(screen.getByTestId("editor-tab-group-term-2")).toBeInTheDocument();
   expect(screen.queryByTestId("editor-tab-group-w2")).toBeNull();
@@ -128,20 +128,19 @@ describe("EditorTabs", () => {
   it("renders workspace tabs and reacts to clicks", async () => {
     useWorkbench.setState({
       ...initial,
-      workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" })],
+      workspaces: [makeWorkspace({ id: "w1" })],
       activeWorkspaceId: "w1",
       systemTabs: [],
       activeSystemTab: null,
       terminalGroups: [
         { id: "w1", workspaceId: "w1", title: "Terminal 1" },
-        { id: "w2", workspaceId: "w2", title: "Terminal 1" },
       ],
-      activeGroupByWorkspace: { w1: "w1", w2: "w2" },
+      activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
     expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("editor-tab-w2"));
-    expect(useWorkbench.getState().activeWorkspaceId).toBe("w2");
+    await userEvent.click(screen.getByTestId("editor-tab-w1"));
+    expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
   });
 
   it("close button on a workspace tab removes it", async () => {
@@ -185,6 +184,8 @@ describe("EditorTabs", () => {
       systemTabs: ["kanban"],
       activeSystemTab: "kanban",
       activeWorkspaceId: null,
+      fileTabs: [{ id: "file:/tmp/x.ts", kind: "file", path: "/tmp/x.ts", worktreePath: "/tmp", workspaceId: "w1", preview: false, dirty: false, mode: "edit", viewed: false }],
+      activeFileTabId: "file:/tmp/x.ts",
       terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
       activeGroupByWorkspace: { w1: "w1" },
     });
@@ -589,6 +590,47 @@ describe("EditorTabs", () => {
     const fileTab = screen.getByText("a.ts");
     fireEvent.dblClick(fileTab);
     expect(useWorkbench.getState().fileTabs.find((t) => t.id === tabId)?.preview).toBe(false);
+  });
+
+  it("shows only the active workspace's tab, not other workspaces", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [
+        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1" },
+        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2" },
+      ],
+      activeWorkspaceId: "ws1",
+      terminalGroups: [
+        { id: "ws1", workspaceId: "ws1", title: "Terminal 1" },
+        { id: "ws2", workspaceId: "ws2", title: "Terminal 1" },
+      ],
+      activeGroupByWorkspace: { ws1: "ws1", ws2: "ws2" },
+    });
+    renderWithProviders(<EditorTabs />);
+    // EditorTab renders `workspace.title ?? workspace.branch` (EditorTab.tsx:57)
+    expect(screen.getByText("feature/alpha")).toBeInTheDocument();
+    expect(screen.queryByText("feature/beta")).not.toBeInTheDocument();
+  });
+
+  it("shows the owning workspace's tab when a file tab from it is active with no active workspace", () => {
+    useWorkbench.setState({
+      ...initial,
+      workspaces: [
+        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1" },
+        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2" },
+      ],
+      activeWorkspaceId: null,
+      fileTabs: [{ id: "file:/tmp/a/x.ts", kind: "file", path: "/tmp/a/x.ts", worktreePath: "/tmp/a", workspaceId: "ws1", preview: true, dirty: false, mode: "edit", viewed: false }],
+      activeFileTabId: "file:/tmp/a/x.ts",
+      terminalGroups: [
+        { id: "ws1", workspaceId: "ws1", title: "Terminal 1" },
+        { id: "ws2", workspaceId: "ws2", title: "Terminal 1" },
+      ],
+      activeGroupByWorkspace: { ws1: "ws1", ws2: "ws2" },
+    });
+    renderWithProviders(<EditorTabs />);
+    expect(screen.getByText("feature/alpha")).toBeInTheDocument();
+    expect(screen.queryByText("feature/beta")).not.toBeInTheDocument();
   });
 
   it("clicking a non-active terminal group tab switches the active group (line 207 onClick)", async () => {

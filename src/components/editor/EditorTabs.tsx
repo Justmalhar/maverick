@@ -182,16 +182,18 @@ export function EditorTabs() {
           );
         })}
 
-        {workspaces.map((ws) => (
-          <EditorTab
-            key={ws.id}
-            workspace={ws}
-            active={ws.id === activeId}
-            onSelect={() => setActiveWorkspace(ws.id)}
-            onClose={() => removeWorkspace(ws.id)}
-            onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
-          />
-        ))}
+        {workspaces
+          .filter((ws) => ws.id === contextWorkspaceId)
+          .map((ws) => (
+            <EditorTab
+              key={ws.id}
+              workspace={ws}
+              active={ws.id === activeId}
+              onSelect={() => setActiveWorkspace(ws.id)}
+              onClose={() => removeWorkspace(ws.id)}
+              onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
+            />
+          ))}
 
         {ctxGroups.map((g) => {
           const active =
