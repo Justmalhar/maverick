@@ -1,5 +1,5 @@
 import { describe, test, it, expect, beforeEach } from "bun:test";
-import { mkdtempSync } from "fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { RpcHandlers } from "./rpc-handlers";
@@ -1493,6 +1493,20 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     const handlers = new RpcHandlers({ store, git: git as never, notifier: { write: () => {} } });
     const res = await handlers.dispatch("git.discard_file", { worktreePath: "/wt", filePath: "a.ts" });
     expect(res).toEqual({ ok: true });
+  });
+
+  it("hooks.claudeSettingsPath writes a settings file wired to the running hook server", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, notifier: { write: () => {} } });
+    const { path } = (await handlers.dispatch("hooks.claudeSettingsPath", {
+      workspaceId: "ws_hooktest",
+    })) as { path: string };
+    expect(existsSync(path)).toBe(true);
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    expect(parsed.env.MAVERICK_WS).toBe("ws_hooktest");
+    expect(parsed.hooks.Notification[0].hooks[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/agent-hook$/);
+    rmSync(path, { force: true });
+    handlers.stopHookServer();
   });
 
 });
