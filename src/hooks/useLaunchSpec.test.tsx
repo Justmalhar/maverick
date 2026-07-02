@@ -137,12 +137,12 @@ describe("useLaunchSpec", () => {
     expect(invoke).not.toHaveBeenCalledWith("context_record", expect.anything());
   });
 
-  it("output flips status to attention on a BEL, exit records done", async () => {
+  it("output keeps status working (BEL no longer signals attention), exit records done", async () => {
     const ws = makeWorkspace({ id: "w1", sessionId: undefined });
     useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: [] });
     await mount(ws, "pty-1", true);
     act(() => emitData("pty-1", "\x07"));
-    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("attention");
+    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("working");
     act(() => emitExit("pty-1", 0));
     expect(useAgentStatusStore.getState().statuses["w1"]).toBe("done");
   });
