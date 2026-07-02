@@ -1,13 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { buildReviewPrompt, buildReviewCommentsPrompt, runAiReview, sendReviewComments } from "./ai-review";
+import { buildReviewPrompt, runAiReview } from "./ai-review";
 import { __testing__ } from "@/components/editor/terminal/leaf-registry";
 import { makeDiff, makeDiffFile } from "@/test/fixtures";
-import type { ReviewComment } from "@/lib/stores/review-comments";
-
-function comment(over: Partial<ReviewComment> = {}): ReviewComment {
-  return { id: "c1", workspaceId: "w1", file: "src/a.ts", line: 1, side: "new", body: "fix", ...over };
-}
 
 // A workspace with a live agent PTY is reachable; one with no PTY is not.
 const PTY_TARGET = { workspaceId: "w1", backend: "claude-code", cwd: "/wt" };
@@ -38,57 +33,6 @@ describe("buildReviewPrompt", () => {
     const prompt = buildReviewPrompt(makeDiff(), "   ");
     expect(prompt).toContain("Review the staged and unstaged changes");
   });
-});
-
-describe("buildReviewCommentsPrompt", () => {
-  it("returns an empty string for no comments", () => {
-    expect(buildReviewCommentsPrompt([])).toBe("");
-  });
-
-  it("emits one Re: file:line — body line per comment, in order", () => {
-    const prompt = buildReviewCommentsPrompt([
-      comment({ file: "src/a.ts", line: 12, body: "rename this" }),
-      comment({ file: "src/b.ts", line: 3, body: "handle null" }),
-    ]);
-    expect(prompt).toContain("Re: src/a.ts:12 — rename this");
-    expect(prompt).toContain("Re: src/b.ts:3 — handle null");
-    expect(prompt.indexOf("src/a.ts")).toBeLessThan(prompt.indexOf("src/b.ts"));
-  });
-
-  it("includes an instructional header", () => {
-    const prompt = buildReviewCommentsPrompt([comment()]);
-    expect(prompt).toContain("review comments");
-  });
-});
-
-describe("sendReviewComments", () => {
-  it("returns ran:false with no comments", async () => {
-    const r = await sendReviewComments({ target: PTY_TARGET, comments: [] });
-    expect(r.ran).toBe(false);
-    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
-  });
-
-  it("returns ran:false when the agent is unreachable (no PTY)", async () => {
-    const r = await sendReviewComments({ target: UNREACHABLE_TARGET, comments: [comment()] });
-    expect(r.ran).toBe(false);
-    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
-  });
-
-  it("writes the batched prompt to the agent PTY and focuses it", async () => {
-    __testing__.leafPtyCache.set("w1-1", "pty-1");
-    const onAgentFocus = vi.fn();
-    const r = await sendReviewComments({
-      target: PTY_TARGET,
-      comments: [comment({ file: "src/a.ts", line: 9, body: "tidy" })],
-      onAgentFocus,
-    });
-    expect(r.ran).toBe(true);
-    expect(onAgentFocus).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(invoke).mock.calls.find((c) => c[0] === "pty_write");
-    expect((call?.[1] as { ptyId: string }).ptyId).toBe("pty-1");
-    expect((call?.[1] as { data: string }).data).toContain("Re: src/a.ts:9 — tidy");
-  });
-
 });
 
 describe("runAiReview", () => {
