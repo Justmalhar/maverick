@@ -6,7 +6,7 @@ mod utf8_carry;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -128,6 +128,74 @@ pub struct SpawnParams {
     pub rows: u16,
 }
 
+/// Resolve the user's *real* PATH by asking their login+interactive shell.
+///
+/// A GUI launch (Finder/Dock, and a DMG-installed `.app` in particular) hands
+/// the app a stunted PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) with no Homebrew, no
+/// `~/.bun/bin`, and no fnm/nvm-managed toolchains — so a Setup/Run script
+/// spawned as a non-login `/bin/sh -c` fails with "command not found" even
+/// though the tools exist. Terminals dodge this only because they launch a
+/// login shell that rebuilds PATH from the user's profile.
+///
+/// We ask `$SHELL -ilc 'printf %s "$PATH"'` (login + interactive so BOTH
+/// `~/.zprofile` and `~/.zshrc` are sourced) and read ONLY stdout: the shell's
+/// rc noise (prompt frameworks, zoxide notices, etc.) goes to stderr/the tty, so
+/// the captured value is a clean PATH string. Result is cached for the process
+/// lifetime — the child shell runs at most once per app launch. macOS/Linux
+/// only; Windows GUI launches don't strip PATH the same way and have no
+/// `-ilc` shell, so it is a no-op there.
+#[cfg(not(windows))]
+fn resolve_login_path_uncached() -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let out = std::process::Command::new(&shell)
+        .args(["-ilc", "printf %s \"$PATH\""])
+        // Give the rc files a terminfo entry so terminal-aware init doesn't abort.
+        .env("TERM", "xterm-256color")
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
+    }
+}
+
+#[cfg(windows)]
+fn resolve_login_path_uncached() -> Option<String> {
+    None
+}
+
+/// Cached wrapper over [`resolve_login_path_uncached`]. The login shell is
+/// spawned lazily on the first PTY spawn and never again.
+fn login_path() -> Option<String> {
+    static CACHE: OnceLock<Option<String>> = OnceLock::new();
+    CACHE.get_or_init(resolve_login_path_uncached).clone()
+}
+
+/// Overlay the resolved login-shell PATH onto the inherited environment.
+///
+/// When we have a resolved PATH it replaces whatever (possibly stunted) `PATH`
+/// the GUI launch handed us; when we don't, the inherited environment passes
+/// through untouched. Callers' explicit `env` overrides are layered *after* this
+/// in [`apply_child_env`], so a caller-supplied PATH still wins.
+fn env_with_login_path<I>(inherited: I, login: Option<String>) -> Vec<(String, String)>
+where
+    I: IntoIterator<Item = (String, String)>,
+{
+    let mut out: Vec<(String, String)> = inherited.into_iter().collect();
+    if let Some(path) = login {
+        match out.iter_mut().find(|(k, _)| k == "PATH") {
+            Some((_, v)) => *v = path,
+            None => out.push(("PATH".to_string(), path)),
+        }
+    }
+    out
+}
+
 /// Build a spawned PTY child's environment.
 ///
 /// GUI launches (Finder/Dock on macOS, Explorer on Windows) hand the app a
@@ -188,7 +256,11 @@ impl PtyManager {
         if let Some(cwd) = &params.cwd {
             cmd.cwd(cwd);
         }
-        apply_child_env(&mut cmd, std::env::vars(), params.env.as_ref());
+        apply_child_env(
+            &mut cmd,
+            env_with_login_path(std::env::vars(), login_path()),
+            params.env.as_ref(),
+        );
 
         let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
         let killer = child.clone_killer();
@@ -616,6 +688,54 @@ mod tests {
             Some(&overrides),
         );
         assert_eq!(cmd.get_env("TERM"), Some(std::ffi::OsStr::new("vt100")));
+    }
+
+    // A GUI/DMG launch hands the app a stunted PATH; the resolved login PATH
+    // must replace it so non-login `/bin/sh -c` scripts can find their tools.
+    #[test]
+    fn login_path_replaces_stunted_inherited_path() {
+        let out = env_with_login_path(
+            vec![
+                ("PATH".into(), "/usr/bin:/bin".into()),
+                ("HOME".into(), "/Users/me".into()),
+            ],
+            Some("/opt/homebrew/bin:/Users/me/.bun/bin:/usr/bin:/bin".into()),
+        );
+        let path = out.iter().find(|(k, _)| k == "PATH").map(|(_, v)| v.as_str());
+        assert_eq!(path, Some("/opt/homebrew/bin:/Users/me/.bun/bin:/usr/bin:/bin"));
+        // Untouched entries survive.
+        assert!(out.iter().any(|(k, v)| k == "HOME" && v == "/Users/me"));
+    }
+
+    #[test]
+    fn login_path_added_when_inherited_has_none() {
+        let out = env_with_login_path(vec![("HOME".into(), "/Users/me".into())], Some("/opt/homebrew/bin".into()));
+        assert!(out.iter().any(|(k, v)| k == "PATH" && v == "/opt/homebrew/bin"));
+    }
+
+    #[test]
+    fn login_path_none_passes_inherited_through_unchanged() {
+        let out = env_with_login_path(vec![("PATH".into(), "/usr/bin".into())], None);
+        assert_eq!(out, vec![("PATH".to_string(), "/usr/bin".to_string())]);
+    }
+
+    // Precedence: a caller's explicit PATH override still beats the resolved
+    // login PATH (overrides are layered after the repaired inherited env).
+    #[test]
+    fn explicit_path_override_beats_resolved_login_path() {
+        let mut overrides = HashMap::new();
+        overrides.insert("PATH".to_string(), "/caller/only".to_string());
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.env_clear();
+        apply_child_env(
+            &mut cmd,
+            env_with_login_path(
+                vec![("PATH".into(), "/usr/bin".into())],
+                Some("/opt/homebrew/bin".into()),
+            ),
+            Some(&overrides),
+        );
+        assert_eq!(cmd.get_env("PATH"), Some(std::ffi::OsStr::new("/caller/only")));
     }
 
     #[test]
