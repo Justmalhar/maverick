@@ -134,12 +134,13 @@ config are never touched or dirtied.
   (delete `ATTENTION_PATTERN`/`streamRequestsAttention`; output always → `working`).
   `markExit` still sets `done`/`error` for the pill but no longer notifies.
 - `src/hooks/useAgentNotifications.ts`: **the entire byte-stream→notify bridge is
-  removed** (the hook is deleted and unmounted from the app shell). All three
-  notification types now originate from Claude hooks via the sidecar
-  `notification.send` event, which the Toaster and NotificationBell already
-  render. This guarantees no double-fire.
-- `src/lib/notification-route.ts`: `ALWAYS_OS_TYPES` retained (attention/error
-  from a *real* hook genuinely should always surface), now trustworthy.
+  removed** (the hook is deleted and unmounted from the app shell). Attention
+  notifications now originate from Claude's `Notification` hook (permission/idle)
+  via the sidecar `notification.send` event, which the Toaster and NotificationBell
+  already render. This guarantees no double-fire. Done/error are no longer
+  OS-notified — they remain only as the local status pill (PTY exit code).
+- `src/lib/notification-route.ts`: `ALWAYS_OS_TYPES` retained (a *real* attention
+  hook genuinely should always surface), now trustworthy.
 
 ### Data flow (Claude, waiting for input)
 
