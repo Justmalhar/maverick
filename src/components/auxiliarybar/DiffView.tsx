@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2, MessagesSquare, Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GitCompare, GitCommitVertical, GitPullRequest, Bot, Loader2, Wrench } from "lucide-react";
 import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
-import { useReviewComments } from "@/lib/stores/review-comments";
-import { ReviewComments } from "./ReviewComments";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { diffGet, prCreate } from "@/lib/tauri";
-import { runAiReview, sendReviewComments } from "@/lib/ai-review";
+import { runAiReview } from "@/lib/ai-review";
 import { buildCreatePrPrompt, buildFixErrorsPrompt, canDispatchAgentAction, sendAgentPrompt, type AgentTarget } from "@/lib/ai-actions";
 import type { DiffResult } from "@/lib/ipc";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -54,13 +52,7 @@ export function DiffView() {
   const createPrPref = useProjectSettingsStore((s) => s.data?.preferences?.createPr);
   const generalPref = useProjectSettingsStore((s) => s.data?.preferences?.general);
   const fixErrorsPref = useProjectSettingsStore((s) => s.data?.preferences?.fixErrors);
-  const allComments = useReviewComments((s) => s.comments);
-  const clearComments = useReviewComments((s) => s.clearForWorkspace);
   const agentStatus = useAgentStatus(active?.id ?? "");
-  const comments = useMemo(
-    () => allComments.filter((c) => c.workspaceId === active?.id),
-    [allComments, active?.id]
-  );
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [prStatus, setPrStatus] = useState<PrStatus>({ kind: "idle" });
 
@@ -133,20 +125,6 @@ export function DiffView() {
       });
     } catch (e) {
       console.error("Fix errors failed", e);
-    }
-  }
-
-  async function onSendComments() {
-    if (!active || !agentTarget || comments.length === 0) return;
-    try {
-      const res = await sendReviewComments({
-        target: agentTarget,
-        comments,
-        onAgentFocus: () => setActiveWorkspace(active.id),
-      });
-      if (res.ran) clearComments(active.id);
-    } catch (e) {
-      console.error("Send review comments failed", e);
     }
   }
 
@@ -249,23 +227,6 @@ export function DiffView() {
             Fix errors
           </button>
         </div>
-        {comments.length > 0 && (
-          <button
-            type="button"
-            onClick={onSendComments}
-            disabled={agentStatus === "working" || !canAct}
-            data-testid="diff-send-comments"
-            title={
-              agentStatus === "working"
-                ? "Agent is working — wait until it's idle to send comments"
-                : "Send your inline review comments to the agent"
-            }
-            className="flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent/90 disabled:opacity-50"
-          >
-            <MessagesSquare className="h-3.5 w-3.5" />
-            Send {comments.length} comment{comments.length === 1 ? "" : "s"} to agent
-          </button>
-        )}
         {prStatus.kind === "done" && (
           <a
             href={prStatus.url}
@@ -314,8 +275,6 @@ export function DiffView() {
           ))}
         </ul>
       </ScrollArea>
-
-      <ReviewComments workspaceId={active.id} files={files.map((f) => f.path)} />
     </div>
   );
 }
