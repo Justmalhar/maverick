@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderHook, act } from "@testing-library/react";
-import { useLaunchSpec, __resetLaunchedForTests } from "./useLaunchSpec";
+import { useLaunchSpec, __resetLaunchedForTests, isClaudeLaunchCommand } from "./useLaunchSpec";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { makeWorkspace } from "@/test/fixtures";
@@ -137,12 +137,12 @@ describe("useLaunchSpec", () => {
     expect(invoke).not.toHaveBeenCalledWith("context_record", expect.anything());
   });
 
-  it("output flips status to attention on a BEL, exit records done", async () => {
+  it("output keeps status working (BEL no longer signals attention), exit records done", async () => {
     const ws = makeWorkspace({ id: "w1", sessionId: undefined });
     useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: [] });
     await mount(ws, "pty-1", true);
     act(() => emitData("pty-1", "\x07"));
-    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("attention");
+    expect(useAgentStatusStore.getState().statuses["w1"]).toBe("working");
     act(() => emitExit("pty-1", 0));
     expect(useAgentStatusStore.getState().statuses["w1"]).toBe("done");
   });
@@ -208,5 +208,101 @@ describe("useLaunchSpec", () => {
     expect(writeCalls().length).toBeGreaterThan(0);
     isWindowsSpy.mockRestore();
     shellKindSpy.mockRestore();
+  });
+
+  it("prepends --settings <path> for a claude launch when the RPC succeeds", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--foo"] });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") return { path: "/tmp/ws.json" };
+      return undefined;
+    }) as unknown as typeof invoke);
+    await mount(ws, "pty-1", true);
+    expect(invoke).toHaveBeenCalledWith("hooks_claude_settings_path", { workspaceId: "w1" });
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "claude --settings /tmp/ws.json --foo\r",
+    });
+  });
+
+  it("fails open (launches without --settings) when hooksClaudeSettingsPath rejects", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--foo"] });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") throw new Error("rpc failed");
+      return undefined;
+    }) as unknown as typeof invoke);
+    await mount(ws, "pty-1", true);
+    expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "claude --foo\r" });
+  });
+
+  it("does not arm the prompt paste on pre-launch shell output while the settings RPC is pending", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: [], prompt: "do the task" });
+
+    let resolveSettings: (v: { path: string }) => void = () => {};
+    const pending = new Promise<{ path: string }>((resolve) => {
+      resolveSettings = resolve;
+    });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") return pending;
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    await mount(ws, "pty-1", true);
+
+    // The settings RPC hasn't resolved yet, so the launch command has not been
+    // written. Shell noise (e.g. a login banner) arriving now must not arm the
+    // IdleWatcher — otherwise the prompt would get pasted into the bare shell.
+    expect(writeCalls()).toHaveLength(0);
+    act(() => emitData("pty-1", "Last login: Wed Jul  2 10:00:00 on ttys000\n"));
+    act(() => vi.advanceTimersByTime(400));
+    expect(
+      writeCalls().some((c) => String((c[1] as { data: string }).data).includes("do the task"))
+    ).toBe(false);
+
+    // Resolve the RPC: the launch command is written and the watcher is armed.
+    await act(async () => {
+      resolveSettings({ path: "/tmp/ws.json" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "claude --settings /tmp/ws.json\r",
+    });
+
+    // Now that the command has actually been written, real CLI output should
+    // arm the watcher and the prompt should get pasted after it goes idle.
+    act(() => emitData("pty-1", "Welcome to Claude"));
+    act(() => vi.advanceTimersByTime(400));
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "\x1b[200~do the task\x1b[201~\r",
+    });
+  });
+
+  it("does not fetch settings or inject --settings for non-claude commands", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "codex", args: ["--foo"] });
+    await mount(ws, "pty-1", true);
+    expect(invoke).not.toHaveBeenCalledWith("hooks_claude_settings_path", expect.anything());
+    expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "codex --foo\r" });
+  });
+});
+
+describe("isClaudeLaunchCommand", () => {
+  it("matches bare and pathed claude binaries", () => {
+    expect(isClaudeLaunchCommand("claude")).toBe(true);
+    expect(isClaudeLaunchCommand("/Users/x/.local/bin/claude")).toBe(true);
+    expect(isClaudeLaunchCommand("claude.cmd")).toBe(true);
+    expect(isClaudeLaunchCommand("C:\\bin\\claude.exe")).toBe(true);
+  });
+
+  it("does not match other CLIs", () => {
+    expect(isClaudeLaunchCommand("codex")).toBe(false);
+    expect(isClaudeLaunchCommand("gemini")).toBe(false);
+    expect(isClaudeLaunchCommand("claude-code-helper")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useWorkbench } from "@/state/store";
-import { ptyWrite, onPtyData, onPtyExit } from "@/lib/tauri";
+import { ptyWrite, onPtyData, onPtyExit, hooksClaudeSettingsPath } from "@/lib/tauri";
 import {
   buildLaunchCommandLine,
   wrapBracketedPaste,
@@ -37,6 +37,12 @@ function launchShell(): LaunchShell {
   return "powershell";
 }
 
+/** True when a launch command invokes the Claude Code CLI (bare, pathed, .cmd/.exe). */
+export function isClaudeLaunchCommand(command: string): boolean {
+  const base = command.split(/[\\/]/).pop() ?? command;
+  return /^claude(\.cmd|\.exe)?$/i.test(base);
+}
+
 /**
  * Drives the terminal-first launch flow for a workspace's PRIMARY leaf. When its
  * shell PTY first becomes ready, the staged {@link LaunchSpec} is consumed once,
@@ -62,7 +68,28 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
     launched.add(workspaceId);
 
     useAgentStatusStore.getState().setStatus(workspaceId, "working");
-    void ptyWrite(ptyId, buildLaunchCommandLine(spec, launchShell())).catch(() => {});
+
+    let cancelled = false;
+    // The prompt IdleWatcher must not treat pre-launch shell output (the prompt,
+    // a login banner) as the CLI's output — otherwise it could fire and paste the
+    // staged prompt into a bare shell during the async settings-path fetch. Only
+    // arm it once the launch command has actually been written.
+    let launchWritten = false;
+
+    void (async () => {
+      let args = spec.args;
+      if (isClaudeLaunchCommand(spec.command)) {
+        try {
+          const { path } = await hooksClaudeSettingsPath(workspaceId);
+          args = ["--settings", path, ...spec.args];
+        } catch {
+          // Fail open: launch Claude without hook notifications rather than block.
+        }
+      }
+      if (cancelled) return;
+      await ptyWrite(ptyId, buildLaunchCommandLine({ ...spec, args }, launchShell())).catch(() => {});
+      launchWritten = true;
+    })().catch(() => {});
 
     let watcher: IdleWatcher | null = null;
     if (spec.prompt !== undefined && spec.prompt !== "") {
@@ -77,10 +104,9 @@ export function useLaunchSpec(workspace: Workspace, ptyId: string | undefined, r
       }
     }
 
-    let cancelled = false;
     const unlistenData = onPtyData(({ ptyId: id, data }) => {
       if (id !== ptyId || cancelled) return;
-      watcher?.push();
+      if (launchWritten) watcher?.push();
       reportOutput(data);
     });
     const unlistenExit = onPtyExit(({ ptyId: id, code }) => {

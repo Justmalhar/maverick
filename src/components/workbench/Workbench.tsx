@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { useAgentNotifications } from "@/hooks/useAgentNotifications";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { onProjectSettingsChanged } from "@/lib/tauri";
@@ -46,8 +45,6 @@ export function Workbench() {
   });
   const loadProjectSettings = useProjectSettingsStore((s) => s.load);
   const { refreshProjects, refreshWorkspaces, refreshBackends } = useWorkspace();
-  // Raise OS/in-app notifications when any agent finishes or needs input.
-  useAgentNotifications();
   // Collapse the PrimarySideBar to icon-only below the responsive breakpoint.
   const { collapsed } = useResponsiveLayout();
 
