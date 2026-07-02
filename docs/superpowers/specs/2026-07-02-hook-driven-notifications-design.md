@@ -49,17 +49,13 @@ correct signal source is each CLI's own lifecycle hooks.
 - Payload always includes stable `session_id` and `cwd`.
 - **We never touch the user's global `~/.claude` settings.**
 
-### Codex (developers.openai.com/codex)
+### Other backends (codex, gemini, aider, ollama)
 
-- `notify = ["prog", "args"]` in `config.toml`, or injectable per-launch via
-  `-c notify=[...]`. Fires only **`agent-turn-complete`** (done). JSON arg:
-  `{type, thread-id, turn-id, cwd, input-messages, last-assistant-message}`.
-- No native "waiting for input" event via `notify`. Correlate by `cwd`.
-
-### Others (gemini, aider, ollama)
-
-No hook systems. They will produce **no** OS notifications after this change
-(strictly better than false spam). Revisiting is out of scope.
+**Out of scope by decision (2026-07-02).** Only Claude Code drives notifications.
+Every other backend produces **no** OS notifications after this change (strictly
+better than today's false spam). Codex does expose an `agent-turn-complete`
+`notify` event and could be added later via the same HTTP receiver, but is
+explicitly deferred.
 
 ## Design (chosen approach)
 
@@ -71,8 +67,8 @@ owns `NotificationService`, worktrees, and config parsing (per CLAUDE.md layer
 boundaries), so the whole path lives there.
 
 ```
-Claude/Codex hook ──HTTP──▶ sidecar HookServer (127.0.0.1:<ephemeral>, token)
-                                     │  resolve workspace by header/cwd
+Claude Code hook ──HTTP──▶ sidecar HookServer (127.0.0.1:<ephemeral>, token)
+                                     │  resolve workspace by header
                                      ▼
                             NotificationService.send ──emit "notification.send"──▶ Toaster
 ```
@@ -83,24 +79,25 @@ Claude/Codex hook ──HTTP──▶ sidecar HookServer (127.0.0.1:<ephemeral>,
 OS-assigned ephemeral port, with a random secret token generated at boot.
 - `POST /agent-hook` — auth by token (header `X-Maverick-Token`); rejects any
   request whose token mismatches, and rejects non-loopback peers.
-- Body: the CLI event JSON. Correlation: `X-Maverick-Workspace` header (Claude,
-  via injected `env`+`allowedEnvVars`) with fallback to `cwd` lookup.
+- Body: the Claude event JSON. Correlation: the `X-Maverick-Workspace` request
+  header, populated from the injected `env.MAVERICK_WS` via `allowedEnvVars`
+  interpolation. No separate registry needed. If the header is absent, notify as
+  global (`workspaceId: null`) — fail open rather than swallow a real prompt.
 - Maps event → `{type, title, body}` and calls `NotificationService.send`.
   - Claude `Notification`/`permission_prompt` → `agent.attention`.
   - Claude `Notification`/`idle_prompt` → `agent.attention` (waiting for next prompt).
   - Claude `Stop` → `agent.done`.
-  - Codex `agent-turn-complete` → `agent.done`.
 - Exposes `{ port, token }` for the config writer. Lifecycle owned by the sidecar
   bootstrap (started in `runServer`, closed on shutdown).
 
-**2. Workspace↔worktree registry.** The server needs to turn a `cwd`/workspace
-header into a `workspaceId`. Add a small in-memory map in `RpcHandlers`
-(populated on workspace create/list, cleared on destroy) keyed by canonical
-worktree path and by workspace id.
+**2. Hook config injection via `--settings` (no worktree pollution).**
+`claude --settings <file-or-json>` loads *additional* settings that merge with
+the user's own (verified against installed `claude` 2.1.198). So instead of
+writing into the user's `.claude/`, the sidecar writes a **Maverick-managed
+per-workspace hooks file** (app-data/temp dir, keyed by workspace id) and appends
+`--settings <path>` to the `claude` launch args. The user's worktree and global
+config are never touched or dirtied.
 
-**3. Per-worktree hook config writer (new helper, sidecar).** On workspace
-creation (after the worktree exists), write `.claude/settings.local.json` into
-the worktree:
 ```jsonc
 {
   "hooks": {
@@ -114,17 +111,23 @@ the worktree:
   "env": { "MAVERICK_WS": "<workspaceId>" }
 }
 ```
-- Merge, don't clobber, if the file already exists (preserve user hooks).
-- Ensure the worktree's `.claude/` entry is gitignored locally so we don't dirty
-  the user's tree (Claude gitignores `.local.json` itself; verify).
+- The `env` block sets `MAVERICK_WS` inside Claude's process (portable across
+  shells — no shell-prefix plumbing), which interpolates into the correlation
+  header.
+- **`http` hook support to verify live during implementation.** If the installed
+  `claude` rejects `type: "http"`, fall back to a `command` hook that curls the
+  receiver (`curl -s -X POST … -d @-`); curl is present on the target macOS and
+  the sidecar augments PATH. The plan carries both variants; the live smoke test
+  decides.
+- Injection happens where the `claude` launch command is assembled
+  (`src/lib/launch.ts` / the terminal-first launch flow), gated on
+  `backendId === "claude-code"`.
+- **Layer boundary:** port + token stay inside the sidecar. The frontend calls a
+  new RPC (e.g. `hooks.claudeSettingsPath({ workspaceId })`) that lazily starts
+  the hook server, writes the per-workspace settings file, and returns just the
+  path. The frontend appends `--settings <path>` and never sees the token.
 
-**4. Codex `notify` injection.** Add `-c notify=["<helper>", …]` (or a tiny
-bundled `codex-notify` script that POSTs to the receiver) to the Codex launch
-args in `resolveLaunch`/`BACKEND_COMMAND_FALLBACK`. Correlate by `cwd`. If a
-clean per-launch injection proves unreliable, Codex `done` can ship in a
-follow-up — Claude coverage is the priority.
-
-**5. Frontend decoupling.**
+**3. Frontend decoupling.**
 - `src/hooks/useAgentStatus.ts`: keep the `working`/`idle` **visual pill** driven
   by the byte stream (cosmetic, no notifications), but **remove BEL→`attention`**.
   `attention`/`done`/`error` are no longer derived from bytes.
@@ -149,7 +152,7 @@ follow-up — Claude coverage is the priority.
 ### Error handling
 
 - Bad/absent token or non-loopback peer → `401`, no side effect.
-- Unknown workspace (cwd not in registry) → still notify with `workspaceId:null`
+- Missing `X-Maverick-Workspace` header → still notify with `workspaceId:null`
   (global) so we fail open rather than swallow a real prompt; log at debug.
 - Port bind failure → sidecar logs and continues; hook config is simply not
   written (no receiver), so we degrade to "no notifications" not a crash.
@@ -158,10 +161,9 @@ follow-up — Claude coverage is the priority.
 ### Testing
 
 - `hook-server.test.ts`: token auth, loopback enforcement, event→notification
-  mapping for each `notification_type`/`Stop`/Codex payload, unknown-workspace
+  mapping for each `notification_type` and `Stop`, missing-workspace-header
   fail-open, malformed body.
 - Config-writer test: fresh write, merge with existing hooks, idempotency.
-- Registry test: add/lookup-by-cwd/lookup-by-id/clear-on-destroy.
 - `useAgentStatus.test.ts`: BEL no longer produces `attention`; pill still
   goes working→idle.
 - `useAgentNotifications.test.ts`: byte-stream transitions no longer call
@@ -172,17 +174,13 @@ follow-up — Claude coverage is the priority.
 
 ## Non-goals
 
-- gemini/aider/ollama hook support.
-- Codex "waiting for input" (no event exists).
+- Codex / gemini / aider / ollama notifications (Claude Code only).
 - Changing the NotificationBell history UI.
 
-## Open questions for review
+## Decisions (2026-07-02)
 
-1. **Transport** — loopback HTTP (chosen) vs file-drop via existing `fs-watcher`
-   vs PTY sentinel marker. HTTP is the most robust and matches Claude's native
-   `http` hook; confirm acceptable to open a loopback socket (bound to 127.0.0.1,
-   token-gated).
-2. **Codex scope now vs follow-up** — include Codex `done` in this PR, or land
-   Claude-complete first?
-3. **Visual pill** — keep the byte-stream working/idle pill (chosen) or delete
-   the heuristic wholesale?
+1. **Transport** — loopback HTTP receiver in the sidecar (127.0.0.1, ephemeral
+   port, token-gated), matching Claude's native `http` hook type.
+2. **Scope** — Claude Code only. All other backends produce no notifications.
+3. **Visual pill** — keep the byte-stream working/idle pill (cosmetic); remove
+   its notification side effects.
