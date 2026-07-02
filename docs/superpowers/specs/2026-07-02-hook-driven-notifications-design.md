@@ -87,6 +87,7 @@ OS-assigned ephemeral port, with a random secret token generated at boot.
   - Claude `Notification`/`permission_prompt` → `agent.attention`.
   - Claude `Notification`/`idle_prompt` → `agent.attention` (waiting for next prompt).
   - Claude `Stop` → `agent.done`.
+  - Claude `StopFailure` → `agent.error`.
 - Exposes `{ port, token }` for the config writer. Lifecycle owned by the sidecar
   bootstrap (started in `runServer`, closed on shutdown).
 
@@ -106,6 +107,8 @@ config are never touched or dirtied.
       "headers": { "X-Maverick-Token": "<token>", "X-Maverick-Workspace": "${MAVERICK_WS}" },
       "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }],
     "Stop": [{ "hooks": [{ "type": "http", "url": "…", "headers": {…},
+      "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }],
+    "StopFailure": [{ "hooks": [{ "type": "http", "url": "…", "headers": {…},
       "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }]
   },
   "env": { "MAVERICK_WS": "<workspaceId>" }
@@ -129,13 +132,14 @@ config are never touched or dirtied.
 
 **3. Frontend decoupling.**
 - `src/hooks/useAgentStatus.ts`: keep the `working`/`idle` **visual pill** driven
-  by the byte stream (cosmetic, no notifications), but **remove BEL→`attention`**.
-  `attention`/`done`/`error` are no longer derived from bytes.
-- `src/hooks/useAgentNotifications.ts`: no longer the notification trigger for
-  hook-capable backends. Notifications now arrive via the sidecar `notification.send`
-  event (already wired to the Toaster). Reconcile so we don't double-fire: the
-  frontend status→notify bridge is removed; the Toaster/NotificationBell keep
-  rendering `notification.send` events.
+  by the byte stream (cosmetic, no notifications), but **remove BEL→`attention`**
+  (delete `ATTENTION_PATTERN`/`streamRequestsAttention`; output always → `working`).
+  `markExit` still sets `done`/`error` for the pill but no longer notifies.
+- `src/hooks/useAgentNotifications.ts`: **the entire byte-stream→notify bridge is
+  removed** (the hook is deleted and unmounted from the app shell). All three
+  notification types now originate from Claude hooks via the sidecar
+  `notification.send` event, which the Toaster and NotificationBell already
+  render. This guarantees no double-fire.
 - `src/lib/notification-route.ts`: `ALWAYS_OS_TYPES` retained (attention/error
   from a *real* hook genuinely should always surface), now trustworthy.
 
