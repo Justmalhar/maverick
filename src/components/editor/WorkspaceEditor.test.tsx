@@ -44,7 +44,7 @@ beforeEach(() => {
 
 describe("WorkspaceEditor", () => {
   it("mounts every group, shows only the active one", () => {
-    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s" };
+    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s", mode: "terminal" as const };
     useWorkbench.setState({
       workspaces: [ws],
       terminalGroups: [
@@ -86,5 +86,30 @@ describe("WorkspaceEditor", () => {
     });
     renderWithProviders(<WorkspaceEditor workspace={ws} active={false} />);
     expect(screen.getByTestId("workspace-editor-w1").className).toMatch(/keep-alive-hidden/);
+  });
+
+  it("renders AgentChatView for the primary group of an agent-mode workspace", () => {
+    const ws = makeWorkspace({ id: "wsA", mode: "agent" });
+    useWorkbench.setState({
+      terminalGroups: [{ id: "wsA", workspaceId: "wsA", title: "Terminal 1" }],
+      activeGroupByWorkspace: { wsA: "wsA" },
+    });
+    renderWithProviders(<WorkspaceEditor workspace={ws} active />);
+    expect(screen.getByTestId("agent-chat-wsA")).toBeInTheDocument();
+    expect(screen.queryByTestId("terminal-view-wsA")).not.toBeInTheDocument();
+  });
+
+  it("still renders TerminalView for extra groups of an agent-mode workspace", () => {
+    const ws = makeWorkspace({ id: "wsA", mode: "agent" });
+    useWorkbench.setState({
+      terminalGroups: [
+        { id: "wsA", workspaceId: "wsA", title: "Terminal 1" },
+        { id: "g2", workspaceId: "wsA", title: "Terminal 2" },
+      ],
+      activeGroupByWorkspace: { wsA: "wsA" },
+    });
+    renderWithProviders(<WorkspaceEditor workspace={ws} active />);
+    expect(screen.getByTestId("terminal-group-g2")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-view-g2")).toBeInTheDocument();
   });
 });

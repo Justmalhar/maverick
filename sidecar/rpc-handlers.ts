@@ -60,6 +60,7 @@ const Schemas = {
     branch: nullishOptional(z.string()),
     backend: z.string(),
     baseBranch: nullishOptional(z.string()),
+    mode: nullishOptional(z.enum(["terminal", "agent"])),
   }),
   workspaceDestroy: z.object({ workspaceId: z.string() }),
   workspaceList: z.object({ projectId: nullishOptional(z.string()) }),
@@ -564,6 +565,7 @@ export class RpcHandlers {
           agentBackend: p.backend,
           worktreePath,
           title,
+          mode: p.mode ?? "terminal",
         });
       }
       case "workspace.destroy": {

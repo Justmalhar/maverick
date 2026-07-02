@@ -41,6 +41,7 @@ import type {
   Stash,
   UsageSummary,
   Workspace,
+  WorkspaceMode,
   WorkspacePreset,
   PresetLaunchResult,
   PresetNode,
@@ -67,7 +68,8 @@ export async function workspaceCreate(
   projectPath: string,
   branch: string | undefined,
   backend: string,
-  baseBranch?: string
+  baseBranch?: string,
+  mode?: WorkspaceMode
 ): Promise<Workspace> {
   return invoke("workspace_create", {
     projectId,
@@ -75,6 +77,7 @@ export async function workspaceCreate(
     branch,
     backend,
     baseBranch,
+    mode,
   });
 }
 

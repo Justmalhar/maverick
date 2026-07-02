@@ -28,8 +28,8 @@ beforeEach(() => {
 function seed() {
   useWorkbench.setState({
     workspaces: [
-      { id: "w1", projectId: "p", branch: "b1", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s", title: "A" },
-      { id: "w2", projectId: "p", branch: "b2", agentBackend: "claude", worktreePath: "/wt/w2", status: "active", sessionId: "s", title: "B" },
+      { id: "w1", projectId: "p", branch: "b1", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s", title: "A", mode: "terminal" },
+      { id: "w2", projectId: "p", branch: "b2", agentBackend: "claude", worktreePath: "/wt/w2", status: "active", sessionId: "s", title: "B", mode: "terminal" },
     ],
     activeWorkspaceId: "w1",
     terminalGroups: [
@@ -596,8 +596,8 @@ describe("EditorTabs", () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [
-        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1" },
-        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2" },
+        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1", mode: "terminal" },
+        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2", mode: "terminal" },
       ],
       activeWorkspaceId: "ws1",
       terminalGroups: [
@@ -616,8 +616,8 @@ describe("EditorTabs", () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [
-        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1" },
-        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2" },
+        { id: "ws1", projectId: "p1", branch: "feature/alpha", agentBackend: "claude", worktreePath: "/tmp/a", status: "idle", sessionId: "s1", mode: "terminal" },
+        { id: "ws2", projectId: "p1", branch: "feature/beta", agentBackend: "claude", worktreePath: "/tmp/b", status: "idle", sessionId: "s2", mode: "terminal" },
       ],
       activeWorkspaceId: null,
       fileTabs: [{ id: "file:/tmp/a/x.ts", kind: "file", path: "/tmp/a/x.ts", worktreePath: "/tmp/a", workspaceId: "ws1", preview: true, dirty: false, mode: "edit", viewed: false }],

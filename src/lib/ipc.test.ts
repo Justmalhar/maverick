@@ -26,7 +26,7 @@ describe("ipc types", () => {
   it("Workspace status union compiles", () => {
     const w: Workspace = {
       id: "1", projectId: "p", branch: "main", agentBackend: "claude",
-      worktreePath: "/", status: "active", sessionId: "s", title: "t",
+      worktreePath: "/", status: "active", sessionId: "s", title: "t", mode: "terminal",
     };
     expectTypeOf(w.status).toEqualTypeOf<"active" | "idle" | "error">();
   });

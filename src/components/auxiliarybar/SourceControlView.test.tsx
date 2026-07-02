@@ -16,6 +16,7 @@ const WS = {
   worktreePath: "/wt",
   status: "active" as const,
   sessionId: "s1",
+  mode: "terminal" as const,
 };
 
 const FILES = [

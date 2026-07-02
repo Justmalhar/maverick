@@ -17,6 +17,7 @@ export interface Workspace {
   status: "active" | "idle" | "error";
   sessionId: string;
   title?: string;
+  mode: WorkspaceMode;
 }
 
 export interface Backend {
@@ -28,10 +29,10 @@ export interface Backend {
   active: boolean;
 }
 
-// Retained for backward-compat of persisted presets (PresetNode.mode). Maverick
-// is terminal-first: every workspace runs a shell PTY and the app only ever
-// produces "terminal". "agent" survives only so older stored presets deserialize.
-export type EditorMode = "agent" | "terminal";
+export type WorkspaceMode = "terminal" | "agent";
+
+// Deprecated alias retained so persisted presets (PresetNode.mode) deserialize.
+export type EditorMode = WorkspaceMode;
 
 /**
  * A one-shot directive to launch a CLI inside a freshly-opened workspace's shell.
@@ -122,6 +123,8 @@ export interface Message {
   content: string;
   toolCallsJson?: string;
   createdAt: number;
+  partsJson?: string;
+  turnId?: string;
 }
 
 export interface Attachment {

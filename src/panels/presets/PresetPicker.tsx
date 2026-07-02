@@ -71,6 +71,7 @@ export default function PresetPicker({ open, onOpenChange }: Props) {
         status: "active",
         sessionId: result.workspaceId,
         title: preset.name,
+        mode: "terminal",
       });
       setActiveWorkspace(result.workspaceId);
       onOpenChange(false);

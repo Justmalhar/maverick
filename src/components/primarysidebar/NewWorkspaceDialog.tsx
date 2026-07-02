@@ -2,7 +2,7 @@
 // branch name (type prefix + slug) for a new workspace's worktree in one flow.
 // Defer naming to the AI with "Let AI name it later".
 import { useState, useEffect } from "react";
-import { Sparkles, GitBranch } from "lucide-react";
+import { Sparkles, GitBranch, TerminalSquare, MessageSquare } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Dialog,
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { useWorkbench } from "@/state/store";
 import { brandFor } from "@/lib/backend-brand";
 import { gitBranchList } from "@/lib/tauri";
-import type { Branch } from "@/lib/ipc";
+import type { Branch, WorkspaceMode } from "@/lib/ipc";
 
 const BRANCH_TYPES = ["feature", "fix", "bug", "chore", "hotfix"] as const;
 type BranchType = (typeof BRANCH_TYPES)[number];
@@ -34,6 +34,7 @@ export interface NewWorkspacePayload {
   baseBranch?: string;
   branch?: string;
   aiLater?: boolean;
+  mode: WorkspaceMode;
 }
 
 interface Props {
@@ -93,6 +94,7 @@ export function NewWorkspaceDialog({
     if (!open) {
       setType("feature");
       setName("");
+      setMode("terminal");
       return;
     }
     setBackend(backends.find((b) => b.active)?.id ?? backends[0]?.id ?? "claude-code");
@@ -100,6 +102,7 @@ export function NewWorkspaceDialog({
 
   const [type, setType] = useState<BranchType>("feature");
   const [name, setName] = useState("");
+  const [mode, setMode] = useState<WorkspaceMode>("terminal");
 
   const composed = composeTypedBranch(type, name);
   const canCreate = composed !== "";
@@ -109,18 +112,19 @@ export function NewWorkspaceDialog({
     setName("");
     setBase("");
     setBranches([]);
+    setMode("terminal");
   }
 
   function create() {
     if (!canCreate) return;
     onOpenChange(false);
-    onSubmit({ backend, baseBranch: base || undefined, branch: composed });
+    onSubmit({ backend, baseBranch: base || undefined, branch: composed, mode });
     reset();
   }
 
   function aiLater() {
     onOpenChange(false);
-    onSubmit({ backend, baseBranch: base || undefined, aiLater: true });
+    onSubmit({ backend, baseBranch: base || undefined, aiLater: true, mode });
     reset();
   }
 
@@ -135,6 +139,37 @@ export function NewWorkspaceDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-5 px-6 py-5">
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel>Workspace mode</FieldLabel>
+            <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-card p-1" role="group" aria-label="Workspace mode">
+              {(["terminal", "agent"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  aria-pressed={mode === m}
+                  data-testid={`workspace-mode-${m}`}
+                  className={cn(
+                    "relative flex items-center justify-center gap-1.5 rounded px-1 py-1.5 text-[11px] font-mono transition-colors duration-100",
+                    mode === m ? "text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {mode === m ? (
+                    <motion.span
+                      layoutId="workspace-mode-active"
+                      className="absolute inset-0 rounded bg-accent shadow-sm"
+                      transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  ) : null}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {m === "terminal" ? <TerminalSquare className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
+                    {m === "terminal" ? "Terminal" : "Agent"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <FieldLabel>Coding agent</FieldLabel>

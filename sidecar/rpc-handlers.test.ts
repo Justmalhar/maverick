@@ -26,7 +26,7 @@ import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
 import type { ChecksModule } from "./checks-module";
-import type { ChecksReport, KanbanTask, Shell } from "./types";
+import type { ChecksReport, KanbanTask, Shell, Workspace } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
 function fakeShell(steps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []): {
@@ -197,6 +197,29 @@ describe("RpcHandlers", () => {
     // workspace.list with a null projectId must not throw either.
     const all = (await h.dispatch("workspace.list", { projectId: null })) as unknown[];
     expect(Array.isArray(all)).toBe(true);
+  });
+
+  test("workspace.create persists agent mode", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/ws-agent" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/ws-agent",
+      branch: "feature/agent-x",
+      backend: "claude",
+      mode: "agent",
+    })) as Workspace;
+    expect(ws.mode).toBe("agent");
+  });
+
+  test("workspace.create defaults to terminal mode when omitted", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/ws-terminal" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/ws-terminal",
+      branch: "feat",
+      backend: "claude",
+    })) as Workspace;
+    expect(ws.mode).toBe("terminal");
   });
 
   test("message.append tolerates toolCallsJson: null", async () => {
