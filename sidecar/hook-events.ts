@@ -18,27 +18,22 @@ function asString(v: unknown): string | undefined {
  * Map a Claude Code hook payload (parsed JSON body of a `/agent-hook` POST) to
  * the notification it should raise, or null when the event is not worth
  * interrupting the user. Pure and total: never throws on malformed input.
+ *
+ * Only the `Notification` event is surfaced. `Stop`/`StopFailure` are
+ * intentionally NOT mapped: `Stop` fires on every assistant turn and
+ * `StopFailure` on transient auto-retried API errors, so notifying on them would
+ * spam a still-running agent. Actual completion/exit is reflected by the local
+ * status pill (PTY exit code), not an OS notification.
  */
 export function mapClaudeHookEvent(payload: unknown): MappedHookNotification | null {
   if (typeof payload !== "object" || payload === null) return null;
   const p = payload as Record<string, unknown>;
-  const event = asString(p.hook_event_name);
-  if (!event) return null;
-
-  if (event === "Notification") {
-    const kind = asString(p.notification_type);
-    if (!kind || !ATTENTION_NOTIFICATION_TYPES.has(kind)) return null;
-    return {
-      type: "agent.attention",
-      title: "Agent needs input",
-      body: asString(p.message) ?? "Claude is waiting for your input",
-    };
-  }
-  if (event === "Stop") {
-    return { type: "agent.done", title: "Agent finished", body: "Claude finished its task" };
-  }
-  if (event === "StopFailure") {
-    return { type: "agent.error", title: "Agent error", body: "Claude exited with an error" };
-  }
-  return null;
+  if (asString(p.hook_event_name) !== "Notification") return null;
+  const kind = asString(p.notification_type);
+  if (!kind || !ATTENTION_NOTIFICATION_TYPES.has(kind)) return null;
+  return {
+    type: "agent.attention",
+    title: "Agent needs input",
+    body: asString(p.message) ?? "Claude is waiting for your input",
+  };
 }

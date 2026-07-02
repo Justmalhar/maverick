@@ -86,8 +86,10 @@ OS-assigned ephemeral port, with a random secret token generated at boot.
 - Maps event → `{type, title, body}` and calls `NotificationService.send`.
   - Claude `Notification`/`permission_prompt` → `agent.attention`.
   - Claude `Notification`/`idle_prompt` → `agent.attention` (waiting for next prompt).
-  - Claude `Stop` → `agent.done`.
-  - Claude `StopFailure` → `agent.error`.
+  - Claude `Stop`/`StopFailure` are intentionally NOT notified: `Stop` fires
+    every turn and `StopFailure` on transient auto-retried errors, so notifying
+    on them would spam a running agent. Completion/errors show only via the
+    local status pill (PTY exit code).
 - Exposes `{ port, token }` for the config writer. Lifecycle owned by the sidecar
   bootstrap (started in `runServer`, closed on shutdown).
 
@@ -105,10 +107,6 @@ config are never touched or dirtied.
     "Notification": [{ "hooks": [{ "type": "http",
       "url": "http://127.0.0.1:<port>/agent-hook",
       "headers": { "X-Maverick-Token": "<token>", "X-Maverick-Workspace": "${MAVERICK_WS}" },
-      "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "…", "headers": {…},
-      "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }],
-    "StopFailure": [{ "hooks": [{ "type": "http", "url": "…", "headers": {…},
       "allowedEnvVars": ["MAVERICK_WS"], "timeout": 5 }] }]
   },
   "env": { "MAVERICK_WS": "<workspaceId>" }

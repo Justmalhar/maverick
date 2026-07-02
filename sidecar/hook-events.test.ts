@@ -27,20 +27,9 @@ describe("mapClaudeHookEvent", () => {
     });
   });
 
-  it("maps Stop to agent.done", () => {
-    expect(mapClaudeHookEvent({ hook_event_name: "Stop" })).toEqual({
-      type: "agent.done",
-      title: "Agent finished",
-      body: "Claude finished its task",
-    });
-  });
-
-  it("maps StopFailure to agent.error", () => {
-    expect(mapClaudeHookEvent({ hook_event_name: "StopFailure" })).toEqual({
-      type: "agent.error",
-      title: "Agent error",
-      body: "Claude exited with an error",
-    });
+  it("ignores Stop and StopFailure (per-turn / transient — would spam)", () => {
+    expect(mapClaudeHookEvent({ hook_event_name: "Stop" })).toBeNull();
+    expect(mapClaudeHookEvent({ hook_event_name: "StopFailure" })).toBeNull();
   });
 
   it("ignores Notification types that are not attention-worthy", () => {

@@ -28,14 +28,15 @@ function httpHook(port: number, token: string) {
 }
 
 /**
- * The additional-settings JSON Claude loads via `--settings`. Hooks POST each
- * lifecycle event to the sidecar's loopback receiver; the ${MAVERICK_WS} header
- * is interpolated from the per-file `env` block written by writeClaudeHooksFile.
+ * The additional-settings JSON Claude loads via `--settings`. Wires only the
+ * `Notification` hook, POSTed to the sidecar's loopback receiver; the
+ * ${MAVERICK_WS} header is interpolated from the per-file `env` block written
+ * by writeClaudeHooksFile. `Stop`/`StopFailure` are deliberately not wired —
+ * see hook-events.ts for why.
  */
 export function buildClaudeHooksSettings(opts: { port: number; token: string }): object {
-  const hook = () => [httpHook(opts.port, opts.token)];
   return {
-    hooks: { Notification: hook(), Stop: hook(), StopFailure: hook() },
+    hooks: { Notification: [httpHook(opts.port, opts.token)] },
     env: { [WS_ENV]: WS_PLACEHOLDER },
   };
 }

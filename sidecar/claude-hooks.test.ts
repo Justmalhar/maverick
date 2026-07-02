@@ -8,10 +8,10 @@ const dir = join(tmpdir(), "mv-claude-hooks-test");
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("buildClaudeHooksSettings", () => {
-  it("wires Notification/Stop/StopFailure http hooks with token + workspace header", () => {
+  it("wires the Notification http hook with token + workspace header", () => {
     const s = buildClaudeHooksSettings({ port: 51234, token: "secret-abc" }) as any;
     expect(s.env.MAVERICK_WS).toBe("${MAVERICK_WS}"); // placeholder replaced per-file by writer
-    for (const ev of ["Notification", "Stop", "StopFailure"]) {
+    for (const ev of ["Notification"]) {
       const hook = s.hooks[ev][0].hooks[0];
       expect(hook.type).toBe("http");
       expect(hook.url).toBe("http://127.0.0.1:51234/agent-hook");
@@ -19,6 +19,8 @@ describe("buildClaudeHooksSettings", () => {
       expect(hook.headers["X-Maverick-Workspace"]).toBe("${MAVERICK_WS}");
       expect(hook.allowedEnvVars).toEqual(["MAVERICK_WS"]);
     }
+    expect((s.hooks as any).Stop).toBeUndefined();
+    expect((s.hooks as any).StopFailure).toBeUndefined();
   });
 });
 
@@ -38,6 +40,8 @@ describe("writeClaudeHooksFile", () => {
     const a = writeClaudeHooksFile({ workspaceId: "ws_1", port: 1, token: "t", dir });
     const b = writeClaudeHooksFile({ workspaceId: "ws_1", port: 2, token: "t", dir });
     expect(a).toBe(b);
-    expect(JSON.parse(readFileSync(b, "utf8")).hooks.Stop[0].hooks[0].url).toContain(":2/");
+    expect(JSON.parse(readFileSync(b, "utf8")).hooks.Notification[0].hooks[0].url).toContain(
+      ":2/"
+    );
   });
 });

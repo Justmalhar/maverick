@@ -49,9 +49,13 @@ describe("HookServer", () => {
     server = new HookServer({ notifications: notif, token: "tok" });
     await server.start();
     const { port } = server.endpoint();
-    await post(port, { hook_event_name: "Stop" }, { "X-Maverick-Token": "tok" });
+    await post(
+      port,
+      { hook_event_name: "Notification", notification_type: "idle_prompt" },
+      { "X-Maverick-Token": "tok" }
+    );
     expect(notif.calls[0].workspaceId).toBeNull();
-    expect(notif.calls[0].type).toBe("agent.done");
+    expect(notif.calls[0].type).toBe("agent.attention");
   });
 
   it("ignores unmapped events without sending", async () => {
