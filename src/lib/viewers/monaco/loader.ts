@@ -2,6 +2,11 @@
 // everything else goes through getMonaco()). Loaded lazily — first file tab
 // pays the chunk cost, the Workbench never does.
 import type * as MonacoApi from "monaco-editor";
+// The `editor.api` entry (unlike `editor.main`) never imports codicon.css, so the
+// `@font-face { font-family: "codicon" }` is otherwise never registered and every
+// codicon glyph — most visibly the diff gutter +/- signs (diff-insert/diff-remove) —
+// renders as tofu boxes. Registering it here keeps us on the minimal entry.
+import "monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css";
 import { MAVERICK_DARK } from "./maverick-theme";
 import { SHIKI_LANGS, languageForPath } from "./languages";
 
