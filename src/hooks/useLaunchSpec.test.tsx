@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { renderHook, act } from "@testing-library/react";
-import { useLaunchSpec, __resetLaunchedForTests } from "./useLaunchSpec";
+import { useLaunchSpec, __resetLaunchedForTests, isClaudeLaunchCommand } from "./useLaunchSpec";
 import { useWorkbench } from "@/state/store";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { makeWorkspace } from "@/test/fixtures";
@@ -208,5 +208,54 @@ describe("useLaunchSpec", () => {
     expect(writeCalls().length).toBeGreaterThan(0);
     isWindowsSpy.mockRestore();
     shellKindSpy.mockRestore();
+  });
+
+  it("prepends --settings <path> for a claude launch when the RPC succeeds", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--foo"] });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") return { path: "/tmp/ws.json" };
+      return undefined;
+    }) as unknown as typeof invoke);
+    await mount(ws, "pty-1", true);
+    expect(invoke).toHaveBeenCalledWith("hooks_claude_settings_path", { workspaceId: "w1" });
+    expect(invoke).toHaveBeenCalledWith("pty_write", {
+      ptyId: "pty-1",
+      data: "claude --settings /tmp/ws.json --foo\r",
+    });
+  });
+
+  it("fails open (launches without --settings) when hooksClaudeSettingsPath rejects", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--foo"] });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "hooks_claude_settings_path") throw new Error("rpc failed");
+      return undefined;
+    }) as unknown as typeof invoke);
+    await mount(ws, "pty-1", true);
+    expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "claude --foo\r" });
+  });
+
+  it("does not fetch settings or inject --settings for non-claude commands", async () => {
+    const ws = makeWorkspace({ id: "w1", sessionId: undefined });
+    useWorkbench.getState().setLaunchSpec("w1", { command: "codex", args: ["--foo"] });
+    await mount(ws, "pty-1", true);
+    expect(invoke).not.toHaveBeenCalledWith("hooks_claude_settings_path", expect.anything());
+    expect(invoke).toHaveBeenCalledWith("pty_write", { ptyId: "pty-1", data: "codex --foo\r" });
+  });
+});
+
+describe("isClaudeLaunchCommand", () => {
+  it("matches bare and pathed claude binaries", () => {
+    expect(isClaudeLaunchCommand("claude")).toBe(true);
+    expect(isClaudeLaunchCommand("/Users/x/.local/bin/claude")).toBe(true);
+    expect(isClaudeLaunchCommand("claude.cmd")).toBe(true);
+    expect(isClaudeLaunchCommand("C:\\bin\\claude.exe")).toBe(true);
+  });
+
+  it("does not match other CLIs", () => {
+    expect(isClaudeLaunchCommand("codex")).toBe(false);
+    expect(isClaudeLaunchCommand("gemini")).toBe(false);
+    expect(isClaudeLaunchCommand("claude-code-helper")).toBe(false);
   });
 });
