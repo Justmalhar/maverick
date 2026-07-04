@@ -57,6 +57,37 @@ describe("CheckpointManager", () => {
     expect(await git(repo, "status", "--porcelain")).toBe(statusBefore);
   });
 
+  test("snapshot on an unborn HEAD produces a parentless commit and restore still works", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "mvck-cp-unborn-"));
+    try {
+      await git(bare, "init", "-b", "main");
+      await git(bare, "config", "user.email", "t@t.t");
+      await git(bare, "config", "user.name", "t");
+      writeFileSync(join(bare, "first.txt"), "hello\n");
+
+      const sha = await cp.snapshot(bare, "sess1");
+      expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect(await git(bare, "rev-parse", "refs/maverick/checkpoints/sess1")).toBe(sha);
+      const commit = await git(bare, "cat-file", "-p", sha);
+      expect(commit).not.toContain("parent ");
+
+      writeFileSync(join(bare, "first.txt"), "trashed\n");
+      await cp.restore(bare, sha);
+      expect(readFileSync(join(bare, "first.txt"), "utf8")).toBe("hello\n");
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+
+  test("restore rejects with the failing git command when given a bad sha", async () => {
+    const badSha = "0".repeat(40);
+    await expect(cp.restore(repo, badSha)).rejects.toThrow(/read-tree/);
+  });
+
+  test("snapshot on a nonexistent worktree rejects and cleans up its temp index", async () => {
+    await expect(cp.snapshot("/path/that/does/not/exist", "s")).rejects.toThrow();
+  });
+
   test("snapshots stack on the session ref and dropRef removes it", async () => {
     const sha1 = await cp.snapshot(repo, "sess1");
     writeFileSync(join(repo, "b.txt"), "b\n");
