@@ -110,6 +110,25 @@ describe("EditorBreadcrumb", () => {
     );
   });
 
+  it("stays visible with the workspace's branch when a file tab is open instead of the workspace", () => {
+    mockBranch(null);
+    useWorkbench.setState({
+      projects: [makeProject({ id: "p", name: "Alpha" })],
+      workspaces: [
+        makeWorkspace({ id: "ws", projectId: "p", branch: "feature/x", agentBackend: "codex", worktreePath: "/wt/ws" }),
+      ],
+      // Opening a file tab clears activeWorkspaceId — the breadcrumb must fall
+      // back to the file tab's worktree instead of disappearing.
+      activeWorkspaceId: null,
+      activeFileTabId: "file:/wt/ws/a.ts",
+      fileTabs: [
+        { id: "file:/wt/ws/a.ts", kind: "file", path: "/wt/ws/a.ts", worktreePath: "/wt/ws", workspaceId: "ws", preview: false, dirty: false, mode: "edit", viewed: false },
+      ],
+    });
+    renderWithProviders(<EditorBreadcrumb />);
+    expect(screen.getByTestId("editor-breadcrumb-branch")).toHaveTextContent("feature/x");
+  });
+
   it("disables the sync control and performs no action when diverged", async () => {
     mockBranch({ upstream: "origin/viper", ahead: 1, behind: 2 });
     mountActive();

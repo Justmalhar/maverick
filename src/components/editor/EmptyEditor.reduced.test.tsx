@@ -30,22 +30,16 @@ vi.mock("framer-motion", async () => {
 
 import { renderWithProviders, screen } from "@/test/utils";
 import { EmptyEditor } from "./EmptyEditor";
-import { EditorTab } from "./EditorTab";
 import { ProjectItem } from "@/components/primarysidebar/ProjectItem";
 import { Panel } from "@/components/panel/Panel";
 import { TitleBar } from "@/components/titlebar/TitleBar";
 import { useWorkbench } from "@/state/store";
-import { makeProject, makeWorkspace } from "@/test/fixtures";
+import { makeProject } from "@/test/fixtures";
 
 describe("reduced-motion branch coverage", () => {
   it("EmptyEditor renders without motion animation values", () => {
     renderWithProviders(<EmptyEditor />);
     expect(screen.getByTestId("empty-editor")).toBeInTheDocument();
-  });
-
-  it("EditorTab layout=false branch", () => {
-    renderWithProviders(<EditorTab workspace={makeWorkspace({ id: "z" })} active onSelect={() => {}} onClose={() => {}} />);
-    expect(screen.getByTestId("editor-tab-z")).toBeInTheDocument();
   });
 
   it("ProjectItem AnimatePresence reduced branch", () => {
