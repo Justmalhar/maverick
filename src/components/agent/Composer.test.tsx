@@ -60,8 +60,6 @@ describe("Composer", () => {
     const stop = await screen.findByRole("button", { name: "Stop" });
     await userEvent.click(stop);
     expect(tauri.agentInterrupt).toHaveBeenCalledWith("s1");
-    const box = screen.getByRole("textbox", { name: "Message agent" });
-    box.focus();
     await userEvent.keyboard("{Escape}");
     expect(tauri.agentInterrupt).toHaveBeenCalledTimes(2);
   });

@@ -23,9 +23,13 @@ export function Composer({ workspace }: Props) {
     let cancelled = false;
     agentCapabilities(workspace.id)
       .then((c) => { if (!cancelled) setCaps(c); })
-      .catch(() => {});
+      .catch((e) => console.error("[agent] capabilities failed", e));
     return () => { cancelled = true; };
   }, [workspace.id]);
+
+  function interrupt() {
+    agentInterrupt(sessionId).catch((e) => console.error("[agent] interrupt failed", e));
+  }
 
   function autoGrow() {
     const el = textareaRef.current;
@@ -51,28 +55,35 @@ export function Composer({ workspace }: Props) {
     }
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void send();
-    } else if (e.key === "Escape" && working) {
+    }
+  }
+
+  // Escape lives on the composer root so it bubbles from any focused
+  // descendant (e.g. the Stop button), yet stays scoped to this composer —
+  // a window listener would fire for inactive keep-alive-mounted workspaces.
+  function onRootKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape" && working) {
       e.preventDefault();
-      void agentInterrupt(sessionId);
+      interrupt();
     }
   }
 
   function selectModel(id: string) {
     setOptionsLocal(sessionId, { model: id });
-    void agentSetOptions(sessionId, { model: id });
+    agentSetOptions(sessionId, { model: id }).catch((e) => console.error("[agent] set options failed", e));
   }
 
   function selectReasoning(id: string) {
     setOptionsLocal(sessionId, { reasoningLevel: id });
-    void agentSetOptions(sessionId, { reasoningLevel: id });
+    agentSetOptions(sessionId, { reasoningLevel: id }).catch((e) => console.error("[agent] set options failed", e));
   }
 
   return (
-    <div className="mv-composer flex shrink-0 flex-col gap-2 border-t border-border bg-editor p-3" data-testid="agent-composer">
+    <div className="mv-composer flex shrink-0 flex-col gap-2 border-t border-border bg-editor p-3" data-testid="agent-composer" onKeyDown={onRootKeyDown}>
       {slice.queue.length > 0 && (
         <div className="flex flex-col gap-1">
           {slice.queue.map((q) => (
@@ -84,7 +95,7 @@ export function Composer({ workspace }: Props) {
               <button
                 type="button"
                 aria-label="Remove queued message"
-                onClick={() => void agentQueueRemove(sessionId, q.id)}
+                onClick={() => agentQueueRemove(sessionId, q.id).catch((e) => console.error("[agent] queue remove failed", e))}
                 className="flex h-4 w-4 items-center justify-center rounded-sm hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -94,6 +105,7 @@ export function Composer({ workspace }: Props) {
         </div>
       )}
 
+      {/* TODO(agent-mode plan Task 14): attachment populate path lands with drop/paste */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachments.map((a) => (
@@ -119,7 +131,7 @@ export function Composer({ workspace }: Props) {
           value={draft}
           rows={2}
           onChange={(e) => { setDraft(e.target.value); autoGrow(); }}
-          onKeyDown={onKeyDown}
+          onKeyDown={onTextareaKeyDown}
           placeholder="Ask to make changes, @mention files, run /commands"
           className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
@@ -131,7 +143,7 @@ export function Composer({ workspace }: Props) {
             <button
               type="button"
               aria-label="Stop"
-              onClick={() => void agentInterrupt(sessionId)}
+              onClick={interrupt}
               className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-foreground transition-colors duration-100 hover:bg-destructive/20 hover:text-destructive"
             >
               <Square className="h-3.5 w-3.5" />
