@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Workspace } from "@/lib/ipc";
 import { hydrateAgentSession } from "@/lib/agent/agent-events";
 import { Transcript } from "./Transcript";
+import { Composer } from "./Composer";
 
 interface Props { workspace: Workspace; visible: boolean; }
 
@@ -20,7 +21,7 @@ export function AgentChatView({ workspace, visible }: Props) {
   return (
     <div data-testid={`agent-chat-${workspace.id}`} className="mv-agentchat flex h-full flex-col bg-editor">
       <Transcript sessionId={workspace.sessionId} />
-      <div data-testid="agent-composer" className="shrink-0" />
+      <Composer workspace={workspace} />
     </div>
   );
 }
