@@ -5,7 +5,9 @@ import {
   agentCapabilities, agentInterrupt, agentQueueRemove, agentSend, agentSetOptions,
 } from "@/lib/tauri";
 import { useAgentStore, emptySession } from "@/state/agent-store";
+import { detectTrigger } from "@/lib/agent/trigger";
 import { ModelMenu, ReasoningMenu } from "./ComposerMenus";
+import { TriggerMenu } from "./TriggerMenu";
 
 interface Props { workspace: Workspace; }
 
@@ -14,10 +16,23 @@ export function Composer({ workspace }: Props) {
   const slice = useAgentStore((s) => s.sessions[sessionId]) ?? emptySession();
   const setOptionsLocal = useAgentStore((s) => s.setOptionsLocal);
   const [draft, setDraft] = useState("");
+  const [caret, setCaret] = useState(0);
   const [attachments, setAttachments] = useState<Extract<AgentPart, { type: "attachment" }>[]>([]);
   const [caps, setCaps] = useState<AgentCapabilities | null>(null);
+  const [dismissedTriggerKey, setDismissedTriggerKey] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const working = slice.status === "working";
+
+  const activeTrigger = detectTrigger(draft, caret);
+  const triggerKey = activeTrigger ? `${activeTrigger.kind}:${activeTrigger.start}` : null;
+
+  useEffect(() => {
+    if (!triggerKey) setDismissedTriggerKey(null);
+  }, [triggerKey]);
+
+  function syncCaret(e: React.SyntheticEvent<HTMLTextAreaElement>) {
+    setCaret(e.currentTarget.selectionStart ?? 0);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +61,7 @@ export function Composer({ workspace }: Props) {
       ...attachments,
     ];
     setDraft("");
+    setCaret(0);
     setAttachments([]);
     requestAnimationFrame(autoGrow);
     try {
@@ -65,8 +81,16 @@ export function Composer({ workspace }: Props) {
   // Escape lives on the composer root so it bubbles from any focused
   // descendant (e.g. the Stop button), yet stays scoped to this composer —
   // a window listener would fire for inactive keep-alive-mounted workspaces.
+  // An open trigger menu takes priority: Escape dismisses it (keyed by the
+  // trigger's token position) rather than interrupting the agent.
   function onRootKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === "Escape" && working) {
+    if (e.key !== "Escape") return;
+    if (triggerKey && dismissedTriggerKey !== triggerKey) {
+      e.preventDefault();
+      setDismissedTriggerKey(triggerKey);
+      return;
+    }
+    if (working) {
       e.preventDefault();
       interrupt();
     }
@@ -125,16 +149,39 @@ export function Composer({ workspace }: Props) {
       )}
 
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-card focus-within:border-accent/50">
-        <textarea
-          ref={textareaRef}
-          aria-label="Message agent"
-          value={draft}
-          rows={2}
-          onChange={(e) => { setDraft(e.target.value); autoGrow(); }}
-          onKeyDown={onTextareaKeyDown}
-          placeholder="Ask to make changes, @mention files, run /commands"
-          className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
-        />
+        <div className="relative">
+          {triggerKey && dismissedTriggerKey !== triggerKey && (
+            <TriggerMenu
+              worktreePath={workspace.worktreePath}
+              caps={caps}
+              draft={draft}
+              caret={caret}
+              onPick={({ text, caret: nextCaret }) => {
+                setDraft(text);
+                requestAnimationFrame(() => {
+                  const el = textareaRef.current;
+                  if (el) {
+                    el.focus();
+                    el.setSelectionRange(nextCaret, nextCaret);
+                    setCaret(nextCaret);
+                  }
+                });
+              }}
+            />
+          )}
+          <textarea
+            ref={textareaRef}
+            aria-label="Message agent"
+            value={draft}
+            rows={2}
+            onChange={(e) => { setDraft(e.target.value); syncCaret(e); autoGrow(); }}
+            onKeyDown={onTextareaKeyDown}
+            onKeyUp={syncCaret}
+            onClick={syncCaret}
+            placeholder="Ask to make changes, @mention files, run /commands"
+            className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+        </div>
         <div className="flex items-center gap-1 px-2 pb-2">
           <ModelMenu value={slice.model} options={caps?.models ?? []} onSelect={selectModel} />
           <ReasoningMenu value={slice.reasoningLevel} options={caps?.reasoningLevels ?? []} onSelect={selectReasoning} />

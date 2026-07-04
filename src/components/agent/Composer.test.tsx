@@ -19,7 +19,7 @@ vi.mock("@/lib/tauri", () => ({
     supportsConversationRewind: true,
   }),
   agentAttachmentSave: vi.fn(),
-  fileSearch: vi.fn().mockResolvedValue({ hits: [], truncated: false }),
+  fileSearch: vi.fn().mockResolvedValue({ hits: [{ rel: "scripts/db-repl.ts" }], truncated: false }),
 }));
 vi.mock("@/lib/file-drop", () => ({ registerFileDropTarget: vi.fn().mockReturnValue(() => {}) }));
 
@@ -99,5 +99,29 @@ describe("Composer", () => {
     await waitFor(() => expect(consoleError).toHaveBeenCalledWith("[agent] send failed", expect.any(Error)));
     expect(box).toHaveValue("");
     consoleError.mockRestore();
+  });
+
+  it("picking a mention replaces the token in the draft and restores caret focus", async () => {
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" }) as HTMLTextAreaElement;
+    await userEvent.type(box, "fix @db");
+    expect(await screen.findByText("scripts/db-repl.ts")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("scripts/db-repl.ts"));
+    expect(box).toHaveValue("fix @scripts/db-repl.ts ");
+    await waitFor(() => expect(box).toHaveFocus());
+    expect(box.selectionStart).toBe(24);
+  });
+
+  it("Escape dismisses an open trigger menu instead of interrupting", async () => {
+    useAgentStore.setState({ sessions: { s1: { ...emptySession(), status: "working", hydrated: true } } });
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "fix @db");
+    expect(await screen.findByText("scripts/db-repl.ts")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("scripts/db-repl.ts")).not.toBeInTheDocument();
+    expect(tauri.agentInterrupt).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(tauri.agentInterrupt).toHaveBeenCalledWith("s1");
   });
 });
