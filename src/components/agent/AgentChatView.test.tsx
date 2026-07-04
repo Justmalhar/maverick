@@ -43,4 +43,16 @@ describe("AgentChatView", () => {
     expect(await screen.findByTestId("agent-composer")).toBeInTheDocument();
     expect(screen.getByTestId("agent-transcript")).toBeInTheDocument();
   });
+
+  it("re-arms hydrate on failure so the next visible toggle retries", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    hydrateAgentSession.mockRejectedValueOnce(new Error("boom"));
+    const { rerender } = render(<AgentChatView workspace={ws} visible />);
+    await waitFor(() => expect(consoleError).toHaveBeenCalledWith("[agent] hydrate failed", expect.any(Error)));
+    expect(hydrateAgentSession).toHaveBeenCalledTimes(1);
+    rerender(<AgentChatView workspace={ws} visible={false} />);
+    rerender(<AgentChatView workspace={ws} visible />);
+    await waitFor(() => expect(hydrateAgentSession).toHaveBeenCalledTimes(2));
+    consoleError.mockRestore();
+  });
 });

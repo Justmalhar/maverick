@@ -8,6 +8,13 @@ import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
 import { TerminalRegistry, type TerminalHandle, type TerminalProvider } from "@/lib/terminal-provider";
 
+// These tests exercise WorkspaceEditor's group routing, not hydrate semantics —
+// without this mock the agent-mode cases hit the real hydrate path and spam stderr.
+vi.mock("@/lib/agent/agent-events", () => ({
+  hydrateAgentSession: vi.fn().mockResolvedValue(undefined),
+  ensureAgentEventSubscription: vi.fn(),
+}));
+
 const initial = useWorkbench.getState();
 
 function registerStubProvider() {
