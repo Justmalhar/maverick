@@ -52,19 +52,49 @@ describe("AssistantTurn", () => {
     expect(screen.getByTestId("assistant-turn")).toBeEmptyDOMElement();
   });
 
-  it("skips non-text parts of the final answer message", () => {
+  it("renders thinking parts of a [thinking, text] final-answer message as a collapsed thinking row", () => {
     const messages: AgentChatMessage[] = [
       {
         id: "a1",
         sessionId: "s",
         turnId: "t1",
         role: "assistant",
-        parts: [{ type: "thinking", summary: "wrapping up" }, { type: "text", text: "Done." }],
+        parts: [
+          { type: "thinking", summary: "wrapping up\nlonger reasoning detail" },
+          { type: "text", text: "Done." },
+        ],
         createdAt: 1,
       },
     ];
     render(<AssistantTurn messages={messages} streaming={false} />);
     expect(screen.getByText("Done.")).toBeInTheDocument();
-    expect(screen.queryByText("wrapping up")).not.toBeInTheDocument();
+    expect(screen.getByText("wrapping up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    expect(screen.queryByText(/longer reasoning detail/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("activity-toggle")).not.toBeInTheDocument();
+  });
+
+  it("keeps the activity toggle count accurate when the final message also carries thinking", () => {
+    const messages: AgentChatMessage[] = [
+      {
+        id: "a1",
+        sessionId: "s",
+        turnId: "t1",
+        role: "assistant",
+        parts: [{ type: "tool-call", toolUseId: "t1", toolName: "Bash", title: "Run tests", status: "ok" }],
+        createdAt: 1,
+      },
+      {
+        id: "a2",
+        sessionId: "s",
+        turnId: "t1",
+        role: "assistant",
+        parts: [{ type: "thinking", summary: "final reflection" }, { type: "text", text: "All done." }],
+        createdAt: 2,
+      },
+    ];
+    render(<AssistantTurn messages={messages} streaming={false} />);
+    expect(screen.getByText("All done.")).toBeInTheDocument();
+    expect(screen.getByTestId("activity-toggle")).toHaveTextContent("1 tool call, 0 messages");
   });
 });

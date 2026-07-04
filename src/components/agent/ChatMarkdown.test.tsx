@@ -28,6 +28,12 @@ describe("ChatMarkdown", () => {
     render(<ChatMarkdown text={"```\nline one\nline two\n```"} />);
     expect(screen.getByText(/line one/)).toBeInTheDocument();
   });
+  it("treats a bare single-line fence with no language as a code block, not inline code", () => {
+    render(<ChatMarkdown text={"```\nsolo\n```"} />);
+    // CodeBlock's fallback <pre> carries overflow-x-auto; the inline chip
+    // style would instead sit bare inside react-markdown's default <pre>.
+    expect(screen.getByText("solo").closest("pre")).toHaveClass("overflow-x-auto");
+  });
   it("opens links in a new tab", () => {
     render(<ChatMarkdown text={"[docs](https://example.com)"} />);
     const link = screen.getByRole("link", { name: "docs" });

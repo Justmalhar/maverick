@@ -60,10 +60,16 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, className }: { te
           ),
           th: (props) => <th className="border-b border-border bg-muted px-3 py-2 text-left font-medium" {...props} />,
           td: (props) => <td className="border-b border-border px-3 py-2" {...props} />,
-          code: ({ className: cls, children, ...rest }) => {
+          code: ({ node, className: cls, children, ...rest }) => {
             const match = /language-(\w+)/.exec(cls ?? "");
             const text = String(children).replace(/\n$/, "");
-            if (!match && !text.includes("\n")) {
+            // A bare fence with no language yields neither a language-* class
+            // nor (when its content is one line) an embedded newline, so it
+            // would misclassify as inline. Its source position gives it away:
+            // fences span multiple raw lines (the ``` delimiters), inline
+            // code sits on one.
+            const fenced = node?.position != null && node.position.start.line !== node.position.end.line;
+            if (!match && !fenced && !text.includes("\n")) {
               return (
                 <code className="rounded-sm border border-border bg-muted px-1 py-0.5 text-[12px]" {...rest}>
                   {children}
