@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Square, X } from "lucide-react";
 import type { AgentCapabilities, AgentPart, Workspace } from "@/lib/ipc";
 import {
-  agentCapabilities, agentInterrupt, agentQueueRemove, agentSend, agentSetOptions,
+  agentAttachmentSave, agentCapabilities, agentInterrupt, agentQueueRemove, agentSend, agentSetOptions,
 } from "@/lib/tauri";
 import { useAgentStore, emptySession } from "@/state/agent-store";
 import { detectTrigger } from "@/lib/agent/trigger";
+import { attachmentForPath } from "@/lib/agent/attachments";
+import { registerFileDropTarget } from "@/lib/file-drop";
+import { cn } from "@/lib/utils";
 import { ModelMenu, ReasoningMenu } from "./ComposerMenus";
 import { TriggerMenu } from "./TriggerMenu";
+
+const PASTE_ATTACHMENT_THRESHOLD = 2000;
 
 interface Props { workspace: Workspace; }
 
@@ -21,6 +26,9 @@ export function Composer({ workspace }: Props) {
   const [caps, setCaps] = useState<AgentCapabilities | null>(null);
   const [dismissedTriggerKey, setDismissedTriggerKey] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const pasteCounter = useRef(0);
   const working = slice.status === "working";
 
   const activeTrigger = detectTrigger(draft, caret);
@@ -42,8 +50,36 @@ export function Composer({ workspace }: Props) {
     return () => { cancelled = true; };
   }, [workspace.id]);
 
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    return registerFileDropTarget(el, {
+      onPaths: (paths) =>
+        setAttachments((prev) => {
+          const known = new Set(prev.map((a) => a.path));
+          return [...prev, ...paths.filter((p) => !known.has(p)).map(attachmentForPath)];
+        }),
+      onDragState: setDragOver,
+    });
+  }, []);
+
   function interrupt() {
     agentInterrupt(sessionId).catch((e) => console.error("[agent] interrupt failed", e));
+  }
+
+  async function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const text = e.clipboardData.getData("text/plain");
+    if (text.length <= PASTE_ATTACHMENT_THRESHOLD) return;
+    e.preventDefault();
+    pasteCounter.current += 1;
+    const name = `pasted_text_${pasteCounter.current}.txt`;
+    try {
+      const { path } = await agentAttachmentSave(sessionId, name, btoa(unescape(encodeURIComponent(text))));
+      setAttachments((prev) => [...prev, { type: "attachment", name: path.split(/[/\\]/).pop() ?? name, path, mime: "text/plain" }]);
+    } catch (err) {
+      console.error("[agent] paste attachment failed", err);
+      setDraft((d) => d + text);
+    }
   }
 
   function autoGrow() {
@@ -107,7 +143,7 @@ export function Composer({ workspace }: Props) {
   }
 
   return (
-    <div className="mv-composer flex shrink-0 flex-col gap-2 border-t border-border bg-editor p-3" data-testid="agent-composer" onKeyDown={onRootKeyDown}>
+    <div ref={rootRef} className="mv-composer flex shrink-0 flex-col gap-2 border-t border-border bg-editor p-3" data-testid="agent-composer" onKeyDown={onRootKeyDown}>
       {slice.queue.length > 0 && (
         <div className="flex flex-col gap-1">
           {slice.queue.map((q) => (
@@ -129,7 +165,6 @@ export function Composer({ workspace }: Props) {
         </div>
       )}
 
-      {/* TODO(agent-mode plan Task 14): attachment populate path lands with drop/paste */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachments.map((a) => (
@@ -148,7 +183,7 @@ export function Composer({ workspace }: Props) {
         </div>
       )}
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card focus-within:border-accent/50">
+      <div className={cn("flex flex-col gap-2 rounded-lg border bg-card focus-within:border-accent/50", dragOver ? "border-accent" : "border-border")}>
         <div className="relative">
           {triggerKey && dismissedTriggerKey !== triggerKey && (
             <TriggerMenu
@@ -178,6 +213,7 @@ export function Composer({ workspace }: Props) {
             onKeyDown={onTextareaKeyDown}
             onKeyUp={syncCaret}
             onClick={syncCaret}
+            onPaste={(e) => void onPaste(e)}
             placeholder="Ask to make changes, @mention files, run /commands"
             className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
           />

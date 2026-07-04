@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Composer } from "./Composer";
 import { useAgentStore, emptySession } from "@/state/agent-store";
 import type { Workspace } from "@/lib/ipc";
 import * as tauri from "@/lib/tauri";
+import { registerFileDropTarget } from "@/lib/file-drop";
 
 vi.mock("@/lib/tauri", () => ({
   agentSend: vi.fn().mockResolvedValue({ queued: false }),
@@ -123,5 +124,76 @@ describe("Composer", () => {
     expect(tauri.agentInterrupt).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
     expect(tauri.agentInterrupt).toHaveBeenCalledWith("s1");
+  });
+
+  it("registers the composer as a file-drop target and adds chips for dropped paths", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    expect(call).toBeDefined();
+    act(() => call[1].onPaths(["/tmp/Screenshot 2026-07-02.png"]));
+    expect(await screen.findByText("Screenshot 2026-07-02.png")).toBeInTheDocument();
+    // dropped attachments ride along on send
+    await userEvent.type(screen.getByRole("textbox", { name: "Message agent" }), "look{Enter}");
+    expect(tauri.agentSend).toHaveBeenCalledWith("s1", [
+      { type: "text", text: "look" },
+      { type: "attachment", name: "Screenshot 2026-07-02.png", path: "/tmp/Screenshot 2026-07-02.png", mime: "image/png" },
+    ]);
+  });
+
+  it("highlights the input card border while a file is dragged over the composer", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    const card = screen.getByRole("textbox", { name: "Message agent" }).closest("div.rounded-lg") as HTMLElement;
+    expect(card).toHaveClass("border-border");
+    act(() => call[1].onDragState?.(true));
+    expect(card).toHaveClass("border-accent");
+    act(() => call[1].onDragState?.(false));
+    expect(card).toHaveClass("border-border");
+  });
+
+  it("dropping the same path twice does not duplicate the chip", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    expect(await screen.findAllByText("a.png")).toHaveLength(1);
+  });
+
+  it("removing a dropped attachment chip excludes it from send", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    await screen.findByText("a.png");
+    await userEvent.click(screen.getByRole("button", { name: "Remove attachment a.png" }));
+    expect(screen.queryByText("a.png")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Message agent" }), "hi{Enter}");
+    expect(tauri.agentSend).toHaveBeenCalledWith("s1", [{ type: "text", text: "hi" }]);
+  });
+
+  it("large pasted text becomes a saved attachment instead of draft text", async () => {
+    vi.mocked(tauri.agentAttachmentSave).mockResolvedValue({ path: "/att/pasted_text_1.txt" });
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    box.focus();
+    await userEvent.paste("x".repeat(3000));
+    await waitFor(() => expect(tauri.agentAttachmentSave).toHaveBeenCalled());
+    expect(await screen.findByText(/pasted_text/)).toBeInTheDocument();
+    expect(box).toHaveValue("");
+  });
+
+  it("falls back to appending pasted text to the draft when saving the attachment fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(tauri.agentAttachmentSave).mockRejectedValueOnce(new Error("disk full"));
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    box.focus();
+    await userEvent.paste("y".repeat(3000));
+    await waitFor(() => expect(tauri.agentAttachmentSave).toHaveBeenCalled());
+    await waitFor(() => expect(box).toHaveValue("y".repeat(3000)));
+    consoleError.mockRestore();
   });
 });
