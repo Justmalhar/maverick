@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { claudeAdapter } from "./claude";
+import { adapterFor } from "../provider";
 import type { AgentEvent } from "../../types";
 import type { TurnContext } from "../provider";
 
@@ -115,6 +117,51 @@ describe("claudeAdapter.translate", () => {
     });
   });
 
+  test("Write tool input yields a create fileChange sized by content lines", () => {
+    const c = ctx();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { id: "msg_3", role: "assistant", content: [
+        { type: "tool_use", id: "toolu_3", name: "Write", input: { file_path: "/w/new.ts", content: "a\nb\nc" } },
+      ] },
+      session_id: "prov-abc",
+    });
+    const evts = claudeAdapter.translate(line, c);
+    const end = evts.at(-1) as { type: "message-end"; message: { parts: unknown[] } };
+    expect(end.message.parts[0]).toMatchObject({
+      type: "tool-call",
+      toolName: "Write",
+      title: "Write",
+      detail: "/w/new.ts",
+      status: "running",
+      fileChanges: [{ path: "/w/new.ts", additions: 3, deletions: 0, kind: "create" }],
+    });
+  });
+
+  test("MultiEdit tool input sums additions/deletions across edits", () => {
+    const c = ctx();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { id: "msg_4", role: "assistant", content: [
+        { type: "tool_use", id: "toolu_4", name: "MultiEdit", input: {
+          file_path: "/w/m.ts",
+          edits: [
+            { old_string: "a", new_string: "a\nb" },
+            { old_string: "x\ny", new_string: "z" },
+          ],
+        } },
+      ] },
+      session_id: "prov-abc",
+    });
+    const evts = claudeAdapter.translate(line, c);
+    const end = evts.at(-1) as { type: "message-end"; message: { parts: unknown[] } };
+    expect(end.message.parts[0]).toMatchObject({
+      type: "tool-call",
+      toolName: "MultiEdit",
+      fileChanges: [{ path: "/w/m.ts", additions: 3, deletions: 3, kind: "edit" }],
+    });
+  });
+
   test("result → turn-end with usage", () => {
     const evts = claudeAdapter.translate(RESULT, ctx());
     expect(evts).toEqual([
@@ -163,6 +210,57 @@ describe("claudeAdapter encode/build", () => {
   test("encodeInterrupt emits a control_request line", () => {
     const parsed = JSON.parse(claudeAdapter.encodeInterrupt("r1")!);
     expect(parsed).toEqual({ type: "control_request", request_id: "r1", request: { subtype: "interrupt" } });
+  });
+});
+
+describe("adapterFor", () => {
+  test("returns the claude adapter for every currently-shipping backend id", () => {
+    for (const backend of ["claude", "claude-code", "codex", undefined]) {
+      expect(adapterFor(backend)).toBe(claudeAdapter);
+    }
+  });
+});
+
+describe("claudeAdapter.capabilities", () => {
+  test("scans worktree .claude/commands and always offers /compact first", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "mv-claude-caps-"));
+    try {
+      const dir = join(worktree, ".claude", "commands");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "deploy.md"), "# Deploy the app\n\nsteps...");
+      writeFileSync(join(dir, "review.md"), "\nReview the current diff\n");
+      writeFileSync(join(dir, "notes.txt"), "not a command");
+      const caps = claudeAdapter.capabilities(worktree);
+      expect(caps.models.map((m) => m.id)).toContain("default");
+      expect(caps.reasoningLevels.map((r) => r.id)).toEqual(["default", "low", "medium", "high"]);
+      expect(caps.supportsInterrupt).toBe(true);
+      expect(caps.supportsConversationRewind).toBe(true);
+      expect(caps.slashCommands[0]).toEqual({ name: "/compact", description: "Compact the conversation context" });
+      expect(caps.slashCommands).toEqual(
+        expect.arrayContaining([
+          { name: "/deploy", description: "Deploy the app" },
+          { name: "/review", description: "Review the current diff" },
+        ]),
+      );
+      expect(caps.slashCommands.map((c) => c.name)).not.toContain("/notes");
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+
+  test("a worktree without .claude/commands contributes nothing and does not throw", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "mv-claude-nocaps-"));
+    try {
+      const before = claudeAdapter.capabilities(worktree).slashCommands;
+      mkdirSync(join(worktree, ".claude", "commands"), { recursive: true });
+      writeFileSync(join(worktree, ".claude", "commands", "extra.md"), "# Extra");
+      const after = claudeAdapter.capabilities(worktree).slashCommands;
+      expect(before[0]).toEqual({ name: "/compact", description: "Compact the conversation context" });
+      expect(before.map((c) => c.name)).not.toContain("/extra");
+      expect(after.length).toBe(before.length + 1);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
   });
 });
 

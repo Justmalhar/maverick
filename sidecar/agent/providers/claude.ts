@@ -122,17 +122,30 @@ function textFromResultContent(content: unknown): string {
   return "";
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function translateStreamEvent(ev: any, ctx: TurnContext): AgentEvent[] {
-  switch (ev?.type) {
+function asRecord(v: unknown): Record<string, unknown> {
+  return v !== null && typeof v === "object" ? (v as Record<string, unknown>) : {};
+}
+
+function asString(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function contentBlocks(raw: Record<string, unknown>): Array<Record<string, unknown>> {
+  const content = asRecord(raw.message).content;
+  return Array.isArray(content) ? content.map(asRecord) : [];
+}
+
+function translateStreamEvent(ev: unknown, ctx: TurnContext): AgentEvent[] {
+  const e = asRecord(ev);
+  switch (e.type) {
     case "message_start":
       return openMessage(ctx);
     case "content_block_start": {
       if (!ctx.current) return [];
-      const block = ev.content_block ?? {};
+      const block = asRecord(e.content_block);
       let part: AgentPart | null = null;
-      if (block.type === "text") part = { type: "text", text: block.text ?? "" };
-      else if (block.type === "thinking") part = { type: "thinking", summary: block.thinking ?? "" };
+      if (block.type === "text") part = { type: "text", text: asString(block.text) };
+      else if (block.type === "thinking") part = { type: "thinking", summary: asString(block.thinking) };
       else return []; // tool_use arrives authoritatively via the complete assistant message
       const partIndex = ctx.current.parts.length;
       ctx.current.parts.push(part);
@@ -142,13 +155,13 @@ function translateStreamEvent(ev: any, ctx: TurnContext): AgentEvent[] {
       if (!ctx.current || ctx.current.parts.length === 0) return [];
       const partIndex = ctx.current.parts.length - 1;
       const part = ctx.current.parts[partIndex];
-      const d = ev.delta ?? {};
+      const d = asRecord(e.delta);
       let delta = "";
       if (d.type === "text_delta" && part.type === "text") {
-        delta = d.text ?? "";
+        delta = asString(d.text);
         part.text += delta;
       } else if (d.type === "thinking_delta" && part.type === "thinking") {
-        delta = d.thinking ?? "";
+        delta = asString(d.thinking);
         part.summary += delta;
       } else {
         return [];
@@ -161,19 +174,19 @@ function translateStreamEvent(ev: any, ctx: TurnContext): AgentEvent[] {
   }
 }
 
-function reconcileAssistant(raw: any, ctx: TurnContext): AgentEvent[] {
+function reconcileAssistant(raw: Record<string, unknown>, ctx: TurnContext): AgentEvent[] {
   const events: AgentEvent[] = [];
   if (!ctx.current) events.push(...openMessage(ctx));
   const cur = ctx.current!;
-  const content: any[] = Array.isArray(raw?.message?.content) ? raw.message.content : [];
   const reconciled: AgentPart[] = [];
-  for (const block of content) {
-    if (block.type === "text") reconciled.push({ type: "text", text: block.text ?? "" });
-    else if (block.type === "thinking") reconciled.push({ type: "thinking", summary: block.thinking ?? "" });
+  for (const block of contentBlocks(raw)) {
+    if (block.type === "text") reconciled.push({ type: "text", text: asString(block.text) });
+    else if (block.type === "thinking") reconciled.push({ type: "thinking", summary: asString(block.thinking) });
     else if (block.type === "tool_use") {
-      const part = toolCallPart(block);
+      const id = asString(block.id);
+      const part = toolCallPart({ id, name: asString(block.name), input: asRecord(block.input) });
       const partIndex = reconciled.length;
-      ctx.tools.set(block.id, { messageId: cur.messageId, partIndex, startedAt: ctx.ids.now() });
+      ctx.tools.set(id, { messageId: cur.messageId, partIndex, startedAt: ctx.ids.now() });
       events.push({ type: "part-start", messageId: cur.messageId, partIndex, part });
       reconciled.push(part);
     }
@@ -183,14 +196,14 @@ function reconcileAssistant(raw: any, ctx: TurnContext): AgentEvent[] {
   return events;
 }
 
-function translateToolResults(raw: any, ctx: TurnContext): AgentEvent[] {
+function translateToolResults(raw: Record<string, unknown>, ctx: TurnContext): AgentEvent[] {
   const events: AgentEvent[] = [];
-  const content: any[] = Array.isArray(raw?.message?.content) ? raw.message.content : [];
-  for (const block of content) {
+  for (const block of contentBlocks(raw)) {
     if (block.type !== "tool_result") continue;
-    const loc = ctx.tools.get(block.tool_use_id);
+    const toolUseId = asString(block.tool_use_id);
+    const loc = ctx.tools.get(toolUseId);
     if (!loc) continue;
-    ctx.tools.delete(block.tool_use_id);
+    ctx.tools.delete(toolUseId);
     const output = textFromResultContent(block.content).slice(0, MAX_TOOL_OUTPUT);
     events.push({
       type: "part-end",
@@ -199,7 +212,7 @@ function translateToolResults(raw: any, ctx: TurnContext): AgentEvent[] {
       part: {
         // The session manager patches the persisted part; the adapter reports the terminal fields.
         type: "tool-call",
-        toolUseId: block.tool_use_id,
+        toolUseId,
         toolName: "",
         title: "",
         status: block.is_error ? "error" : "ok",
@@ -210,7 +223,6 @@ function translateToolResults(raw: any, ctx: TurnContext): AgentEvent[] {
   }
   return events;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export const claudeAdapter: AgentProviderAdapter = {
   id: "claude",
@@ -275,7 +287,7 @@ export const claudeAdapter: AgentProviderAdapter = {
         return [{ type: "session-meta", providerSessionId: String(raw.session_id ?? ""), model: String(raw.model ?? "") }];
       }
       case "stream_event":
-        return translateStreamEvent((raw as { event?: unknown }).event, ctx);
+        return translateStreamEvent(raw.event, ctx);
       case "assistant":
         return reconcileAssistant(raw, ctx);
       case "user":
