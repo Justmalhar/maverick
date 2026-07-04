@@ -1,5 +1,5 @@
 import { onAgentEvent, agentState, messagesList } from "@/lib/tauri";
-import type { AgentChatMessage, AgentEventPayload, Message } from "@/lib/ipc";
+import type { AgentChatMessage, AgentEventPayload, AgentRunStatus, Message } from "@/lib/ipc";
 import { useAgentStore } from "@/state/agent-store";
 import { useAgentStatusStore, type AgentStatus } from "@/hooks/useAgentStatus";
 
@@ -7,6 +7,9 @@ let subscribed = false;
 let rafId: number | null = null;
 const pendingDeltas = new Map<string, Array<{ messageId: string; partIndex: number; delta: string }>>();
 
+// The buffer is deliberately global: a non-delta event for ANY session flushes
+// ALL sessions' pending deltas — an early flush is a valid flush, and
+// per-session delta order is still preserved.
 function flushNow(): void {
   if (rafId !== null) {
     cancelAnimationFrame(rafId);
@@ -28,7 +31,7 @@ function scheduleFlush(): void {
   });
 }
 
-const STATUS_MAP: Record<string, AgentStatus> = { idle: "idle", working: "working", error: "error" };
+const STATUS_MAP: Record<AgentRunStatus, AgentStatus> = { idle: "idle", working: "working", error: "error" };
 
 function handlePayload(payload: AgentEventPayload): void {
   const { workspaceId, sessionId, event } = payload;
@@ -41,7 +44,7 @@ function handlePayload(payload: AgentEventPayload): void {
   }
   flushNow();
   if (event.type === "status") {
-    useAgentStatusStore.getState().setStatus(workspaceId, STATUS_MAP[event.status] ?? "idle");
+    useAgentStatusStore.getState().setStatus(workspaceId, STATUS_MAP[event.status]);
   }
   useAgentStore.getState().applyEvent(sessionId, event);
 }

@@ -88,6 +88,32 @@ describe("emptySession", () => {
   });
 });
 
+describe("setOptionsLocal", () => {
+  it("patches model only, leaving reasoningLevel untouched", () => {
+    useAgentStore.getState().setOptionsLocal(S, { reasoningLevel: "high" });
+    useAgentStore.getState().setOptionsLocal(S, { model: "claude-opus-4-8" });
+    expect(useAgentStore.getState().sessions[S]).toMatchObject({ model: "claude-opus-4-8", reasoningLevel: "high" });
+  });
+
+  it("patches reasoningLevel only, leaving model untouched", () => {
+    useAgentStore.getState().setOptionsLocal(S, { model: "claude-opus-4-8" });
+    useAgentStore.getState().setOptionsLocal(S, { reasoningLevel: "low" });
+    expect(useAgentStore.getState().sessions[S]).toMatchObject({ model: "claude-opus-4-8", reasoningLevel: "low" });
+  });
+});
+
+describe("reset", () => {
+  it("deletes the addressed session and leaves others untouched", () => {
+    const { applyEvent, reset } = useAgentStore.getState();
+    applyEvent(S, { type: "status", status: "working" });
+    applyEvent("other", { type: "status", status: "working" });
+    reset(S);
+    const { sessions } = useAgentStore.getState();
+    expect(sessions[S]).toBeUndefined();
+    expect(sessions.other).toMatchObject({ status: "working" });
+  });
+});
+
 describe("hydrate", () => {
   it("replaces messages and marks hydrated without clobbering a later streaming status", () => {
     useAgentStore.getState().hydrate(S, [msg("m1", "user")], {
