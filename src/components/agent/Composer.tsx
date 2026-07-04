@@ -14,9 +14,13 @@ import { TriggerMenu } from "./TriggerMenu";
 
 const PASTE_ATTACHMENT_THRESHOLD = 2000;
 
-interface Props { workspace: Workspace; }
+interface Props {
+  workspace: Workspace;
+  restoredDraft?: string | null;
+  onRestoredDraftConsumed?: () => void;
+}
 
-export function Composer({ workspace }: Props) {
+export function Composer({ workspace, restoredDraft, onRestoredDraftConsumed }: Props) {
   const sessionId = workspace.sessionId;
   const slice = useAgentStore((s) => s.sessions[sessionId]) ?? emptySession();
   const setOptionsLocal = useAgentStore((s) => s.setOptionsLocal);
@@ -37,6 +41,18 @@ export function Composer({ workspace }: Props) {
   useEffect(() => {
     if (!triggerKey) setDismissedTriggerKey(null);
   }, [triggerKey]);
+
+  // Fires once per rewind: consume immediately so the parent's state reset
+  // (which changes restoredDraft back to null) can't re-trigger this effect.
+  useEffect(() => {
+    if (restoredDraft == null) return;
+    setDraft(restoredDraft);
+    onRestoredDraftConsumed?.();
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      autoGrow();
+    });
+  }, [restoredDraft]);
 
   function syncCaret(e: React.SyntheticEvent<HTMLTextAreaElement>) {
     setCaret(e.currentTarget.selectionStart ?? 0);

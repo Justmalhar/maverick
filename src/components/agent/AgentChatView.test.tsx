@@ -1,7 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentChatView } from "./AgentChatView";
 import { useAgentStore, emptySession } from "@/state/agent-store";
+import * as tauri from "@/lib/tauri";
 import type { Workspace } from "@/lib/ipc";
 
 const hydrateAgentSession = vi.fn().mockResolvedValue(undefined);
@@ -54,5 +56,39 @@ describe("AgentChatView", () => {
     rerender(<AgentChatView workspace={ws} visible />);
     await waitFor(() => expect(hydrateAgentSession).toHaveBeenCalledTimes(2));
     consoleError.mockRestore();
+  });
+
+  it("rewinds a user message end-to-end: menu → confirm → agentRewind → rehydrate → draft restored", async () => {
+    vi.mocked(tauri.agentRewind).mockResolvedValue({ ok: true });
+    useAgentStore.setState({
+      sessions: {
+        sess1: {
+          ...emptySession(),
+          hydrated: true,
+          messages: [
+            {
+              id: "m1",
+              sessionId: "sess1",
+              turnId: "t1",
+              role: "user",
+              parts: [{ type: "text", text: "original prompt" }],
+              createdAt: 1,
+            },
+          ],
+        },
+      },
+    });
+    render(<AgentChatView workspace={ws} visible />);
+    hydrateAgentSession.mockClear();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Message actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /rewind to here/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Rewind" }));
+
+    expect(tauri.agentRewind).toHaveBeenCalledWith("sess1", "m1");
+    await waitFor(() => expect(hydrateAgentSession).toHaveBeenCalledWith("w1", "sess1"));
+
+    const composerInput = await screen.findByRole("textbox", { name: "Message agent" });
+    await waitFor(() => expect(composerInput).toHaveValue("original prompt"));
   });
 });
