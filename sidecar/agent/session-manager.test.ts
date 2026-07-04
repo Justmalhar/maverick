@@ -13,7 +13,12 @@ class FakeProc implements ManagedProc {
   private controller!: ReadableStreamDefaultController<Uint8Array>;
   stdout = new ReadableStream<Uint8Array>({ start: (c) => (this.controller = c) });
   stderr = new ReadableStream<Uint8Array>({ start: () => {} });
-  stdin = { write: (d: string | Uint8Array) => this.written.push(typeof d === "string" ? d : new TextDecoder().decode(d)) };
+  stdin = {
+    write: (d: string | Uint8Array) => {
+      if (stdinError) throw stdinError;
+      return this.written.push(typeof d === "string" ? d : new TextDecoder().decode(d));
+    },
+  };
   private resolveExit!: (code: number) => void;
   exited = new Promise<number>((r) => (this.resolveExit = r));
   kill() { this.exit(143); }
@@ -28,6 +33,9 @@ let events: Array<{ method: string; params: { sessionId: string; event: { type: 
 let mgr: AgentSessionManager;
 let ws: ReturnType<SQLiteStore["workspaceCreate"]>;
 let attachmentsRoot: string;
+// Failure knobs: when set, FakeProc.stdin.write / fakeCheckpoints.restore throw.
+let stdinError: Error | null;
+let restoreError: Error | null;
 
 const spawn: Spawner = (cmd) => {
   const p = new FakeProc();
@@ -51,7 +59,13 @@ beforeEach(() => {
   // Nest an "attachments" segment under the temp dir so the real path-shape
   // assertion (`/attachments/<sessionId>/`) still holds without touching ~/.maverick.
   attachmentsRoot = join(mkdtempSync(join(tmpdir(), "mv-agent-")), "attachments");
-  const fakeCheckpoints = { snapshot: async () => "cafebabe".repeat(5), restore: async () => {}, dropRef: async () => {} };
+  stdinError = null;
+  restoreError = null;
+  const fakeCheckpoints = {
+    snapshot: async () => "cafebabe".repeat(5),
+    restore: async () => { if (restoreError) throw restoreError; },
+    dropRef: async () => {},
+  };
   mgr = new AgentSessionManager({ store, notifier, spawn, checkpoints: fakeCheckpoints as never, attachmentsRoot });
   const project = store.projectAdd({ path: "/tmp/proj" });
   ws = store.workspaceCreate({ projectId: project.id, branch: "b", agentBackend: "claude", worktreePath: "/tmp/proj-wt", mode: "agent" });
@@ -152,6 +166,31 @@ describe("interrupt + exit + errors", () => {
     expect(spawnedCmds).toHaveLength(2);
     expect(mgr.state(ws.id).status).toBe("working");
   });
+
+  test("an error turn does not auto-drain the queue", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    await mgr.send(ws.sessionId, [{ type: "text", text: "two" }]);
+    procs[0].pushLine({ type: "result", subtype: "error", is_error: true, result: "boom", duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 }, session_id: "p" });
+    await tick();
+    expect(mgr.state(ws.id).status).toBe("error");
+    expect(mgr.state(ws.id).queue).toHaveLength(1);
+    expect(procs[0].written).toHaveLength(1); // queued message was NOT auto-sent
+  });
+
+  test("stdin write failure flags error but send resolves; next send respawns and works", async () => {
+    stdinError = new Error("EPIPE");
+    const res = await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    expect(res.queued).toBe(false);
+    expect(res.turnId).toBeDefined();
+    expect(mgr.state(ws.id).status).toBe("error");
+    expect(eventTypes()).toContain("error");
+    expect(store.messagesList({ sessionId: ws.sessionId })).toHaveLength(1); // user message persisted
+    stdinError = null;
+    await mgr.send(ws.sessionId, [{ type: "text", text: "two" }]);
+    expect(spawnedCmds).toHaveLength(2);
+    expect(procs[1].written).toHaveLength(1);
+    expect(mgr.state(ws.id).status).toBe("working");
+  });
 });
 
 describe("rewind", () => {
@@ -166,6 +205,23 @@ describe("rewind", () => {
     // Fake worktree has no ~/.claude session file → fork fails → fresh provider session.
     expect(store.sessionMetaGet(ws.sessionId)?.providerSessionId).toBeNull();
     expect(mgr.state(ws.id).status).toBe("idle");
+  });
+
+  test("rewind restore failure rethrows, keeps history, emits error, session stays usable", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    procs[0].pushLine({ type: "assistant", message: { id: "m1", role: "assistant", content: [{ type: "text", text: "reply" }] }, session_id: "p1" });
+    procs[0].pushLine({ type: "result", subtype: "success", is_error: false, duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 }, session_id: "p1" });
+    await tick();
+    const [userMsg] = store.messagesList({ sessionId: ws.sessionId });
+    restoreError = new Error("restore boom");
+    await expect(mgr.rewind(ws.sessionId, userMsg.id)).rejects.toThrow("restore boom");
+    expect(mgr.state(ws.id).status).toBe("idle");
+    expect(store.messagesList({ sessionId: ws.sessionId })).toHaveLength(2); // NOT truncated
+    expect(eventTypes()).toContain("error");
+    restoreError = null;
+    await mgr.send(ws.sessionId, [{ type: "text", text: "again" }]);
+    expect(spawnedCmds).toHaveLength(2); // respawned after the killed proc
+    expect(mgr.state(ws.id).status).toBe("working");
   });
 });
 

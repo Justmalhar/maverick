@@ -171,8 +171,16 @@ export class AgentSessionManager {
       tools: new Map(),
       unknownLines: 0,
     };
-    s.proc!.stdin!.write(s.adapter.encodeUserMessage(parts) + "\n");
-    this.setStatus(s, "working");
+    try {
+      s.proc!.stdin!.write(s.adapter.encodeUserMessage(parts) + "\n");
+      this.setStatus(s, "working");
+    } catch (e) {
+      // The user message is already persisted — the error event is the caller's
+      // signal, so the send itself must not reject.
+      s.needsRespawn = true;
+      this.emitEvent(s, { type: "error", message: `failed to write to agent stdin: ${String(e)}`, recoverable: true });
+      this.setStatus(s, "error");
+    }
     return turnId;
   }
 
@@ -254,7 +262,11 @@ export class AgentSessionManager {
 
   private finishTurn(s: LiveSession): void {
     s.ctx = null;
-    if (s.status !== "error") this.setStatus(s, "idle");
+    // An errored turn must not auto-drain the queue: the next queued message
+    // would silently run against a broken provider session. The queue stays
+    // intact so the user can remove/resend; a later send drains normally.
+    if (s.status === "error") return;
+    this.setStatus(s, "idle");
     const next = s.queue.shift();
     if (next) {
       this.emitEvent(s, { type: "queue-updated", queue: [...s.queue] });
@@ -276,8 +288,15 @@ export class AgentSessionManager {
     const s = this.resolve(sessionId);
     if (!s.proc || s.proc.exitCode !== null) return { ok: true };
     const line = s.adapter.encodeInterrupt(this.ids.uuid("ctl"));
-    if (line) s.proc.stdin!.write(line + "\n");
-    else s.proc.kill("SIGINT");
+    try {
+      if (line) s.proc.stdin!.write(line + "\n");
+      else s.proc.kill("SIGINT");
+    } catch (e) {
+      s.needsRespawn = true;
+      this.emitEvent(s, { type: "error", message: `failed to interrupt agent: ${String(e)}`, recoverable: true });
+      this.setStatus(s, "error");
+      throw e;
+    }
     return { ok: true };
   }
 
@@ -310,7 +329,16 @@ export class AgentSessionManager {
     s.ctx = null;
     s.queue = [];
     // Worktree first, DB second: never truncate history if files failed to restore.
-    await this.checkpoints.restore(s.worktreePath, cp.gitSha);
+    try {
+      await this.checkpoints.restore(s.worktreePath, cp.gitSha);
+    } catch (e) {
+      // Proc is already killed and ctx cleared — idle is the truthful state.
+      // History is untouched (truncation only happens below), so the session
+      // stays fully usable; the caller sees the rethrow, the UI the event.
+      this.emitEvent(s, { type: "error", message: `rewind failed to restore checkpoint: ${String(e)}`, recoverable: true });
+      this.setStatus(s, "idle");
+      throw e;
+    }
     this.store.messagesTruncateFrom(sessionId, messageId);
     this.store.checkpointsTruncateFrom(sessionId, cp.createdAt);
     let providerSessionId: string | null = null;
