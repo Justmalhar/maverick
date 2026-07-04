@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkbench } from "@/state/store";
-import { gitBranches } from "@/lib/tauri";
+import { gitBranches, projectSettingsGet } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { Attachment } from "@/lib/ipc";
 
@@ -20,6 +20,26 @@ export interface ComposerPayload {
   baseBranch: string;
   agentBackend: string;
   attachments: Attachment[];
+}
+
+/**
+ * Picks the branch to preselect: the project's configured "branch new
+ * workspaces from" value if it's present in the fetched branch list
+ * (matched with any "origin/" prefix stripped, since git_branches only
+ * returns local names), else "main", else "master", else none.
+ */
+function pickDefaultBranch(branches: string[], configured?: string): string {
+  const normalize = (b: string) => b.replace(/^origin\//, "");
+  if (configured) {
+    const target = normalize(configured);
+    const match = branches.find((b) => normalize(b) === target);
+    if (match) return match;
+  }
+  return (
+    branches.find((b) => normalize(b) === "main") ??
+    branches.find((b) => normalize(b) === "master") ??
+    ""
+  );
 }
 
 interface Props {
@@ -58,8 +78,13 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
       setBranchError(null);
       setSelectedBaseBranch("");
       try {
-        const b = await gitBranches(project.path);
-        setBranches(Array.isArray(b) ? b : []);
+        const [b, settings] = await Promise.all([
+          gitBranches(project.path),
+          projectSettingsGet(projectId).catch(() => null),
+        ]);
+        const branchList = Array.isArray(b) ? b : [];
+        setBranches(branchList);
+        setSelectedBaseBranch(pickDefaultBranch(branchList, settings?.workspaces?.branchFrom));
       } catch {
         setBranchError("Could not load branches");
         setBranches([]);
@@ -198,7 +223,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         </div>
       )}
 
-      <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+      <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
         Task Composer
       </p>
 
@@ -217,7 +242,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         }}
         placeholder="What needs to be done?"
         rows={2}
-        className="w-full resize-none rounded-md border border-border/50 bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="w-full resize-none rounded-md border border-border/50 bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         style={{ maxHeight: "12rem" } as React.CSSProperties}
       />
 

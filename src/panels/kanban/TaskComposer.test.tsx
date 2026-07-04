@@ -94,6 +94,77 @@ describe("TaskComposer", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" }));
   });
 
+  it("defaults base branch to the project's configured branchFrom when present", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_branches") return ["dev", "main", "release"];
+      if (cmd === "project_settings_get")
+        return { workspaces: { branchFrom: "release" } };
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-branch")).toHaveTextContent("release")
+    );
+  });
+
+  it("strips an 'origin/' prefix when matching the configured branchFrom", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_branches") return ["dev", "main"];
+      if (cmd === "project_settings_get")
+        return { workspaces: { branchFrom: "origin/main" } };
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-branch")).toHaveTextContent("main")
+    );
+  });
+
+  it("falls back to 'main' when the configured branchFrom isn't in the branch list", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_branches") return ["dev", "main"];
+      if (cmd === "project_settings_get")
+        return { workspaces: { branchFrom: "origin/main-line" } };
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-branch")).toHaveTextContent("main")
+    );
+  });
+
+  it("falls back to 'master' when neither branchFrom nor 'main' is available", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_branches") return ["dev", "master"];
+      if (cmd === "project_settings_get") throw new Error("no settings");
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-branch")).toHaveTextContent("master")
+    );
+  });
+
+  it("leaves base branch unselected when no configured branch, main, or master is found", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "git_branches") return ["dev", "feature/x"];
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByText("Alpha"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" }));
+    expect(screen.getByTestId("composer-branch")).toHaveTextContent("Base Branch");
+  });
+
   it("onSend called with correct payload and composer resets", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(["main"] as never);
     const { onSend } = setup();
@@ -101,9 +172,7 @@ describe("TaskComposer", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByText("Alpha"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByText("main"));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
 
     await userEvent.type(screen.getByTestId("composer-prompt"), "fix the bug");
 
@@ -127,8 +196,7 @@ describe("TaskComposer", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByText("Alpha"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByText("main"));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
     await userEvent.type(screen.getByTestId("composer-prompt"), "ship it");
     await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
 
@@ -146,9 +214,7 @@ describe("TaskComposer", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByText("Alpha"));
     await waitFor(() => expect(invoke).toHaveBeenCalled());
-
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByText("main"));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
 
     await userEvent.type(screen.getByTestId("composer-prompt"), "do work");
     await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());

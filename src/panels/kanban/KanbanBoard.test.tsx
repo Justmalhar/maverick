@@ -94,9 +94,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByRole("option", { name: "A" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByRole("option", { name: "main" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
 
     await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
 
@@ -148,8 +146,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByRole("option", { name: "A" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByRole("option", { name: "main" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
     await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
     await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
     await userEvent.click(screen.getByTestId("composer-send"));
@@ -501,8 +498,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByRole("option", { name: "A" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByRole("option", { name: "main" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
     await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
     await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
     await userEvent.click(screen.getByTestId("composer-send"));
@@ -655,8 +651,7 @@ describe("KanbanBoard", () => {
     await userEvent.click(screen.getByTestId("composer-project"));
     await userEvent.click(await screen.findByRole("option", { name: "CatchProj" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
-    await userEvent.click(screen.getByTestId("composer-branch"));
-    await userEvent.click(await screen.findByRole("option", { name: "main" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
     await userEvent.type(screen.getByTestId("composer-prompt"), "Catch test");
     await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
     await userEvent.click(screen.getByTestId("composer-send"));
