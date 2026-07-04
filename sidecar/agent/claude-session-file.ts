@@ -5,8 +5,8 @@ import { homedir } from "os";
 // The claude CLI stores each session as
 // ~/.claude/projects/<cwd-slug>/<session-id>.jsonl where the slug replaces
 // every non-alphanumeric character of the absolute cwd with "-". This coupling
-// is version-checked at runtime: all functions degrade to "no fork" (fresh
-// provider session) when the layout doesn't match.
+// has no version check — every function falls back to "no fork" (fresh
+// provider session) when the layout or shape doesn't match.
 export function claudeProjectDir(worktreePath: string, home: string = homedir()): string {
   const slug = worktreePath.replace(/[^a-zA-Z0-9]/g, "-");
   return join(home, ".claude", "projects", slug);

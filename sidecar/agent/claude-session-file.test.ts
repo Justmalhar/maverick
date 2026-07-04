@@ -46,6 +46,22 @@ describe("claude session files", () => {
     ]);
   });
 
+  test("forkSessionFile returns false when the source has fewer lines than lineCount", () => {
+    seedSession("short", [JSON.stringify({ sessionId: "short", turn: 1 })]);
+    expect(forkSessionFile(WT, "short", 3, "x", home)).toBe(false);
+    expect(existsSync(join(claudeProjectDir(WT, home), "x.jsonl"))).toBe(false);
+  });
+
+  test("forkSessionFile copies malformed lines verbatim without throwing", () => {
+    seedSession("mixed", [
+      JSON.stringify({ sessionId: "mixed", turn: 1 }),
+      "not json at all {",
+    ]);
+    expect(forkSessionFile(WT, "mixed", 2, "fork2", home)).toBe(true);
+    const forked = readFileSync(join(claudeProjectDir(WT, home), "fork2.jsonl"), "utf8").trim().split("\n");
+    expect(forked).toEqual([JSON.stringify({ sessionId: "fork2", turn: 1 }), "not json at all {"]);
+  });
+
   test("forkSessionFile returns false when source is missing or lineCount is 0", () => {
     expect(forkSessionFile(WT, "ghost", 3, "f", home)).toBe(false);
     seedSession("s2", [JSON.stringify({ sessionId: "s2" })]);
