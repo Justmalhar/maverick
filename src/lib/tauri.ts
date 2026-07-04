@@ -2,6 +2,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AgentCapabilities,
+  AgentEventPayload,
+  AgentPart,
+  AgentSessionSnapshot,
   BlameLine,
   BootstrapStatus,
   Branch,
@@ -728,4 +732,49 @@ export async function readMaverickMd(): Promise<string> {
 
 export async function writeMaverickMd(contents: string): Promise<void> {
   return invoke("write_maverick_md", { contents });
+}
+
+// Agent Mode
+
+export async function agentCapabilities(workspaceId: string): Promise<AgentCapabilities> {
+  return invoke("agent_capabilities", { workspaceId });
+}
+
+export async function agentSend(sessionId: string, parts: AgentPart[]): Promise<{ queued: boolean; turnId?: string }> {
+  return invoke("agent_send", { sessionId, parts });
+}
+
+export async function agentInterrupt(sessionId: string): Promise<{ ok: true }> {
+  return invoke("agent_interrupt", { sessionId });
+}
+
+export async function agentQueueRemove(sessionId: string, queuedId: string): Promise<{ ok: true }> {
+  return invoke("agent_queue_remove", { sessionId, queuedId });
+}
+
+export async function agentSetOptions(
+  sessionId: string,
+  opts: { model?: string; reasoningLevel?: string }
+): Promise<{ ok: true }> {
+  return invoke("agent_set_options", { sessionId, model: opts.model, reasoningLevel: opts.reasoningLevel });
+}
+
+export async function agentState(workspaceId: string): Promise<AgentSessionSnapshot> {
+  return invoke("agent_state", { workspaceId });
+}
+
+export async function agentRewind(sessionId: string, messageId: string): Promise<{ ok: true }> {
+  return invoke("agent_rewind", { sessionId, messageId });
+}
+
+export async function agentAttachmentSave(
+  sessionId: string,
+  name: string,
+  contentBase64: string
+): Promise<{ path: string }> {
+  return invoke("agent_attachment_save", { sessionId, name, contentBase64 });
+}
+
+export function onAgentEvent(callback: (payload: AgentEventPayload) => void): Promise<UnlistenFn> {
+  return listen<AgentEventPayload>("agent:event", (e) => callback(e.payload));
 }

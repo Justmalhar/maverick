@@ -15,6 +15,7 @@ import { GitModule } from "./git-module";
 import { GitCredentials } from "./git-credentials";
 import { ChecksModule } from "./checks-module";
 import { PresetLauncher } from "./preset-launcher";
+import { AgentSessionManager } from "./agent/session-manager";
 import { KanbanStore } from "./kanban-store";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
@@ -264,6 +265,18 @@ const Schemas = {
     provider: CredentialProviderSchema,
     username: nullishOptional(z.string()),
   }),
+  agentCapabilities: z.object({ workspaceId: z.string() }),
+  agentSend: z.object({ sessionId: z.string(), parts: z.array(z.record(z.string(), z.unknown())) }),
+  agentInterrupt: z.object({ sessionId: z.string() }),
+  agentQueueRemove: z.object({ sessionId: z.string(), queuedId: z.string() }),
+  agentSetOptions: z.object({
+    sessionId: z.string(),
+    model: nullishOptional(z.string()),
+    reasoningLevel: nullishOptional(z.string()),
+  }),
+  agentState: z.object({ workspaceId: z.string() }),
+  agentRewind: z.object({ sessionId: z.string(), messageId: z.string() }),
+  agentAttachmentSave: z.object({ sessionId: z.string(), name: z.string(), contentBase64: z.string() }),
 };
 
 export interface RpcHandlersOptions {
@@ -296,6 +309,7 @@ export interface RpcHandlersOptions {
   prText?: PrTextGenerator;
   credentials?: GitCredentials;
   notifier?: Notifier;
+  agents?: AgentSessionManager;
 }
 
 export class RpcHandlers {
@@ -328,6 +342,7 @@ export class RpcHandlers {
   readonly prText: PrTextGenerator;
   readonly credentials: GitCredentials;
   readonly notifier: Notifier;
+  readonly agents: AgentSessionManager;
 
   private watchedProjects = new Set<string>();
 
@@ -369,6 +384,7 @@ export class RpcHandlers {
     this.branchName = opts.branchName ?? new BranchNameGenerator();
     this.prText = opts.prText ?? new PrTextGenerator();
     this.credentials = opts.credentials ?? new GitCredentials();
+    this.agents = opts.agents ?? new AgentSessionManager({ store: this.store, notifier: this.notifier });
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -387,6 +403,7 @@ export class RpcHandlers {
   }
 
   private async teardownWorkspace(workspaceId: string): Promise<void> {
+    this.agents.disposeForWorkspace(workspaceId);
     const ws = this.store.workspaceGet(workspaceId);
     if (!ws) return;
     // Preset/terminal PTYs are Rust-owned and reaped by the frontend's
@@ -934,6 +951,38 @@ export class RpcHandlers {
       case "instructions.resolve": {
         const p = Schemas.instructionsResolve.parse(params);
         return this.instructions.resolve(p);
+      }
+      case "agent.capabilities": {
+        const p = Schemas.agentCapabilities.parse(params);
+        return this.agents.capabilities(p.workspaceId);
+      }
+      case "agent.send": {
+        const p = Schemas.agentSend.parse(params);
+        return this.agents.send(p.sessionId, p.parts as never);
+      }
+      case "agent.interrupt": {
+        const p = Schemas.agentInterrupt.parse(params);
+        return this.agents.interrupt(p.sessionId);
+      }
+      case "agent.queueRemove": {
+        const p = Schemas.agentQueueRemove.parse(params);
+        return this.agents.queueRemove(p.sessionId, p.queuedId);
+      }
+      case "agent.setOptions": {
+        const p = Schemas.agentSetOptions.parse(params);
+        return this.agents.setOptions(p.sessionId, { model: p.model, reasoningLevel: p.reasoningLevel });
+      }
+      case "agent.state": {
+        const p = Schemas.agentState.parse(params);
+        return this.agents.state(p.workspaceId);
+      }
+      case "agent.rewind": {
+        const p = Schemas.agentRewind.parse(params);
+        return this.agents.rewind(p.sessionId, p.messageId);
+      }
+      case "agent.attachmentSave": {
+        const p = Schemas.agentAttachmentSave.parse(params);
+        return this.agents.attachmentSave(p.sessionId, p.name, p.contentBase64);
       }
       default:
         throw new Error(`Unknown method: ${method}`);

@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod attachment;
 pub mod bootstrap;
 pub mod browser;
@@ -24,6 +25,10 @@ pub mod skills;
 pub mod usage;
 pub mod workspace;
 
+pub use agent::{
+    agent_attachment_save, agent_capabilities, agent_interrupt, agent_queue_remove, agent_rewind,
+    agent_send, agent_set_options, agent_state,
+};
 pub use attachment::attachment_create;
 pub use bootstrap::{
     bootstrap_complete, bootstrap_status, bootstrap_update_settings, detect_backends,

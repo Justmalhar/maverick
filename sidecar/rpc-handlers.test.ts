@@ -60,7 +60,10 @@ function fakeProc(): ManagedProc {
   };
 }
 
-function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []) {
+function buildHandlers(
+  shellSteps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = [],
+  overrides: Partial<ConstructorParameters<typeof RpcHandlers>[0]> = {}
+) {
   const ids = (() => {
     let n = 0;
     return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
@@ -107,6 +110,7 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   return new RpcHandlers({
     store, process: proc, worktree, config, skills, diff, git,
     presets, kanban, mcp, notifications, context, usage, attachments, fileTree,
+    ...overrides,
   });
 }
 
@@ -1517,5 +1521,73 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     const res = await handlers.dispatch("git.discard_file", { worktreePath: "/wt", filePath: "a.ts" });
     expect(res).toEqual({ ok: true });
   });
+});
 
+describe("agent.* RPC surface", () => {
+  test("agent.* methods dispatch to the session manager", async () => {
+    const calls: string[] = [];
+    const fakeAgents = {
+      capabilities: (id: string) => {
+        calls.push(`cap:${id}`);
+        return { models: [], reasoningLevels: [], slashCommands: [], supportsInterrupt: true, supportsConversationRewind: true };
+      },
+      send: async (id: string) => {
+        calls.push(`send:${id}`);
+        return { queued: false, turnId: "t" };
+      },
+      interrupt: async (id: string) => {
+        calls.push(`int:${id}`);
+        return { ok: true };
+      },
+      queueRemove: (id: string, q: string) => {
+        calls.push(`qr:${id}:${q}`);
+        return { ok: true };
+      },
+      setOptions: (id: string) => {
+        calls.push(`opt:${id}`);
+        return { ok: true };
+      },
+      state: (id: string) => {
+        calls.push(`state:${id}`);
+        return { sessionId: "s", workspaceId: id, status: "idle", queue: [], model: null, reasoningLevel: null, providerSessionId: null };
+      },
+      rewind: async (id: string, m: string) => {
+        calls.push(`rw:${id}:${m}`);
+        return { ok: true };
+      },
+      attachmentSave: (id: string, n: string) => {
+        calls.push(`att:${id}:${n}`);
+        return { path: "/x" };
+      },
+      disposeForWorkspace: () => {},
+    };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, agents: fakeAgents as never, notifier: { write: () => {} } });
+    await handlers.dispatch("agent.capabilities", { workspaceId: "w1" });
+    await handlers.dispatch("agent.send", { sessionId: "s1", parts: [{ type: "text", text: "hi" }] });
+    await handlers.dispatch("agent.interrupt", { sessionId: "s1" });
+    await handlers.dispatch("agent.queueRemove", { sessionId: "s1", queuedId: "q1" });
+    await handlers.dispatch("agent.setOptions", { sessionId: "s1", model: "m" });
+    await handlers.dispatch("agent.state", { workspaceId: "w1" });
+    await handlers.dispatch("agent.rewind", { sessionId: "s1", messageId: "m1" });
+    await handlers.dispatch("agent.attachmentSave", { sessionId: "s1", name: "a.txt", contentBase64: "aGk=" });
+    expect(calls).toEqual([
+      "cap:w1", "send:s1", "int:s1", "qr:s1:q1", "opt:s1", "state:w1", "rw:s1:m1", "att:s1:a.txt",
+    ]);
+  });
+
+  test("workspace.destroy disposes the agent session manager for that workspace", async () => {
+    const disposed: string[] = [];
+    const fakeAgents = { disposeForWorkspace: (id: string) => disposed.push(id) };
+    const handlers = buildHandlers([{}, {}, {}], { agents: fakeAgents as never });
+    const project = (await handlers.dispatch("project.add", { path: "/tmp/agent-dispose" })) as { id: string };
+    const ws = (await handlers.dispatch("workspace.create", {
+      projectId: project.id,
+      projectPath: "/tmp/agent-dispose",
+      branch: "feat",
+      backend: "claude",
+    })) as { id: string };
+    await handlers.dispatch("workspace.destroy", { workspaceId: ws.id });
+    expect(disposed).toEqual([ws.id]);
+  });
 });
