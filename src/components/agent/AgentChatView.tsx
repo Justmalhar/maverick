@@ -1,17 +1,26 @@
+import { useEffect, useRef } from "react";
 import type { Workspace } from "@/lib/ipc";
+import { hydrateAgentSession } from "@/lib/agent/agent-events";
+import { Transcript } from "./Transcript";
 
-interface Props {
-  workspace: Workspace;
-  visible: boolean;
-}
+interface Props { workspace: Workspace; visible: boolean; }
 
-export function AgentChatView({ workspace }: Props) {
+export function AgentChatView({ workspace, visible }: Props) {
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!visible || hydratedRef.current) return;
+    hydratedRef.current = true;
+    hydrateAgentSession(workspace.id, workspace.sessionId).catch((e) => {
+      hydratedRef.current = false;
+      console.error("[agent] hydrate failed", e);
+    });
+  }, [visible, workspace.id, workspace.sessionId]);
+
   return (
-    <div
-      data-testid={`agent-chat-${workspace.id}`}
-      className="mv-agentchat flex h-full items-center justify-center text-sm text-muted-foreground"
-    >
-      Agent chat — coming online in a later task
+    <div data-testid={`agent-chat-${workspace.id}`} className="mv-agentchat flex h-full flex-col bg-editor">
+      <Transcript sessionId={workspace.sessionId} />
+      <div data-testid="agent-composer" className="shrink-0" />
     </div>
   );
 }
