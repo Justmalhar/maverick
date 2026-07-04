@@ -318,6 +318,16 @@ src-sidecar/
 | `preset.list` | `{ projectPath? }` | `WorkspacePreset[]` |
 | `preset.launch` | `{ preset, projectId, branch? }` | `{ workspaceId }` |
 | `preset.save_current` | `{ workspaceId, name }` | `WorkspacePreset` |
+| `agent.capabilities` | `{ workspaceId }` | `AgentCapabilities` |
+| `agent.send` | `{ sessionId, parts }` | `{ queued, turnId? }` |
+| `agent.interrupt` | `{ sessionId }` | `{ ok }` |
+| `agent.queueRemove` | `{ sessionId, queuedId }` | `{ ok }` |
+| `agent.setOptions` | `{ sessionId, model?, reasoningLevel? }` | `{ ok }` |
+| `agent.state` | `{ workspaceId }` | `AgentSessionSnapshot` |
+| `agent.rewind` | `{ sessionId, messageId }` | `{ ok }` |
+| `agent.attachmentSave` | `{ sessionId, name, contentBase64 }` | `{ path }` |
+
+**Agent Mode (workspace `mode: "agent"`, migration `006_agent_mode.sql`):** the sidecar spawns the provider CLI with piped stdio (`claude --input-format stream-json --output-format stream-json --include-partial-messages --permission-mode bypassPermissions`, cwd = worktree) and a per-provider adapter (`sidecar/agent/providers/`) normalizes its NDJSON into unified `AgentEvent`s emitted as the `agent.event` JSON-RPC notification — auto-forwarded to the webview as Tauri event `agent:event`. Before each user turn a git checkpoint of the full working tree is committed to `refs/maverick/checkpoints/<sessionId>` (never moves HEAD); `agent.rewind` restores the worktree, truncates messages, and forks the provider session transcript. Chat history persists in the existing `sessions`/`messages` tables (`parts_json`, `turn_id`); checkpoints in `agent_checkpoints`.
 
 ### 4.4 Tauri Commands (Rust → React bridge)
 

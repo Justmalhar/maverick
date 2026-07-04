@@ -69,6 +69,7 @@ A full VSCode-style workbench wrapped around your AI CLIs — multiple agents in
 | **Multi-agent** | Run Claude Code, Codex, Gemini CLI, Aider, Ollama, or any custom CLI in parallel — up to 6 agent workspaces visible in a single window |
 | **Workspace isolation** | Every agent run gets its own `git worktree` — isolated working copy, isolated branch, no cross-contamination |
 | **Terminal-native** | Each agent runs as a real CLI process in a full PTY — complete TUI fidelity (colours, keybindings, interactive prompts), launched with your own command and flags. Split the grid with `⌘D` / `⌘⇧D`; everything stays alive across workspace switches |
+| **Agent Mode (chat UI)** | Create a workspace in Agent mode for a Conductor-style chat instead of a terminal: streaming markdown answers, collapsible tool-call activity, thinking summaries, file-change chips, model + reasoning switchers, `/` slash commands, `@` file mentions, drag-drop & paste attachments, queued messages, and per-message **Rewind** (git-checkpointed worktree restore + conversation fork). Provider-agnostic protocol — Claude Code ships as the reference adapter; terminal tabs remain available alongside the chat |
 | **Instruction injection** | First prompt of every session is automatically prefixed with your project's `MAVERICK.md` (falls back to `CLAUDE.md` → `AGENTS.md`) plus a global `~/.maverick/MAVERICK.md` |
 
 ### VSCode-Style Workbench
