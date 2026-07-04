@@ -46,11 +46,9 @@ function seed() {
   });
 }
 
-it("shows both workspace chips but only the active workspace's group + file tabs", () => {
+it("shows only the active workspace's group + file tabs, not other workspaces'", () => {
   seed();
   renderWithProviders(<EditorTabs />);
-  expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
-  expect(screen.getByTestId("editor-tab-w2")).toBeInTheDocument();
   expect(screen.getByTestId("editor-tab-group-w1")).toBeInTheDocument();
   expect(screen.getByTestId("editor-tab-group-term-2")).toBeInTheDocument();
   expect(screen.queryByTestId("editor-tab-group-w2")).toBeNull();
@@ -125,7 +123,7 @@ it("editor-tabs-add-terminal button is disabled when there is no context workspa
 });
 
 describe("EditorTabs", () => {
-  it("renders workspace tabs and reacts to clicks", async () => {
+  it("does not render a tab for a workspace other than the active one", () => {
     useWorkbench.setState({
       ...initial,
       workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" })],
@@ -139,25 +137,8 @@ describe("EditorTabs", () => {
       activeGroupByWorkspace: { w1: "w1", w2: "w2" },
     });
     renderWithProviders(<EditorTabs />);
-    expect(screen.getByTestId("editor-tab-w1")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("editor-tab-w2"));
-    expect(useWorkbench.getState().activeWorkspaceId).toBe("w2");
-  });
-
-  it("close button on a workspace tab removes it", async () => {
-    useWorkbench.setState({
-      ...initial,
-      workspaces: [makeWorkspace({ id: "w1" }), makeWorkspace({ id: "w2" })],
-      activeWorkspaceId: "w1",
-      terminalGroups: [
-        { id: "w1", workspaceId: "w1", title: "Terminal 1" },
-        { id: "w2", workspaceId: "w2", title: "Terminal 1" },
-      ],
-      activeGroupByWorkspace: { w1: "w1", w2: "w2" },
-    });
-    renderWithProviders(<EditorTabs />);
-    await userEvent.click(screen.getAllByLabelText("Close workspace")[0]);
-    expect(useWorkbench.getState().workspaces.map((w) => w.id)).toEqual(["w2"]);
+    expect(screen.getByTestId("editor-tab-group-w1")).toBeInTheDocument();
+    expect(screen.queryByTestId("editor-tab-group-w2")).toBeNull();
   });
 
   it("standalone browser button opens the browser system tab", async () => {
@@ -176,23 +157,6 @@ describe("EditorTabs", () => {
     expect(screen.queryByTestId("editor-tabs-open-automations")).not.toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-mcps")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-tabs-open-browser")).not.toBeInTheDocument();
-  });
-
-  it("clicking a workspace tab while a system tab is active switches to the workspace", async () => {
-    useWorkbench.setState({
-      ...initial,
-      workspaces: [makeWorkspace({ id: "w1" })],
-      systemTabs: ["kanban"],
-      activeSystemTab: "kanban",
-      activeWorkspaceId: null,
-      terminalGroups: [{ id: "w1", workspaceId: "w1", title: "Terminal 1" }],
-      activeGroupByWorkspace: { w1: "w1" },
-    });
-    renderWithProviders(<EditorTabs />);
-    await userEvent.click(screen.getByTestId("editor-tab-w1"));
-    expect(useWorkbench.getState().activeWorkspaceId).toBe("w1");
-    // The system tab must be deactivated so the workspace editor shows.
-    expect(useWorkbench.getState().activeSystemTab).toBeNull();
   });
 
   it("inactive system tab click activates it", async () => {
@@ -285,7 +249,7 @@ describe("EditorTabs", () => {
     dispatchSpy.mockRestore();
   });
 
-  it("right-clicking a workspace tab saves the layout as a preset", async () => {
+  it("right-clicking the workspace's terminal tab saves the layout as a preset", async () => {
     vi.mocked(invoke).mockReset().mockImplementation((cmd: string) => {
       if (cmd === "preset_save_current") return Promise.resolve(makePreset({ name: "Saved" })) as never;
       return Promise.resolve([]) as never;
@@ -298,7 +262,7 @@ describe("EditorTabs", () => {
       activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
-    fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
+    fireEvent.contextMenu(screen.getByTestId("editor-tab-group-w1"));
     expect(await screen.findByTestId("save-layout-dialog")).toBeInTheDocument();
     await userEvent.type(screen.getByTestId("save-layout-name"), "Saved");
     await userEvent.click(screen.getByTestId("save-layout-confirm"));
@@ -536,7 +500,7 @@ describe("EditorTabs", () => {
       activeGroupByWorkspace: { w1: "w1" },
     });
     renderWithProviders(<EditorTabs />);
-    fireEvent.contextMenu(screen.getByTestId("editor-tab-w1"));
+    fireEvent.contextMenu(screen.getByTestId("editor-tab-group-w1"));
     expect(await screen.findByTestId("save-layout-dialog")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("save-layout-cancel"));
     await waitFor(() => expect(screen.queryByTestId("save-layout-dialog")).toBeNull());
