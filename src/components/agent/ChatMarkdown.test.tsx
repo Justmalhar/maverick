@@ -28,11 +28,14 @@ describe("ChatMarkdown", () => {
     render(<ChatMarkdown text={"```\nline one\nline two\n```"} />);
     expect(screen.getByText(/line one/)).toBeInTheDocument();
   });
-  it("treats a bare single-line fence with no language as a code block, not inline code", () => {
-    render(<ChatMarkdown text={"```\nsolo\n```"} />);
-    // CodeBlock's fallback <pre> carries overflow-x-auto; the inline chip
-    // style would instead sit bare inside react-markdown's default <pre>.
-    expect(screen.getByText("solo").closest("pre")).toHaveClass("overflow-x-auto");
+  it("keeps an inline code span that soft-wraps across source lines inline (no <pre>-in-<p>)", () => {
+    // CommonMark folds the line ending inside a code span to a space, so the
+    // rendered text is "foo bar". It must stay an inline <code> chip — a
+    // CodeBlock here would nest <pre> inside <p>, which is invalid HTML.
+    const { container } = render(<ChatMarkdown text={"text `foo\nbar` end"} />);
+    const code = screen.getByText("foo bar", { selector: "code" });
+    expect(code.closest("pre")).toBeNull();
+    expect(container.querySelector("p pre")).toBeNull();
   });
   it("opens links in a new tab", () => {
     render(<ChatMarkdown text={"[docs](https://example.com)"} />);
