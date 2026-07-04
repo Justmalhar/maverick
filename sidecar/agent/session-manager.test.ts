@@ -177,6 +177,20 @@ describe("interrupt + exit + errors", () => {
     expect(procs[0].written).toHaveLength(1); // queued message was NOT auto-sent
   });
 
+  test("interrupt stdin failure rejects, flips status to error, and forces respawn on next send", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    expect(mgr.state(ws.id).status).toBe("working");
+    stdinError = new Error("EPIPE");
+    await expect(mgr.interrupt(ws.sessionId)).rejects.toThrow("EPIPE");
+    expect(mgr.state(ws.id).status).toBe("error");
+    expect(eventTypes()).toContain("error");
+    stdinError = null;
+    await mgr.send(ws.sessionId, [{ type: "text", text: "two" }]);
+    expect(spawnedCmds).toHaveLength(2); // needsRespawn forced a fresh proc
+    expect(procs[1].written).toHaveLength(1);
+    expect(mgr.state(ws.id).status).toBe("working");
+  });
+
   test("stdin write failure flags error but send resolves; next send respawns and works", async () => {
     stdinError = new Error("EPIPE");
     const res = await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
@@ -207,16 +221,17 @@ describe("rewind", () => {
     expect(mgr.state(ws.id).status).toBe("idle");
   });
 
-  test("rewind restore failure rethrows, keeps history, emits error, session stays usable", async () => {
+  test("rewind restore failure mid-turn rethrows, flips working→idle, keeps history, session stays usable", async () => {
+    // No result line is pushed: the turn is still in flight, so status is
+    // "working" going into rewind — the idle assertion below discriminates the
+    // fix instead of passing vacuously on an already-idle session.
     await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
-    procs[0].pushLine({ type: "assistant", message: { id: "m1", role: "assistant", content: [{ type: "text", text: "reply" }] }, session_id: "p1" });
-    procs[0].pushLine({ type: "result", subtype: "success", is_error: false, duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 }, session_id: "p1" });
-    await tick();
+    expect(mgr.state(ws.id).status).toBe("working");
     const [userMsg] = store.messagesList({ sessionId: ws.sessionId });
     restoreError = new Error("restore boom");
     await expect(mgr.rewind(ws.sessionId, userMsg.id)).rejects.toThrow("restore boom");
     expect(mgr.state(ws.id).status).toBe("idle");
-    expect(store.messagesList({ sessionId: ws.sessionId })).toHaveLength(2); // NOT truncated
+    expect(store.messagesList({ sessionId: ws.sessionId })).toHaveLength(1); // NOT truncated
     expect(eventTypes()).toContain("error");
     restoreError = null;
     await mgr.send(ws.sessionId, [{ type: "text", text: "again" }]);
