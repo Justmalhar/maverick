@@ -1,10 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import { TurnFooter } from "./TurnFooter";
+import { TurnFooter, formatTurnDuration } from "./TurnFooter";
 import type { AgentFileChange, AgentUsage } from "@/lib/ipc";
 
 const usage = (durationMs: number): AgentUsage => ({ inputTokens: 10, outputTokens: 20, durationMs });
+
+describe("formatTurnDuration", () => {
+  it("formats 0ms as 0s", () => {
+    expect(formatTurnDuration(0)).toBe("0s");
+  });
+
+  it("formats hour-scale durations as Nh Mm", () => {
+    expect(formatTurnDuration(3_720_000)).toBe("1h 2m");
+  });
+
+  it("omits the minutes suffix on an exact hour", () => {
+    expect(formatTurnDuration(7_200_000)).toBe("2h");
+  });
+});
 
 describe("TurnFooter", () => {
   it("formats sub-minute durations as seconds", () => {

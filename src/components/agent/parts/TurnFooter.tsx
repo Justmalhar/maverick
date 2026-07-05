@@ -1,18 +1,24 @@
 import { Copy } from "lucide-react";
-import type { AgentFileChange, AgentUsage } from "@/lib/ipc";
+import type { AgentFileChange } from "@/lib/ipc";
+import type { TurnMeta } from "@/state/agent-store";
 import { FileChangeChip } from "./FileChangeChip";
 
 export function formatTurnDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    const seconds = totalSeconds % 60;
+    return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 interface TurnFooterProps {
   turnId: string;
-  meta?: { usage: AgentUsage; unknownLines?: number };
+  meta?: TurnMeta;
   answerText: string;
   fileChanges: AgentFileChange[];
   onOpenFile?: (path: string) => void;
@@ -23,7 +29,7 @@ export function TurnFooter({ turnId, meta, answerText, fileChanges, onOpenFile }
 
   function handleCopy() {
     if (!navigator.clipboard) return;
-    void navigator.clipboard.writeText(answerText);
+    navigator.clipboard.writeText(answerText).catch(console.error);
   }
 
   return (

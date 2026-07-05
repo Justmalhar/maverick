@@ -57,4 +57,13 @@ describe("aggregateTurnFileChanges", () => {
   it("returns an empty array for messages with no file changes", () => {
     expect(aggregateTurnFileChanges([m("a1", "t1", "assistant", [{ type: "text", text: "hi" }])])).toEqual([]);
   });
+
+  it("create-then-edit on the same path: the last-seen kind wins", () => {
+    const messages = [
+      m("a1", "t1", "assistant", [toolCall("/w/new.ts", 10, 0, "create"), toolCall("/w/new.ts", 2, 1, "edit")]),
+    ];
+    expect(aggregateTurnFileChanges(messages)).toEqual([
+      { path: "/w/new.ts", additions: 12, deletions: 1, kind: "edit" },
+    ]);
+  });
 });

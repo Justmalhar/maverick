@@ -16,10 +16,37 @@ interface Props {
   onRetry?: (turn: { userParts: AgentPart[] }) => void;
 }
 
+// Whole-turn text, not just the last message: a turn can end on a tool-only
+// message, and copying must still capture every text round-trip before it.
 function answerTextFor(messages: AgentChatMessage[]): string {
-  const last = messages.at(-1);
-  if (!last) return "";
-  return last.parts.filter((p) => p.type === "text").map((p) => (p.type === "text" ? p.text : "")).join("\n");
+  return messages
+    .flatMap((m) => m.parts)
+    .filter((p): p is Extract<AgentPart, { type: "text" }> => p.type === "text" && p.text.trim() !== "")
+    .map((p) => p.text)
+    .join("\n\n");
+}
+
+function RetryButton({ onRetry }: { onRetry: () => void }) {
+  // Permanent per-turn guard: the sidecar's send guard flips status only after
+  // an awaited checkpoint snapshot, so a rapid double-click would start two
+  // turns on the same stdin.
+  const [fired, setFired] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="Retry message"
+      disabled={fired}
+      onClick={() => {
+        if (fired) return;
+        setFired(true);
+        onRetry();
+      }}
+      className="flex w-fit items-center gap-1.5 self-start rounded-sm px-1.5 py-0.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+    >
+      <RotateCcw className="h-3 w-3" />
+      Retry
+    </button>
+  );
 }
 
 function TurnView({
@@ -58,15 +85,7 @@ function TurnView({
         </div>
       ))}
       {hasError && turn.user && onRetry && (
-        <button
-          type="button"
-          aria-label="Retry message"
-          onClick={() => onRetry({ userParts: turn.user!.parts })}
-          className="flex w-fit items-center gap-1.5 self-start rounded-sm px-1.5 py-0.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <RotateCcw className="h-3 w-3" />
-          Retry
-        </button>
+        <RetryButton onRetry={() => onRetry({ userParts: turn.user!.parts })} />
       )}
     </div>
   );

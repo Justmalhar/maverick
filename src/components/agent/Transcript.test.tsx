@@ -69,6 +69,30 @@ describe("TurnFooter wiring", () => {
     render(<Transcript sessionId={S} />);
     expect(screen.queryByTestId("turn-footer-t1")).not.toBeInTheDocument();
   });
+
+  it("copies text from ALL assistant messages even when the turn ends on a tool-only message", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, writable: true, configurable: true });
+    useAgentStore.setState({
+      sessions: {
+        [S]: {
+          ...emptySession(),
+          hydrated: true,
+          messages: [
+            m("u1", "t1", "user", "question one"),
+            m("a1", "t1", "assistant", "round one"),
+            m("a2", "t1", "assistant", "round two"),
+            m("a3", "t1", "assistant", "", [
+              { type: "tool-call", toolUseId: "tu1", toolName: "Bash", title: "run", status: "ok" },
+            ]),
+          ],
+        },
+      },
+    });
+    render(<Transcript sessionId={S} />);
+    await userEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+    expect(writeText).toHaveBeenCalledWith("round one\n\nround two");
+  });
 });
 
 describe("Retry on error rows", () => {
@@ -95,6 +119,16 @@ describe("Retry on error rows", () => {
     render(<Transcript sessionId={S} onRetry={onRetry} />);
     await userEvent.click(screen.getByRole("button", { name: "Retry message" }));
     expect(onRetry).toHaveBeenCalledWith({ userParts });
+  });
+
+  it("fires onRetry exactly once on a rapid double-click and disables the button", async () => {
+    withErrorTurn();
+    const onRetry = vi.fn();
+    render(<Transcript sessionId={S} onRetry={onRetry} />);
+    const button = screen.getByRole("button", { name: "Retry message" });
+    await userEvent.dblClick(button);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
   });
 
   it("does not render Retry when the turn has no error", () => {
