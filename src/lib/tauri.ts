@@ -159,9 +159,10 @@ export async function configSave(
 export async function messagesList(
   sessionId: string,
   limit = 100,
-  offset = 0
+  offset = 0,
+  tail = false
 ): Promise<Message[]> {
-  return invoke("messages_list", { sessionId, limit, offset });
+  return invoke("messages_list", { sessionId, limit, offset, tail });
 }
 
 export async function messageAppend(

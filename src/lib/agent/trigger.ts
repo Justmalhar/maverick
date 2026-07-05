@@ -18,7 +18,7 @@ export function detectTrigger(text: string, caret: number): Trigger | null {
 }
 
 export function applyTrigger(text: string, trigger: Trigger, replacement: string): { text: string; caret: number } {
-  const tokenLen = (trigger.kind === "slash" ? 1 : 1) + trigger.query.length;
+  const tokenLen = 1 + trigger.query.length;
   const before = text.slice(0, trigger.start);
   const after = text.slice(trigger.start + tokenLen);
   const next = `${before}${replacement} ${after}`;

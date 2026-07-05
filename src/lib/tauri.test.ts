@@ -94,9 +94,11 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("config_load", { projectPath: "/tmp/p" });
 
     await api.messagesList("s1");
-    expect(invoke).toHaveBeenLastCalledWith("messages_list", { sessionId: "s1", limit: 100, offset: 0 });
+    expect(invoke).toHaveBeenLastCalledWith("messages_list", { sessionId: "s1", limit: 100, offset: 0, tail: false });
     await api.messagesList("s1", 10, 5);
-    expect(invoke).toHaveBeenLastCalledWith("messages_list", { sessionId: "s1", limit: 10, offset: 5 });
+    expect(invoke).toHaveBeenLastCalledWith("messages_list", { sessionId: "s1", limit: 10, offset: 5, tail: false });
+    await api.messagesList("s1", 1000, 0, true);
+    expect(invoke).toHaveBeenLastCalledWith("messages_list", { sessionId: "s1", limit: 1000, offset: 0, tail: true });
 
     await api.messageAppend("s1", "user", "hi", "json");
     expect(invoke).toHaveBeenLastCalledWith("message_append", {

@@ -94,7 +94,7 @@ export function parseStoredMessages(rows: Message[], sessionId: string): AgentCh
 
 export async function hydrateAgentSession(workspaceId: string, sessionId: string): Promise<void> {
   ensureAgentEventSubscription();
-  const [snap, rows] = await Promise.all([agentState(workspaceId), messagesList(sessionId, 1000, 0)]);
+  const [snap, rows] = await Promise.all([agentState(workspaceId), messagesList(sessionId, 1000, 0, true)]);
   useAgentStore.getState().hydrate(sessionId, parseStoredMessages(rows, sessionId), snap);
 }
 

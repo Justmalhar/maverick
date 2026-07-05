@@ -70,6 +70,7 @@ const Schemas = {
     sessionId: z.string(),
     limit: nullishOptional(z.number()),
     offset: nullishOptional(z.number()),
+    tail: nullishOptional(z.boolean()),
   }),
   messageAppend: z.object({
     sessionId: z.string(),
