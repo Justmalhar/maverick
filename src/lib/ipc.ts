@@ -113,7 +113,7 @@ export type AgentEvent =
   | { type: "part-delta"; messageId: string; partIndex: number; delta: string }
   | { type: "part-end"; messageId: string; partIndex: number; part: AgentPart }
   | { type: "message-end"; message: AgentChatMessage }
-  | { type: "turn-end"; turnId: string; usage: AgentUsage }
+  | { type: "turn-end"; turnId: string; usage: AgentUsage; unknownLines?: number }
   | { type: "status"; status: AgentRunStatus }
   | { type: "queue-updated"; queue: QueuedMessage[] }
   | { type: "permission-request"; requestId: string }

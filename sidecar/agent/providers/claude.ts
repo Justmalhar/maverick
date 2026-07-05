@@ -307,6 +307,7 @@ export const claudeAdapter: AgentProviderAdapter = {
             ...(typeof raw.total_cost_usd === "number" ? { costUsd: raw.total_cost_usd } : {}),
             durationMs: typeof raw.duration_ms === "number" ? raw.duration_ms : 0,
           },
+          ...(ctx.unknownLines > 0 ? { unknownLines: ctx.unknownLines } : {}),
         });
         return events;
       }

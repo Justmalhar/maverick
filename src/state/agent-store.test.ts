@@ -83,8 +83,32 @@ describe("applyDeltas", () => {
 describe("emptySession", () => {
   it("returns the default session slice", () => {
     expect(emptySession()).toEqual({
-      messages: [], status: "idle", queue: [], model: null, reasoningLevel: null, hydrated: false,
+      messages: [], status: "idle", queue: [], model: null, reasoningLevel: null, hydrated: false, turnMeta: {},
     });
+  });
+});
+
+describe("turn-end", () => {
+  it("stores usage+unknownLines under turnMeta[turnId]", () => {
+    const { applyEvent } = useAgentStore.getState();
+    applyEvent(S, { type: "turn-end", turnId: "t1", usage: { inputTokens: 10, outputTokens: 20, durationMs: 3526 }, unknownLines: 2 });
+    expect(useAgentStore.getState().sessions[S].turnMeta).toEqual({
+      t1: { usage: { inputTokens: 10, outputTokens: 20, durationMs: 3526 }, unknownLines: 2 },
+    });
+  });
+
+  it("omits unknownLines when the adapter didn't report any", () => {
+    const { applyEvent } = useAgentStore.getState();
+    applyEvent(S, { type: "turn-end", turnId: "t1", usage: { inputTokens: 1, outputTokens: 1, durationMs: 100 } });
+    expect(useAgentStore.getState().sessions[S].turnMeta.t1).toEqual({ usage: { inputTokens: 1, outputTokens: 1, durationMs: 100 } });
+  });
+
+  it("accumulates meta for multiple turns without clobbering earlier ones", () => {
+    const { applyEvent } = useAgentStore.getState();
+    applyEvent(S, { type: "turn-end", turnId: "t1", usage: { inputTokens: 1, outputTokens: 1, durationMs: 100 } });
+    applyEvent(S, { type: "turn-end", turnId: "t2", usage: { inputTokens: 2, outputTokens: 2, durationMs: 200 } });
+    const { turnMeta } = useAgentStore.getState().sessions[S];
+    expect(Object.keys(turnMeta)).toEqual(["t1", "t2"]);
   });
 });
 
@@ -121,5 +145,12 @@ describe("hydrate", () => {
     });
     expect(useAgentStore.getState().sessions[S]).toMatchObject({ hydrated: true, model: "claude-opus-4-8", status: "idle" });
     expect(useAgentStore.getState().sessions[S].messages).toHaveLength(1);
+  });
+
+  it("leaves turnMeta empty — footer data is live-session-only, never rehydrated", () => {
+    useAgentStore.getState().hydrate(S, [msg("m1", "user")], {
+      sessionId: S, workspaceId: "w1", status: "idle", queue: [], model: null, reasoningLevel: null, providerSessionId: null,
+    });
+    expect(useAgentStore.getState().sessions[S].turnMeta).toEqual({});
   });
 });

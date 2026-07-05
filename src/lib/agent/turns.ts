@@ -1,4 +1,4 @@
-import type { AgentChatMessage } from "@/lib/ipc";
+import type { AgentChatMessage, AgentFileChange } from "@/lib/ipc";
 
 export interface Turn {
   turnId: string;
@@ -22,4 +22,24 @@ export function groupIntoTurns(messages: AgentChatMessage[]): Turn[] {
     (msg.role === "assistant" ? turn.assistant : turn.system).push(msg);
   }
   return turns;
+}
+
+/** Unique-by-path file changes across a turn's tool-call parts, additions/deletions summed. */
+export function aggregateTurnFileChanges(messages: AgentChatMessage[]): AgentFileChange[] {
+  const byPath = new Map<string, AgentFileChange>();
+  for (const msg of messages) {
+    for (const part of msg.parts) {
+      if (part.type !== "tool-call" || !part.fileChanges) continue;
+      for (const change of part.fileChanges) {
+        const existing = byPath.get(change.path);
+        byPath.set(
+          change.path,
+          existing
+            ? { ...existing, additions: existing.additions + change.additions, deletions: existing.deletions + change.deletions, kind: change.kind }
+            : { ...change }
+        );
+      }
+    }
+  }
+  return [...byPath.values()];
 }

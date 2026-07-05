@@ -91,4 +91,22 @@ describe("AgentChatView", () => {
     const composerInput = await screen.findByRole("textbox", { name: "Message agent" });
     await waitFor(() => expect(composerInput).toHaveValue("original prompt"));
   });
+
+  it("retries an errored turn by resending the original user parts", async () => {
+    useAgentStore.setState({
+      sessions: {
+        sess1: {
+          ...emptySession(),
+          hydrated: true,
+          messages: [
+            { id: "m1", sessionId: "sess1", turnId: "t1", role: "user", parts: [{ type: "text", text: "original prompt" }], createdAt: 1 },
+            { id: "e1", sessionId: "sess1", turnId: "error", role: "system", parts: [{ type: "text", text: "agent run failed" }], createdAt: 2 },
+          ],
+        },
+      },
+    });
+    render(<AgentChatView workspace={ws} visible />);
+    await userEvent.click(await screen.findByRole("button", { name: "Retry message" }));
+    expect(tauri.agentSend).toHaveBeenCalledWith("sess1", [{ type: "text", text: "original prompt" }]);
+  });
 });

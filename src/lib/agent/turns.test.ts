@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { groupIntoTurns } from "./turns";
-import type { AgentChatMessage } from "@/lib/ipc";
+import { groupIntoTurns, aggregateTurnFileChanges } from "./turns";
+import type { AgentChatMessage, AgentPart } from "@/lib/ipc";
 
-const m = (id: string, turnId: string, role: AgentChatMessage["role"]): AgentChatMessage => ({
-  id, turnId, role, sessionId: "s", parts: [], createdAt: 1,
+const m = (id: string, turnId: string, role: AgentChatMessage["role"], parts: AgentPart[] = []): AgentChatMessage => ({
+  id, turnId, role, sessionId: "s", parts, createdAt: 1,
 });
 
 describe("groupIntoTurns", () => {
@@ -29,5 +29,32 @@ describe("groupIntoTurns", () => {
     expect(turns).toHaveLength(1);
     expect(turns[0].turnId).toBe("t1");
     expect(turns[0].assistant.map((x) => x.id)).toEqual(["a1"]);
+  });
+});
+
+describe("aggregateTurnFileChanges", () => {
+  const toolCall = (path: string, additions: number, deletions: number, kind: "edit" | "create" | "delete" = "edit"): AgentPart => ({
+    type: "tool-call", toolUseId: `tu_${path}_${additions}_${deletions}`, toolName: "Edit", title: "Edit", status: "ok",
+    fileChanges: [{ path, additions, deletions, kind }],
+  });
+
+  it("sums additions/deletions for the same path across multiple tool-call parts", () => {
+    const messages = [
+      m("a1", "t1", "assistant", [toolCall("/w/a.ts", 3, 1), toolCall("/w/b.ts", 1, 0)]),
+      m("a2", "t1", "assistant", [toolCall("/w/a.ts", 2, 4)]),
+    ];
+    expect(aggregateTurnFileChanges(messages)).toEqual([
+      { path: "/w/a.ts", additions: 5, deletions: 5, kind: "edit" },
+      { path: "/w/b.ts", additions: 1, deletions: 0, kind: "edit" },
+    ]);
+  });
+
+  it("ignores parts without fileChanges and non-tool-call parts", () => {
+    const messages = [m("a1", "t1", "assistant", [{ type: "text", text: "hi" }, { ...toolCall("/w/c.ts", 1, 1) }])];
+    expect(aggregateTurnFileChanges(messages)).toEqual([{ path: "/w/c.ts", additions: 1, deletions: 1, kind: "edit" }]);
+  });
+
+  it("returns an empty array for messages with no file changes", () => {
+    expect(aggregateTurnFileChanges([m("a1", "t1", "assistant", [{ type: "text", text: "hi" }])])).toEqual([]);
   });
 });

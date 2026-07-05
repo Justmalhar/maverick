@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import type {
-  AgentChatMessage, AgentEvent, AgentPart, AgentRunStatus, AgentSessionSnapshot, QueuedMessage,
+  AgentChatMessage, AgentEvent, AgentPart, AgentRunStatus, AgentSessionSnapshot, AgentUsage, QueuedMessage,
 } from "@/lib/ipc";
+
+export interface TurnMeta {
+  usage: AgentUsage;
+  unknownLines?: number;
+}
 
 export interface AgentSessionSlice {
   messages: AgentChatMessage[];
@@ -10,10 +15,13 @@ export interface AgentSessionSlice {
   model: string | null;
   reasoningLevel: string | null;
   hydrated: boolean;
+  // Live-session-only: populated by turn-end events, never rehydrated from
+  // storage, so footers simply don't render for turns loaded from history.
+  turnMeta: Record<string, TurnMeta>;
 }
 
 export function emptySession(): AgentSessionSlice {
-  return { messages: [], status: "idle", queue: [], model: null, reasoningLevel: null, hydrated: false };
+  return { messages: [], status: "idle", queue: [], model: null, reasoningLevel: null, hydrated: false, turnMeta: {} };
 }
 
 interface AgentStoreState {
@@ -99,9 +107,19 @@ function reduceEvent(slice: AgentSessionSlice, sessionId: string, event: AgentEv
       };
       return { ...slice, messages: [...slice.messages, errMsg] };
     }
+    case "turn-end":
+      return {
+        ...slice,
+        turnMeta: {
+          ...slice.turnMeta,
+          [event.turnId]: {
+            usage: event.usage,
+            ...(event.unknownLines !== undefined ? { unknownLines: event.unknownLines } : {}),
+          },
+        },
+      };
     case "session-meta":
     case "part-delta":
-    case "turn-end":
     case "permission-request":
       return slice;
   }

@@ -175,11 +175,15 @@ describe("claudeAdapter.translate", () => {
     expect(types).toEqual(["error", "turn-end"]);
   });
 
-  test("junk / unknown lines emit nothing and count as unknown", () => {
+  test("junk / unknown lines emit nothing and count as unknown; a later result line reports the count", () => {
     const c = ctx();
     expect(claudeAdapter.translate("not json at all", c)).toEqual([]);
     expect(claudeAdapter.translate(JSON.stringify({ type: "mystery_v9" }), c)).toEqual([]);
     expect(c.unknownLines).toBe(2);
+    const evts = claudeAdapter.translate(RESULT, c);
+    expect(evts).toEqual([
+      { type: "turn-end", turnId: "turn1", usage: { inputTokens: 10, outputTokens: 20, costUsd: 0.05, durationMs: 1234 }, unknownLines: 2 },
+    ]);
   });
 });
 
