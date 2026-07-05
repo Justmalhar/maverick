@@ -291,6 +291,17 @@ export class SQLiteStore {
     return { id: msg.id };
   }
 
+  /**
+   * Patches a message's parts after it was already persisted — tool_result
+   * part-end events arrive after the owning assistant message closed, so
+   * without this the DB row is permanently stuck rendering "running" on
+   * rehydrate even though the tool call actually finished.
+   */
+  messagePartsUpdate(messageId: string, partsJson: string): { ok: true } {
+    this.db.query("UPDATE messages SET parts_json = ? WHERE id = ?").run(partsJson, messageId);
+    return { ok: true };
+  }
+
   messagesTruncateFrom(sessionId: string, messageId: string): { ok: true } {
     const anchor = this.db
       .query<{ created_at: number; rowid: number }, [string, string]>(
@@ -392,15 +403,16 @@ export class SQLiteStore {
     return row?.id;
   }
 
-  messagesList(input: { sessionId: string; limit?: number; offset?: number }): Message[] {
-    const limit = input.limit ?? 100;
-    const offset = input.offset ?? 0;
-    const rows = this.db
-      .query<MessageRow, [string, number, number]>(
-        "SELECT id, session_id, role, content, tool_calls_json, created_at, parts_json, turn_id FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
-      )
-      .all(input.sessionId, limit, offset);
-    return rows.map((r) => ({
+  /** All session ids ever created for a workspace, live or not — used to sweep checkpoint refs on teardown. */
+  sessionsForWorkspace(workspaceId: string): string[] {
+    return this.db
+      .query<{ id: string }, [string]>("SELECT id FROM sessions WHERE workspace_id = ?")
+      .all(workspaceId)
+      .map((r) => r.id);
+  }
+
+  private rowToMessage(r: MessageRow): Message {
+    return {
       id: r.id,
       sessionId: r.session_id,
       role: r.role as Message["role"],
@@ -409,7 +421,28 @@ export class SQLiteStore {
       createdAt: r.created_at,
       partsJson: r.parts_json ?? undefined,
       turnId: r.turn_id ?? undefined,
-    }));
+    };
+  }
+
+  messagesList(input: { sessionId: string; limit?: number; offset?: number; tail?: boolean }): Message[] {
+    const limit = input.limit ?? 100;
+    if (input.tail) {
+      // Newest N, oldest-first once returned: long sessions must hydrate their
+      // most recent messages, not whatever happens to be oldest under LIMIT.
+      const rows = this.db
+        .query<MessageRow, [string, number]>(
+          "SELECT id, session_id, role, content, tool_calls_json, created_at, parts_json, turn_id FROM messages WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        )
+        .all(input.sessionId, limit);
+      return rows.reverse().map((r) => this.rowToMessage(r));
+    }
+    const offset = input.offset ?? 0;
+    const rows = this.db
+      .query<MessageRow, [string, number, number]>(
+        "SELECT id, session_id, role, content, tool_calls_json, created_at, parts_json, turn_id FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
+      )
+      .all(input.sessionId, limit, offset);
+    return rows.map((r) => this.rowToMessage(r));
   }
 
   messageAppend(input: {

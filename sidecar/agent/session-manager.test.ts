@@ -10,9 +10,11 @@ import type { Notifier } from "../types";
 class FakeProc implements ManagedProc {
   written: string[] = [];
   exitCode: number | null = null;
+  killSignals: Array<string | number | undefined> = [];
   private controller!: ReadableStreamDefaultController<Uint8Array>;
   stdout = new ReadableStream<Uint8Array>({ start: (c) => (this.controller = c) });
-  stderr = new ReadableStream<Uint8Array>({ start: () => {} });
+  private stderrController!: ReadableStreamDefaultController<Uint8Array>;
+  stderr = new ReadableStream<Uint8Array>({ start: (c) => (this.stderrController = c) });
   stdin = {
     write: (d: string | Uint8Array) => {
       if (stdinError) throw stdinError;
@@ -21,9 +23,21 @@ class FakeProc implements ManagedProc {
   };
   private resolveExit!: (code: number) => void;
   exited = new Promise<number>((r) => (this.resolveExit = r));
-  kill() { this.exit(143); }
+  // A real process may ignore SIGINT (or any signal short of a hard kill), so
+  // only a signal-less kill() actually terminates the fake — this lets
+  // escalation tests observe SIGINT being sent without the process "dying".
+  kill(signal?: string | number) {
+    this.killSignals.push(signal);
+    if (signal === undefined) this.exit(143);
+  }
   pushLine(obj: unknown) { this.controller.enqueue(new TextEncoder().encode(JSON.stringify(obj) + "\n")); }
-  exit(code: number) { this.exitCode = code; this.controller.close(); this.resolveExit(code); }
+  pushErr(text: string) { this.stderrController.enqueue(new TextEncoder().encode(text)); }
+  exit(code: number) {
+    this.exitCode = code;
+    this.controller.close();
+    try { this.stderrController.close(); } catch { /* already closed */ }
+    this.resolveExit(code);
+  }
 }
 
 let store: SQLiteStore;
@@ -36,6 +50,8 @@ let attachmentsRoot: string;
 // Failure knobs: when set, FakeProc.stdin.write / fakeCheckpoints.restore throw.
 let stdinError: Error | null;
 let restoreError: Error | null;
+let droppedRefs: Array<{ worktreePath: string; sessionId: string }>;
+let fakeCheckpoints: { snapshot: () => Promise<string>; restore: () => Promise<void>; dropRef: (worktreePath: string, sessionId: string) => Promise<void> };
 
 const spawn: Spawner = (cmd) => {
   const p = new FakeProc();
@@ -61,10 +77,11 @@ beforeEach(() => {
   attachmentsRoot = join(mkdtempSync(join(tmpdir(), "mv-agent-")), "attachments");
   stdinError = null;
   restoreError = null;
-  const fakeCheckpoints = {
+  droppedRefs = [];
+  fakeCheckpoints = {
     snapshot: async () => "cafebabe".repeat(5),
     restore: async () => { if (restoreError) throw restoreError; },
-    dropRef: async () => {},
+    dropRef: async (worktreePath: string, sessionId: string) => { droppedRefs.push({ worktreePath, sessionId }); },
   };
   mgr = new AgentSessionManager({ store, notifier, spawn, checkpoints: fakeCheckpoints as never, attachmentsRoot });
   const project = store.projectAdd({ path: "/tmp/proj" });
@@ -251,5 +268,105 @@ describe("state + attachments", () => {
     expect(path).toContain(`/attachments/${ws.sessionId}/`);
     expect(path.endsWith("evil-name.txt")).toBe(true);
     expect(require("fs").readFileSync(path, "utf8")).toBe("hello");
+  });
+
+  test("attachmentSave sanitizes a path-traversal sessionId so it lands under attachmentsRoot, not outside", () => {
+    const { path } = mgr.attachmentSave("../evil", "note.txt", Buffer.from("hi").toString("base64"));
+    const { resolve, sep } = require("path") as typeof import("path");
+    const resolvedRoot = resolve(attachmentsRoot);
+    expect(resolve(path).startsWith(resolvedRoot + sep)).toBe(true);
+    expect(path).not.toContain("..");
+  });
+});
+
+describe("tool-call persistence", () => {
+  test("a tool_result arriving after the owning message closed patches the persisted row instead of leaving it running", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "run a command" }]);
+    procs[0].pushLine({ type: "system", subtype: "init", session_id: "prov1", model: "m" });
+    procs[0].pushLine({
+      type: "assistant",
+      message: { id: "m1", role: "assistant", content: [{ type: "tool_use", id: "tu1", name: "Bash", input: { command: "ls" } }] },
+      session_id: "prov1",
+    });
+    await tick();
+    let [, assistantMsg] = store.messagesList({ sessionId: ws.sessionId });
+    expect(JSON.parse(assistantMsg.partsJson!)).toEqual([
+      expect.objectContaining({ type: "tool-call", toolUseId: "tu1", status: "running" }),
+    ]);
+
+    procs[0].pushLine({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu1", is_error: false, content: "total 0" }] },
+      session_id: "prov1",
+    });
+    procs[0].pushLine({ type: "result", subtype: "success", is_error: false, duration_ms: 5, usage: { input_tokens: 1, output_tokens: 2 }, session_id: "prov1" });
+    await tick();
+
+    [, assistantMsg] = store.messagesList({ sessionId: ws.sessionId });
+    const parts = JSON.parse(assistantMsg.partsJson!);
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ type: "tool-call", toolUseId: "tu1", status: "ok", output: "total 0" });
+  });
+});
+
+describe("stderr draining", () => {
+  test("stderr is drained into a bounded tail and surfaced in the exit error message", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    procs[0].pushErr("diagnostic line one\n");
+    procs[0].pushErr("diagnostic line two\n");
+    await tick();
+    procs[0].exit(1);
+    await tick();
+    const errorEvent = events.find((e) => e.params.event.type === "error");
+    const message = String(errorEvent?.params.event.message ?? "");
+    expect(message).toContain("diagnostic line one");
+    expect(message).toContain("diagnostic line two");
+  });
+});
+
+describe("disposeForWorkspace", () => {
+  test("kills live procs for the workspace and removes them from the live map", async () => {
+    await mgr.send(ws.sessionId, [{ type: "text", text: "hi" }]);
+    expect(procs[0].exitCode).toBeNull();
+    await mgr.disposeForWorkspace(ws.id);
+    expect(procs[0].exitCode).not.toBeNull();
+  });
+
+  test("drops checkpoint refs for every session the store ever recorded, including ones never touched live", async () => {
+    const untouchedSessionId = store.sessionCreate(ws.id);
+    await mgr.disposeForWorkspace(ws.id);
+    expect(droppedRefs.map((r) => r.sessionId).sort()).toEqual([untouchedSessionId, ws.sessionId].sort());
+    expect(droppedRefs.every((r) => r.worktreePath === ws.worktreePath)).toBe(true);
+  });
+
+  test("is a no-op when the workspace row is already gone", async () => {
+    await expect(mgr.disposeForWorkspace("nonexistent-ws")).resolves.toBeUndefined();
+    expect(droppedRefs).toEqual([]);
+  });
+});
+
+describe("interrupt escalation", () => {
+  test("escalates to SIGINT then a hard kill when no result arrives within the grace windows", async () => {
+    // Grace is generous relative to the poll windows below so the two stages
+    // (SIGINT at ~20ms, hard kill at ~40ms) can't race the assertions.
+    const fastMgr = new AgentSessionManager({ store, notifier, spawn, checkpoints: fakeCheckpoints as never, attachmentsRoot, interruptGraceMs: 20 });
+    await fastMgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    await fastMgr.interrupt(ws.sessionId);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(procs[0].killSignals).toContain("SIGINT");
+    expect(procs[0].exitCode).toBeNull(); // SIGINT alone doesn't terminate the fake
+    await new Promise((r) => setTimeout(r, 30));
+    expect(procs[0].killSignals).toContain(undefined); // hard kill follows
+    expect(procs[0].exitCode).not.toBeNull();
+  });
+
+  test("does not escalate when a result line arrives before the grace window elapses", async () => {
+    const fastMgr = new AgentSessionManager({ store, notifier, spawn, checkpoints: fakeCheckpoints as never, attachmentsRoot, interruptGraceMs: 30 });
+    await fastMgr.send(ws.sessionId, [{ type: "text", text: "one" }]);
+    await fastMgr.interrupt(ws.sessionId);
+    procs[0].pushLine({ type: "result", subtype: "success", is_error: false, duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 }, session_id: "p" });
+    await tick();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(procs[0].killSignals).toEqual([]);
   });
 });

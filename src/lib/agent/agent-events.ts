@@ -58,6 +58,19 @@ export function ensureAgentEventSubscription(): void {
   });
 }
 
+// A tool-call part can only be "running" in a freshly-streamed message: any
+// terminal event (tool result, turn-end, or process exit) resolves it. A row
+// rehydrated from storage still showing "running" means the process died (or
+// the app restarted) mid-tool-call — the result line that would have closed
+// it out is never coming, so it must be downgraded instead of spinning forever.
+function settleDanglingParts(parts: AgentChatMessage["parts"]): AgentChatMessage["parts"] {
+  return parts.map((part) =>
+    part.type === "tool-call" && part.status === "running"
+      ? { ...part, status: "error", output: part.output ?? "(no result recorded — session interrupted)" }
+      : part
+  );
+}
+
 export function parseStoredMessages(rows: Message[], sessionId: string): AgentChatMessage[] {
   return rows.map((r) => {
     let parts: AgentChatMessage["parts"] | null = null;
@@ -73,7 +86,7 @@ export function parseStoredMessages(rows: Message[], sessionId: string): AgentCh
       sessionId,
       turnId: r.turnId ?? r.id,
       role: r.role === "tool" ? "system" : r.role,
-      parts: parts ?? [{ type: "text", text: r.content }],
+      parts: settleDanglingParts(parts ?? [{ type: "text", text: r.content }]),
       createdAt: r.createdAt,
     };
   });

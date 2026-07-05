@@ -1590,4 +1590,45 @@ describe("agent.* RPC surface", () => {
     await handlers.dispatch("workspace.destroy", { workspaceId: ws.id });
     expect(disposed).toEqual([ws.id]);
   });
+
+  test("workspace.destroy awaits agent session disposal before the worktree is torn down", async () => {
+    const order: string[] = [];
+    let releaseDispose: () => void = () => {};
+    const disposeGate = new Promise<void>((resolve) => (releaseDispose = resolve));
+    const fakeAgents = {
+      disposeForWorkspace: async (id: string) => {
+        order.push(`dispose:${id}`);
+        await disposeGate;
+      },
+    };
+    const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create() { return { workspaceId: "ws_dispose_order", worktreePath: "/tmp/ws_dispose_order" }; },
+      async destroy() {
+        order.push("worktree-destroy");
+        return { ok: true as const };
+      },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const handlers = buildHandlers([{}, {}, {}], { agents: fakeAgents as never, worktree: fakeWorktree as never });
+    const project = (await handlers.dispatch("project.add", { path: "/tmp/agent-dispose-order" })) as { id: string };
+    const ws = (await handlers.dispatch("workspace.create", {
+      projectId: project.id,
+      projectPath: "/tmp/agent-dispose-order",
+      branch: "feat",
+      backend: "claude",
+    })) as { id: string };
+    const destroyPromise = handlers.dispatch("workspace.destroy", { workspaceId: ws.id });
+    // Give the microtask queue a turn: if disposeForWorkspace weren't awaited,
+    // worktree.destroy would already have run by now.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual([`dispose:${ws.id}`]);
+    releaseDispose();
+    await destroyPromise;
+    expect(order).toEqual([`dispose:${ws.id}`, "worktree-destroy"]);
+  });
 });

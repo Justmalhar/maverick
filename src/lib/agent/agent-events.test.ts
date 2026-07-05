@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { __testing__ } from "./agent-events";
+import { __testing__, parseStoredMessages } from "./agent-events";
 import { useAgentStore } from "@/state/agent-store";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 
@@ -41,6 +41,57 @@ describe("handlePayload", () => {
     expect(useAgentStatusStore.getState().statuses[W]).toBe("error");
     __testing__.handlePayload({ workspaceId: W, sessionId: S, event: { type: "status", status: "idle" } });
     expect(useAgentStatusStore.getState().statuses[W]).toBe("idle");
+  });
+});
+
+describe("parseStoredMessages", () => {
+  it("downgrades a tool-call part still \"running\" to \"error\" — the process died mid-call, no result is coming", () => {
+    const [msg] = parseStoredMessages(
+      [
+        {
+          id: "m1",
+          sessionId: S,
+          role: "assistant",
+          content: "",
+          createdAt: 1,
+          turnId: "t1",
+          partsJson: JSON.stringify([
+            { type: "tool-call", toolUseId: "tu1", toolName: "Bash", title: "Bash", status: "running" },
+            { type: "text", text: "hi" },
+          ]),
+        },
+      ],
+      S
+    );
+    expect(msg.parts[0]).toEqual({
+      type: "tool-call",
+      toolUseId: "tu1",
+      toolName: "Bash",
+      title: "Bash",
+      status: "error",
+      output: "(no result recorded — session interrupted)",
+    });
+    expect(msg.parts[1]).toEqual({ type: "text", text: "hi" });
+  });
+
+  it("leaves an already-resolved tool-call part untouched", () => {
+    const [msg] = parseStoredMessages(
+      [
+        {
+          id: "m1",
+          sessionId: S,
+          role: "assistant",
+          content: "",
+          createdAt: 1,
+          turnId: "t1",
+          partsJson: JSON.stringify([
+            { type: "tool-call", toolUseId: "tu1", toolName: "Bash", title: "Bash", status: "ok", output: "done" },
+          ]),
+        },
+      ],
+      S
+    );
+    expect(msg.parts[0]).toEqual({ type: "tool-call", toolUseId: "tu1", toolName: "Bash", title: "Bash", status: "ok", output: "done" });
   });
 });
 

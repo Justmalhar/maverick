@@ -403,7 +403,7 @@ export class RpcHandlers {
   }
 
   private async teardownWorkspace(workspaceId: string): Promise<void> {
-    this.agents.disposeForWorkspace(workspaceId);
+    await this.agents.disposeForWorkspace(workspaceId);
     const ws = this.store.workspaceGet(workspaceId);
     if (!ws) return;
     // Preset/terminal PTYs are Rust-owned and reaped by the frontend's
