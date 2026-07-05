@@ -248,6 +248,11 @@ describe("tauri command wrappers", () => {
     vi.mocked(invoke).mockResolvedValueOnce({ count: 4 } as never);
     await expect(api.notifyUnreadCount()).resolves.toBe(4);
 
+    vi.mocked(invoke).mockResolvedValueOnce({ path: "/tmp/ws_1.json" } as never);
+    const settingsPath = await api.hooksClaudeSettingsPath("ws_1");
+    expect(invoke).toHaveBeenLastCalledWith("hooks_claude_settings_path", { workspaceId: "ws_1" });
+    expect(settingsPath).toEqual({ path: "/tmp/ws_1.json" });
+
     await api.caffeinateStart();
     expect(invoke).toHaveBeenLastCalledWith("caffeinate_start");
     await api.caffeinateStop();

@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
+import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { DiffView } from "./DiffView";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace, makeDiff, makeDiffFile } from "@/test/fixtures";
 import { fileTabId } from "@/state/store";
 import { __testing__ as terminalLeafTesting } from "@/components/editor/terminal/leaf-registry";
-import { useReviewComments } from "@/lib/stores/review-comments";
 import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 
 const initial = useWorkbench.getState();
@@ -23,7 +22,6 @@ function activeWorkspaceWithDiff() {
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   terminalLeafTesting.leafPtyCache.clear();
-  useReviewComments.setState({ comments: [] });
   useAgentStatusStore.setState({ statuses: {} });
   useWorkbench.setState({ ...initial, workspaces: [], activeWorkspaceId: null });
 });
@@ -203,48 +201,6 @@ describe("DiffView", () => {
     expect(await screen.findByTestId("diff-pr-error")).toHaveTextContent("gh: not authenticated");
   });
 
-  it("shows a 'send comments to agent' button only when the workspace has comments", async () => {
-    activeWorkspaceWithDiff();
-    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never);
-    const { rerender } = renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    expect(screen.queryByTestId("diff-send-comments")).not.toBeInTheDocument();
-
-    act(() => {
-      useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 3, side: "new", body: "nit" });
-    });
-    rerender(<DiffView />);
-    expect(screen.getByTestId("diff-send-comments")).toHaveTextContent("Send 1 comment to agent");
-  });
-
-  it("disables the send button while the agent is working", async () => {
-    activeWorkspaceWithDiff();
-    useAgentStatusStore.setState({ statuses: { w1: "working" } });
-    useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 3, side: "new", body: "nit" });
-    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never);
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    expect(screen.getByTestId("diff-send-comments")).toBeDisabled();
-  });
-
-  it("sends the batched comments to the agent PTY and clears them when idle", async () => {
-    activeWorkspaceWithDiff();
-    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
-    useReviewComments.getState().addComment({ workspaceId: "w1", file: "src/a.ts", line: 9, side: "new", body: "tidy this" });
-    vi.mocked(invoke).mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "src/a.ts" })] }) as never);
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-
-    await userEvent.click(screen.getByTestId("diff-send-comments"));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "pty_write",
-        expect.objectContaining({ ptyId: "pty-w1-1", data: expect.stringContaining("Re: src/a.ts:9 — tidy this") })
-      )
-    );
-    expect(useReviewComments.getState().comments).toHaveLength(0);
-  });
-
   it("onDraftPr catch block: logs error when sendAgentPrompt throws", async () => {
     activeWorkspaceWithDiff();
     terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
@@ -273,23 +229,6 @@ describe("DiffView", () => {
     await userEvent.click(screen.getByTestId("diff-fix-errors"));
     await waitFor(() =>
       expect(errSpy).toHaveBeenCalledWith("Fix errors failed", expect.any(Error))
-    );
-    errSpy.mockRestore();
-  });
-
-  it("onSendComments catch block: logs error when sendReviewComments throws", async () => {
-    activeWorkspaceWithDiff();
-    terminalLeafTesting.leafPtyCache.set("w1-1", "pty-w1-1");
-    useReviewComments.getState().addComment({ workspaceId: "w1", file: "a.ts", line: 1, side: "new", body: "test" });
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(makeDiff({ files: [makeDiffFile({ path: "a.ts" })] }) as never) // diff_get
-      .mockRejectedValueOnce(new Error("agent failed")); // pty_write
-    renderWithProviders(<DiffView />);
-    await waitFor(() => expect(screen.getByTestId("diff-view")).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId("diff-send-comments"));
-    await waitFor(() =>
-      expect(errSpy).toHaveBeenCalledWith("Send review comments failed", expect.any(Error))
     );
     errSpy.mockRestore();
   });

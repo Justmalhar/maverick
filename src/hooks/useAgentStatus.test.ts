@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import {
-  streamRequestsAttention,
   statusForExit,
   useAgentStatusStore,
   useAgentStatus,
@@ -15,18 +14,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-});
-
-describe("streamRequestsAttention", () => {
-  it("detects a BEL", () => {
-    expect(streamRequestsAttention("hi\x07there")).toBe(true);
-  });
-  it("detects the iTerm2/macOS attention OSC", () => {
-    expect(streamRequestsAttention("\x1b]9;done\x07")).toBe(true);
-  });
-  it("is false for ordinary output", () => {
-    expect(streamRequestsAttention("compiling main.rs")).toBe(false);
-  });
 });
 
 describe("statusForExit", () => {
@@ -82,11 +69,10 @@ describe("useAgentStatusReporter", () => {
     expect(useAgentStatusStore.getState().statuses.w1).toBe("idle");
   });
 
-  it("flips to attention on a BEL/OSC chunk", () => {
-    vi.useFakeTimers();
-    const { result } = renderHook(() => useAgentStatusReporter("w1"));
-    act(() => result.current.reportOutput("\x07"));
-    expect(useAgentStatusStore.getState().statuses.w1).toBe("attention");
+  it("does not enter 'attention' on a BEL byte (hooks own attention now)", () => {
+    const { result } = renderHook(() => useAgentStatusReporter("ws_bel"));
+    act(() => result.current.reportOutput("ding\x07"));
+    expect(useAgentStatusStore.getState().statuses["ws_bel"]).toBe("working");
   });
 
   it("coalesces rapid output into a single working state (debounced idle)", () => {

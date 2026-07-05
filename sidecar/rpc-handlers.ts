@@ -32,6 +32,8 @@ import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
 import { PrTextGenerator } from "./pr-text-generator";
 import { oneShotSpecFor } from "./agent-oneshot";
+import { HookServer } from "./hook-server";
+import { writeClaudeHooksFile } from "./claude-hooks";
 import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
@@ -225,6 +227,7 @@ const Schemas = {
   notifyMarkRead: z.object({ id: z.string() }),
   notifyDelete: z.object({ id: z.string() }),
   instructionsResolve: z.object({ worktreePath: z.string() }),
+  hooksClaudeSettingsPath: z.object({ workspaceId: z.string() }),
   prCreate: z.object({
     worktreePath: z.string(),
     title: nullishOptional(z.string()),
@@ -346,6 +349,26 @@ export class RpcHandlers {
   readonly agents: AgentSessionManager;
 
   private watchedProjects = new Set<string>();
+  private hookServer: HookServer | null = null;
+
+  private async ensureHookServer(): Promise<HookServer> {
+    if (!this.hookServer) {
+      const notifications = this.notifications;
+      this.hookServer = new HookServer({
+        notifications: {
+          send: (p) => notifications.send({ ...p, workspaceId: p.workspaceId ?? undefined }),
+        },
+      });
+      await this.hookServer.start();
+    }
+    return this.hookServer;
+  }
+
+  /** Test/shutdown hook: close the loopback receiver if it was started. */
+  stopHookServer(): void {
+    this.hookServer?.stop();
+    this.hookServer = null;
+  }
 
   constructor(opts: RpcHandlersOptions = {}) {
     this.store = opts.store ?? new SQLiteStore();
@@ -594,6 +617,13 @@ export class RpcHandlers {
       case "workspace.list": {
         const p = Schemas.workspaceList.parse(params);
         return this.store.workspaceList(p.projectId);
+      }
+      case "hooks.claudeSettingsPath": {
+        const p = Schemas.hooksClaudeSettingsPath.parse(params);
+        const server = await this.ensureHookServer();
+        const { port, token } = server.endpoint();
+        const path = writeClaudeHooksFile({ workspaceId: p.workspaceId, port, token });
+        return { path };
       }
       case "config.load": {
         const p = Schemas.configLoad.parse(params);

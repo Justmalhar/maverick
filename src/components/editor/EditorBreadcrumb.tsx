@@ -1,5 +1,5 @@
 import { ChevronRight, GitBranch, Loader2 } from "lucide-react";
-import { useWorkbench, selectActiveWorkspace } from "@/state/store";
+import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { useSourceControl, getSourceControlRemoteIndicator } from "@/hooks/useSourceControl";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,7 @@ interface Props {
 // to host: it pushes when ahead, pulls when behind, fetches when level, and is
 // disabled (with an explanatory tooltip) when the branch has diverged.
 export function EditorBreadcrumb({ className }: Props) {
-  const active = useWorkbench(selectActiveWorkspace);
+  const active = useWorkbench(selectContextWorkspace);
   const project = useWorkbench((s) =>
     active ? s.projects.find((p) => p.id === active.projectId) : null
   );

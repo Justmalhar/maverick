@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { EditorTab } from "./EditorTab";
 import { FileEditorTab } from "./FileEditorTab";
 import { SaveLayoutDialog } from "./SaveLayoutDialog";
 import { countLeaves } from "@/lib/splitnode";
@@ -60,7 +59,6 @@ const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "mcps",
 
 export function EditorTabs() {
   const platform = useOSPlatform();
-  const workspaces = useWorkbench((s) => s.workspaces);
   const activeId = useWorkbench((s) => s.activeWorkspaceId);
   const setActiveWorkspace = useWorkbench((s) => s.setActiveWorkspace);
   const removeWorkspace = useWorkbench((s) => s.removeWorkspace);
@@ -182,19 +180,6 @@ export function EditorTabs() {
           );
         })}
 
-        {workspaces
-          .filter((ws) => ws.id === contextWorkspaceId)
-          .map((ws) => (
-            <EditorTab
-              key={ws.id}
-              workspace={ws}
-              active={ws.id === activeId}
-              onSelect={() => setActiveWorkspace(ws.id)}
-              onClose={() => removeWorkspace(ws.id)}
-              onContextMenu={(e) => handleTabContextMenu(e, ws.id)}
-            />
-          ))}
-
         {ctxGroups.map((g) => {
           const active =
             activeId === contextWorkspaceId && !activeFileTabId && !activeSystemTab &&
@@ -206,6 +191,7 @@ export function EditorTabs() {
               type="button"
               data-testid={`editor-tab-group-${g.id}`}
               onClick={() => { setActiveWorkspace(g.workspaceId); setActiveGroup(g.workspaceId, g.id); }}
+              onContextMenu={(e) => handleTabContextMenu(e, g.workspaceId)}
               className={cn(
                 "group relative flex min-w-[110px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
                 active ? "bg-tab-active text-tab-fg-active" : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"

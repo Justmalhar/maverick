@@ -335,6 +335,7 @@ pub fn run() {
             caffeinate_stop,
             caffeinate_status,
             instructions_resolve,
+            hooks_claude_settings_path,
             pr_create,
             checks_get,
             browser_open,

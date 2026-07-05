@@ -9,6 +9,7 @@ pub mod context;
 pub mod diff;
 pub mod file_tree;
 pub mod git;
+pub mod hooks;
 pub mod instructions;
 pub mod kanban;
 pub mod mcp;
@@ -55,6 +56,7 @@ pub use git::{
     git_log, git_pull, git_push, git_remote_info, git_resolve_conflict, git_stash_apply,
     git_stash_drop, git_stash_list, git_stash_pop,
 };
+pub use hooks::hooks_claude_settings_path;
 pub use instructions::instructions_resolve;
 pub use kanban::{kanban_delete, kanban_list, kanban_upsert};
 pub use mcp::{mcp_add, mcp_list, mcp_logs, mcp_start, mcp_stop};

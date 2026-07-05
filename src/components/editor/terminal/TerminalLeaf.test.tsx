@@ -157,8 +157,11 @@ describe("TerminalLeaf", () => {
     );
   });
 
-  it("the primary leaf consumes the staged launch spec and types the command", async () => {
-    vi.mocked(invoke).mockResolvedValue({ ptyId: "pty-primary" } as never);
+  it("the primary leaf consumes the staged launch spec and types the command with injected --settings", async () => {
+    vi.mocked(invoke).mockImplementation(((cmd: string) =>
+      cmd === "hooks_claude_settings_path"
+        ? Promise.resolve({ path: "/tmp/hooks.json" })
+        : Promise.resolve({ ptyId: "pty-primary" })) as never);
     useWorkbench.getState().setLaunchSpec("w1", { command: "claude", args: ["--yolo"] });
     renderWithProviders(
       <TerminalLeaf leafId="w1-1" workspace={ws} isFocused onFocus={() => {}} />
@@ -166,7 +169,7 @@ describe("TerminalLeaf", () => {
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "pty_write",
-        { ptyId: "pty-primary", data: "claude --yolo\r" }
+        { ptyId: "pty-primary", data: "claude --settings /tmp/hooks.json --yolo\r" }
       )
     );
     expect(useWorkbench.getState().launchSpecs["w1"]).toBeUndefined();

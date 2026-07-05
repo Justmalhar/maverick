@@ -458,6 +458,10 @@ export async function notifyClear(): Promise<void> {
   await invoke("notify_clear");
 }
 
+export async function hooksClaudeSettingsPath(workspaceId: string): Promise<{ path: string }> {
+  return invoke("hooks_claude_settings_path", { workspaceId });
+}
+
 export function onNotificationSend(
   callback: (n: Notification) => void
 ): Promise<UnlistenFn> {

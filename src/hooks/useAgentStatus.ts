@@ -6,13 +6,6 @@ export type AgentStatus = "idle" | "working" | "attention" | "done" | "error";
 /** Quiet window after the last output chunk before a working agent goes idle. */
 export const IDLE_AFTER_MS = 1200;
 
-/** BEL or the iTerm2/macOS attention OSC (ESC ] 9 ; …) signals user attention. */
-const ATTENTION_PATTERN = /\x07|\x1b\]9;/;
-
-export function streamRequestsAttention(data: string): boolean {
-  return ATTENTION_PATTERN.test(data);
-}
-
 /** Map a pty:exit code to a terminal status. Zero is a clean finish. */
 export function statusForExit(code: number): AgentStatus {
   return code === 0 ? "done" : "error";
@@ -51,10 +44,11 @@ export function useAgentStatus(workspaceId: string): AgentStatus {
 /**
  * Returns a debounced reporter bound to a workspace, driving the shared store
  * from the AgentTerminal PTY output stream. Output flips the status to
- * `working` (or `attention` on a BEL/OSC) and arms a quiet-period timer that
- * relaxes back to `idle`; `markExit` records `done`/`error` and cancels the
- * timer. The timer is the debounce — per-chunk store writes are coalesced to a
- * single `working` set + one deferred `idle` set, so the pill never flickers.
+ * `working` and arms a quiet-period timer that relaxes back to `idle`;
+ * `markExit` records `done`/`error` and cancels the timer. The timer is the
+ * debounce — per-chunk store writes are coalesced to a single `working` set +
+ * one deferred `idle` set, so the pill never flickers. Attention is no longer
+ * derived from the output stream — it's driven by Claude hooks elsewhere.
  */
 export function useAgentStatusReporter(workspaceId: string): {
   reportOutput: (data: string) => void;
@@ -74,10 +68,10 @@ export function useAgentStatusReporter(workspaceId: string): {
   const reportOutputRef = useRef<(data: string) => void>(() => {});
   const markExitRef = useRef<(code: number) => void>(() => {});
 
-  reportOutputRef.current = (data: string) => {
+  reportOutputRef.current = (_data: string) => {
     if (exitedRef.current) return;
     const { setStatus } = useAgentStatusStore.getState();
-    setStatus(workspaceId, streamRequestsAttention(data) ? "attention" : "working");
+    setStatus(workspaceId, "working");
     clearTimer();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
