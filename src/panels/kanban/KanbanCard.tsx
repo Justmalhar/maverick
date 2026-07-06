@@ -203,8 +203,8 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
           style={provided.draggableProps.style as React.CSSProperties}
           data-testid="kanban-card"
           className={cn(
-            "group relative rounded-md border border-border/50 bg-card p-3 text-xs transition-all",
-            snapshot.isDragging && "shadow-xl ring-1 ring-primary/50 opacity-90"
+            "group relative rounded-lg border border-border/50 bg-card/70 p-3 text-xs backdrop-blur-sm transition-all hover:-translate-y-px hover:border-brand/40 hover:shadow-md",
+            snapshot.isDragging && "shadow-pop opacity-95 ring-1 ring-brand/60"
           )}
         >
           {onDelete && (

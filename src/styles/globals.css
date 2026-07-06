@@ -33,6 +33,18 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
+  /* Signature glow — theme-independent grey/white */
+  --color-brand: hsl(var(--brand));
+  --color-brand-strong: hsl(var(--brand-strong));
+  --color-brand-2: hsl(var(--brand-2));
+
+  /* Layered depth */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-glow: var(--shadow-glow);
+
   /* Workbench-specific surfaces */
   --color-titlebar: hsl(var(--titlebar-bg));
   --color-activitybar: hsl(var(--activitybar-bg));
@@ -126,10 +138,16 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
-    border-radius: 0;
+    background: hsl(var(--border-strong) / 0.6);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background-color 0.15s ease;
   }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--brand) / 0.55);
+    background-clip: content-box;
+  }
   ::-webkit-scrollbar-corner { background: transparent; }
 
   button { -webkit-app-region: no-drag; }
@@ -152,34 +170,110 @@
     contain-intrinsic-size: 1000px 1000px;
   }
 
-  /* VSCode-style focus ring — subtle blue accent, never the heavy double-ring */
+  /* VSCode-style focus ring — subtle accent, never the heavy double-ring */
   .vsc-focus {
     outline: 1px solid hsl(var(--ring));
     outline-offset: -1px;
   }
 
-  /* Glassmorphism utilities — PRD §6: backdrop-blur + translucent backgrounds
-     applied to sidebar, panels, modals, tooltips, tab bars, input bars, popovers.
-     Blur radius: 12–24px. Background alpha: 0.6–0.85. saturate(180%) filter. */
+  /* Aurora focus ring — the signature grey/white glow, for interactive controls. */
+  .aurora-ring {
+    outline: none;
+    box-shadow: 0 0 0 1px hsl(var(--brand) / 0.55), 0 0 0 4px hsl(var(--brand) / 0.18);
+  }
+  .aurora-focus:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px hsl(var(--brand) / 0.55), 0 0 0 4px hsl(var(--brand) / 0.18);
+  }
+
+  /* Glassmorphism utilities — frosted translucency + a "lit" top edge (inset
+     highlight) and layered depth so surfaces read as real glass, not flat alpha.
+     Blur 12–24px, saturate for color richness behind. */
   .glass {
-    background: hsl(var(--sidebar-bg) / 0.75);
+    background: hsl(var(--sidebar-bg) / 0.72);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid hsl(var(--border-glass));
+    border: 1px solid hsl(var(--border-glass) / 0.7);
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.05);
   }
 
   .glass-heavy {
-    background: hsl(var(--sidebar-bg) / 0.85);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid hsl(var(--border-glass-strong));
+    background: hsl(var(--sidebar-bg) / 0.82);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid hsl(var(--border-glass-strong) / 0.8);
+    box-shadow: var(--shadow-pop), inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
   }
 
   .glass-light {
-    background: hsl(var(--sidebar-bg) / 0.6);
+    background: hsl(var(--sidebar-bg) / 0.55);
     backdrop-filter: blur(12px) saturate(180%);
     -webkit-backdrop-filter: blur(12px) saturate(180%);
-    border: 1px solid hsl(var(--border-glass) / 0.5);
+    border: 1px solid hsl(var(--border-glass) / 0.4);
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.04);
+  }
+
+  /* A glass surface that also casts a soft white bloom — for the elements we
+     want to feel special (command palette, primary cards). Used sparingly. */
+  .glass-glow {
+    box-shadow: var(--shadow-pop), var(--shadow-glow),
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
+  }
+
+  /* Gradient hairline — a 1px grey-tinted top edge. */
+  .hairline-brand {
+    border-top: 1px solid transparent;
+    border-image: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--brand) / 0.5),
+      hsl(var(--brand-2) / 0.4),
+      transparent
+    ) 1;
+  }
+
+  /* Selected-row accent: a grey/white bar on the leading edge. */
+  .accent-bar {
+    box-shadow: inset 2px 0 0 0 hsl(var(--brand));
+  }
+
+  /* Hover lift — a whisper of elevation on interactive cards/buttons. */
+  .lift {
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.15s ease;
+  }
+  .lift:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ── Signature: the Aurora ────────────────────────────────────────────
+     A slow-drifting grey/white bloom. Used behind hero/empty surfaces and
+     the command palette — the one bold, memorable element. Kept faint so text
+     stays legible; disabled entirely under reduced motion. */
+  .aurora-bg {
+    position: relative;
+    isolation: isolate;
+  }
+  .aurora-bg::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -1;
+    background:
+      radial-gradient(38% 44% at 22% 18%, hsl(var(--brand) / 0.22), transparent 70%),
+      radial-gradient(34% 40% at 82% 30%, hsl(var(--brand-2) / 0.18), transparent 72%),
+      radial-gradient(46% 50% at 60% 88%, hsl(var(--brand-strong) / 0.14), transparent 75%);
+    filter: blur(8px);
+    animation: aurora-drift 22s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes aurora-drift {
+    0%   { transform: translate3d(-3%, -2%, 0) scale(1);    opacity: 0.85; }
+    50%  { transform: translate3d(3%, 2%, 0) scale(1.08);   opacity: 1; }
+    100% { transform: translate3d(-2%, 3%, 0) scale(1.04);  opacity: 0.9; }
   }
 }
 

@@ -59,6 +59,21 @@
   --warning: 41 96% 56%;               /* #fbbf24 */
   --info: 213 94% 68%;                 /* #60a5fa */
 
+  /* ── Signature glow (monochrome) ───────────────────────────────────
+     Theme-independent grey/white used for glows, active accents, focus rings,
+     and gradient edges across the glass treatment. Stays constant across all
+     14 themes so the product keeps one recognizable signature. */
+  --brand: 0 0% 84%;                   /* light grey — accents, bars, rings */
+  --brand-strong: 0 0% 100%;           /* white — glow peaks / highlights */
+  --brand-2: 0 0% 52%;                 /* mid grey — gradient partner */
+
+  /* Layered depth (Linear-style). Add here, never hand-roll in components. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 6px 20px -6px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 18px 44px -12px rgb(0 0 0 / 0.55);
+  --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.65);
+  --shadow-glow: 0 10px 40px -10px hsl(0 0% 100% / 0.22);
+
   /* Borders */
   --border: 240 7% 19%;                /* #2e2e33 — was #27272a (1.4:1 surfaces) */
   --border-strong: 240 7% 28%;         /* #44444c */

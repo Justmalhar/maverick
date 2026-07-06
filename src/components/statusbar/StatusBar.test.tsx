@@ -68,6 +68,7 @@ describe("StatusBar", () => {
     useAgentStatusStore.setState({ statuses: { w1: "working" } });
     renderWithProviders(<StatusBar />);
     const status = await screen.findByTitle("Status: working");
-    expect(status).toHaveClass("text-info");
+    expect(status).toHaveClass("text-brand");
+    expect(status).toHaveClass("animate-pulse");
   });
 });

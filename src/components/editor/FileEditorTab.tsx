@@ -22,7 +22,7 @@ export function FileEditorTab({ tab, active, onSelect, onPin, onClose }: Props) 
       className={cn(
         "group relative flex min-w-[110px] items-center gap-1.5 px-3 text-[12px] transition-colors duration-100",
         active
-          ? "bg-tab-active text-tab-fg-active"
+          ? "bg-tab-active text-tab-fg-active before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-gradient-to-r before:from-brand before:to-brand-2 before:content-['']"
           : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
       )}
     >

@@ -35,10 +35,10 @@ export function EditorTab({ workspace, active, onSelect, onClose, onContextMenu 
         }
       }}
       className={cn(
-        "mv-editor-tab group flex shrink-0 cursor-pointer select-none items-center gap-1.5 pl-3 pr-2 text-[12px]",
+        "mv-editor-tab group relative flex shrink-0 cursor-pointer select-none items-center gap-1.5 pl-3 pr-2 text-[12px]",
         "transition-colors duration-100",
         active
-          ? "bg-tab-active text-tab-fg-active"
+          ? "bg-tab-active text-tab-fg-active before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-gradient-to-r before:from-brand before:to-brand-2 before:content-['']"
           : "bg-tab-inactive text-tab-fg hover:bg-foreground/5 hover:text-foreground"
       )}
     >

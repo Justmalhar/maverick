@@ -12,7 +12,7 @@ const Command = React.forwardRef<
   <CommandPrimitive
     ref={ref}
     className={cn(
-      "flex h-full w-full flex-col overflow-hidden bg-popover text-popover-foreground",
+      "flex h-full w-full flex-col overflow-hidden bg-transparent text-foreground",
       className
     )}
     {...props}
@@ -22,7 +22,7 @@ Command.displayName = CommandPrimitive.displayName;
 
 const CommandDialog = ({ children, ...props }: DialogProps) => (
   <Dialog {...props}>
-    <DialogContent className="overflow-hidden p-0">
+    <DialogContent className="aurora-bg max-w-xl overflow-hidden p-0">
       <Command>{children}</Command>
     </DialogContent>
   </Dialog>
@@ -95,8 +95,8 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-[13px] outline-none",
-      "aria-selected:bg-sidebar-selected aria-selected:text-foreground",
+      "relative flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-[13px] outline-none transition-colors duration-100",
+      "aria-selected:bg-brand/15 aria-selected:text-foreground aria-selected:accent-bar",
       "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
       className
     )}

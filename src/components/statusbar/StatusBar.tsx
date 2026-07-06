@@ -104,7 +104,7 @@ export function StatusBar() {
             label="Status"
             value={agentStatus}
             className={cn(
-              agentStatus === "working" && "text-info",
+              agentStatus === "working" && "animate-pulse text-brand",
               agentStatus === "done" && "text-success",
               agentStatus === "error" && "text-destructive"
             )}

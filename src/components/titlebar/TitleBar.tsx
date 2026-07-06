@@ -75,7 +75,7 @@ export function TitleBar() {
               onClick={handleTogglePrimarySideBar}
               data-testid="titlebar-toggle-primarysidebar"
               aria-pressed={primarySideBarVisible && !collapsed}
-              className="no-drag flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              className="no-drag flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground aria-pressed:bg-brand/15 aria-pressed:text-brand"
             >
               <PanelLeft className="h-3.5 w-3.5" />
             </button>
@@ -93,7 +93,7 @@ export function TitleBar() {
               type="button"
               onClick={() => setQuickOpenOpen(true)}
               data-testid="titlebar-quickopen"
-              className="no-drag flex h-7 w-[460px] max-w-[60vw] items-center gap-2 rounded-md bg-activitybar/70 px-3 text-xs text-muted-foreground backdrop-blur-md transition-colors duration-100 hover:bg-sidebar-hover/80 hover:text-foreground"
+              className="no-drag aurora-focus flex h-7 w-[460px] max-w-[60vw] items-center gap-2 rounded-md bg-activitybar/70 px-3 text-xs text-muted-foreground backdrop-blur-md transition-all duration-150 hover:border-brand/40 hover:bg-sidebar-hover/80 hover:text-foreground"
               style={{ border: "1px solid hsl(var(--border))" }}
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
@@ -115,7 +115,7 @@ export function TitleBar() {
               onClick={togglePanel}
               data-testid="titlebar-toggle-panel"
               aria-pressed={panelVisible}
-              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground aria-pressed:bg-brand/15 aria-pressed:text-brand"
             >
               <PanelBottom className="h-3.5 w-3.5" />
             </button>
@@ -131,7 +131,7 @@ export function TitleBar() {
               onClick={toggleAuxiliaryBar}
               data-testid="titlebar-toggle-auxiliarybar"
               aria-pressed={auxiliaryBarVisible}
-              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground aria-pressed:bg-brand/15 aria-pressed:text-brand"
             >
               <PanelRight className="h-3.5 w-3.5" />
             </button>
@@ -147,7 +147,7 @@ export function TitleBar() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               data-testid="titlebar-settings"
-              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              className="no-drag flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground aria-pressed:bg-brand/15 aria-pressed:text-brand"
             >
               <Settings className="h-3.5 w-3.5" />
             </button>

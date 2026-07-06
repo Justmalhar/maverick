@@ -81,10 +81,12 @@ export function WorkspaceItem({ workspace }: Props) {
         }
       }}
       className={cn(
-        "mv-workspace-item group/ws flex w-full cursor-pointer items-center gap-1.5 pr-2 text-left text-xs",
+        "mv-workspace-item group/ws relative flex w-full cursor-pointer items-center gap-1.5 pr-2 text-left text-xs",
         "transition-colors duration-100 hover:bg-sidebar-hover",
         "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
-        isActive ? "bg-sidebar-selected text-sidebar-selected-fg" : "text-sidebar-fg"
+        isActive
+          ? "bg-sidebar-selected text-sidebar-selected-fg before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-brand before:content-['']"
+          : "text-sidebar-fg"
       )}
     >
       <GitBranch className="h-3.5 w-3.5 shrink-0 text-sidebar-fg" />

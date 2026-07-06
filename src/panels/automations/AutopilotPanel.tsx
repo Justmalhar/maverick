@@ -40,7 +40,7 @@ function AutopilotCard({
   return (
     <li
       data-testid={`autopilot-card-${autopilot.id}`}
-      className="flex items-center gap-2.5 rounded-md border border-border/50 bg-card px-3 py-2 text-xs"
+      className="lift flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/60 px-3 py-2.5 text-xs backdrop-blur-sm hover:border-brand/40"
     >
       <span
         className={cn("h-2 w-2 shrink-0 rounded-full", LAST_STATUS_DOT[autopilot.lastStatus])}

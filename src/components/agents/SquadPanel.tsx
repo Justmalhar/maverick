@@ -28,7 +28,7 @@ function SquadCard({
   return (
     <li
       data-testid={`squad-card-${squad.id}`}
-      className="flex items-center gap-2.5 rounded-md border border-border/50 bg-card px-3 py-2 text-xs"
+      className="lift flex items-center gap-2.5 rounded-lg border border-border/50 bg-card/60 px-3 py-2.5 text-xs backdrop-blur-sm hover:border-brand/40"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-[13px] font-medium text-foreground">{squad.name}</span>
