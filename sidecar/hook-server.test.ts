@@ -92,4 +92,80 @@ describe("HookServer", () => {
     expect(server.endpoint()).toEqual(first);
     expect(first.token.length).toBeGreaterThanOrEqual(16);
   });
+
+  it("routes a tokened POST to /autopilot-trigger into onAutopilotTrigger", async () => {
+    const notif = fakeNotifications();
+    const calls: string[] = [];
+    server = new HookServer({
+      notifications: notif,
+      token: "tok",
+      onAutopilotTrigger: async (id) => {
+        calls.push(id);
+        return { ok: true };
+      },
+    });
+    await server.start();
+    const { port } = server.endpoint();
+    const res = await fetch(`http://127.0.0.1:${port}/autopilot-trigger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Maverick-Token": "tok" },
+      body: JSON.stringify({ id: "autopilot_1" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(calls).toEqual(["autopilot_1"]);
+  });
+
+  it("returns 404 for /autopilot-trigger when no handler is configured", async () => {
+    const notif = fakeNotifications();
+    server = new HookServer({ notifications: notif, token: "tok" });
+    await server.start();
+    const { port } = server.endpoint();
+    const res = await fetch(`http://127.0.0.1:${port}/autopilot-trigger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Maverick-Token": "tok" },
+      body: JSON.stringify({ id: "autopilot_1" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for /autopilot-trigger with malformed JSON or a missing id", async () => {
+    const notif = fakeNotifications();
+    server = new HookServer({
+      notifications: notif,
+      token: "tok",
+      onAutopilotTrigger: async () => ({ ok: true }),
+    });
+    await server.start();
+    const { port } = server.endpoint();
+    const badJson = await fetch(`http://127.0.0.1:${port}/autopilot-trigger`, {
+      method: "POST",
+      headers: { "X-Maverick-Token": "tok" },
+      body: "{not json",
+    });
+    expect(badJson.status).toBe(400);
+    const missingId = await fetch(`http://127.0.0.1:${port}/autopilot-trigger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Maverick-Token": "tok" },
+      body: JSON.stringify({}),
+    });
+    expect(missingId.status).toBe(400);
+  });
+
+  it("rejects an untokened POST to /autopilot-trigger with 401", async () => {
+    const notif = fakeNotifications();
+    server = new HookServer({
+      notifications: notif,
+      token: "tok",
+      onAutopilotTrigger: async () => ({ ok: true }),
+    });
+    await server.start();
+    const { port } = server.endpoint();
+    const res = await fetch(`http://127.0.0.1:${port}/autopilot-trigger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Maverick-Token": "nope" },
+      body: JSON.stringify({ id: "a" }),
+    });
+    expect(res.status).toBe(401);
+  });
 });

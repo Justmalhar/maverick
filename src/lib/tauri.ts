@@ -20,6 +20,8 @@ import type {
   FsChangedPayload,
   TextEncoding,
   KanbanTask,
+  Autopilot,
+  Squad,
   SearchResult,
   MaverickConfig,
   MaverickSettings,
@@ -219,9 +221,10 @@ export async function gitStashList(worktreePath: string): Promise<Stash[]> {
 export async function gitCommit(
   worktreePath: string,
   message: string,
-  files?: string[]
+  files?: string[],
+  gpgSign?: boolean
 ): Promise<{ sha: string }> {
-  return invoke("git_commit", { worktreePath, message, files });
+  return invoke("git_commit", { worktreePath, message, files, gpgSign });
 }
 
 export async function fileTree(worktreePath: string): Promise<FileEntry[]> {
@@ -299,6 +302,53 @@ export async function kanbanUpsert(task: Partial<KanbanTask>): Promise<KanbanTas
 
 export async function kanbanDelete(id: string): Promise<{ ok: true }> {
   return invoke("kanban_delete", { id });
+}
+
+export async function autopilotList(projectId: string): Promise<Autopilot[]> {
+  return invoke("autopilot_list", { projectId });
+}
+
+export async function autopilotUpsert(autopilot: Partial<Autopilot>): Promise<Autopilot> {
+  return invoke("autopilot_upsert", { autopilot });
+}
+
+export async function autopilotDelete(id: string): Promise<{ ok: true }> {
+  return invoke("autopilot_delete", { id });
+}
+
+export async function autopilotRunNow(id: string): Promise<{ ok: boolean; error?: string }> {
+  return invoke("autopilot_run_now", { id });
+}
+
+export async function autopilotWebhookInfo(): Promise<{ url: string; token: string }> {
+  return invoke("autopilot_webhook_info");
+}
+
+export interface AutopilotTriggered {
+  autopilotId: string;
+  projectId: string;
+  name: string;
+  backend: string;
+  branch: string;
+  prompt: string;
+}
+
+export function onAutopilotTriggered(
+  callback: (t: AutopilotTriggered) => void
+): Promise<UnlistenFn> {
+  return listen<AutopilotTriggered>("autopilot:triggered", (e) => callback(e.payload));
+}
+
+export async function squadList(projectId: string): Promise<Squad[]> {
+  return invoke("squad_list", { projectId });
+}
+
+export async function squadUpsert(squad: Partial<Squad>): Promise<Squad> {
+  return invoke("squad_upsert", { squad });
+}
+
+export async function squadDelete(id: string): Promise<{ ok: true }> {
+  return invoke("squad_delete", { id });
 }
 
 export async function presetList(projectPath?: string): Promise<WorkspacePreset[]> {

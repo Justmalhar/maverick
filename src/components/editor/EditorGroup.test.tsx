@@ -136,6 +136,18 @@ describe("EditorGroup", () => {
     await waitFor(() => expect(screen.getByTestId("git-panel-empty")).toBeInTheDocument());
   });
 
+  it("renders automations system tab (AutopilotPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["automations"], activeSystemTab: "automations", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("automations-panel")).toBeInTheDocument());
+  });
+
+  it("renders squads system tab (SquadPanel)", async () => {
+    useWorkbench.setState({ ...initial, systemTabs: ["squads"], activeSystemTab: "squads", activeWorkspaceId: null });
+    renderWithProviders(<EditorGroup />);
+    await waitFor(() => expect(screen.getByTestId("squads-panel")).toBeInTheDocument());
+  });
+
   it("keeps the browser mounted (hidden) when another system tab is active", async () => {
     useWorkbench.setState({
       ...initial,

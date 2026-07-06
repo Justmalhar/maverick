@@ -158,6 +158,14 @@ describe("ThemeProvider", () => {
     expect(themeAccent).toBeTruthy();
   });
 
+  it("applies appearance.uiFontSize as the --ui-font-size root variable", () => {
+    renderHook(() => useThemeContext(), { wrapper: Wrapper });
+    // Default (13) is applied on mount so `body { font-size: var(--ui-font-size) }` resolves.
+    expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("13px");
+    act(() => useSettingsStore.getState().set("appearance.uiFontSize", 16));
+    expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("16px");
+  });
+
   it("colorToHsl handles an empty value (returns null → skipped)", () => {
     // A legacy theme with a UI key whose value is an empty string — colorToHsl("")
     // returns null because !val, so it is skipped.

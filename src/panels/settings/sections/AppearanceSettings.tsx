@@ -25,7 +25,7 @@ const CUSTOM_COLORS: CustomColor[] = [
 
 export default function AppearanceSettings() {
   const { theme, themes, setTheme } = useThemeContext();
-  const [uiFontSize, setUiFontSize] = useSettings("appearance.uiFontSize", 12);
+  const [uiFontSize, setUiFontSize] = useSettings("appearance.uiFontSize", 13);
   const [terminalFontSize, setTerminalFontSize] = useSettings("appearance.terminalFontSize", 13);
   const [ligatures, setLigatures] = useSettings("appearance.ligatures", true);
   const [animations, setAnimations] = useSettings("appearance.animations", true);

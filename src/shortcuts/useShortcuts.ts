@@ -8,6 +8,7 @@ import { KEYBINDINGS, type ActionId } from "./registry";
 import { useWorkbench } from "@/state/store";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
 import { runAiReview } from "@/lib/ai-review";
+import { canDispatchAgentAction } from "@/lib/ai-actions";
 
 // Ask the active editor tab bar to close whatever tab is focused. On macOS this
 // is driven by the native Close-Tab menu item (⌘W); on Windows/Linux by the
@@ -68,6 +69,10 @@ export function useShortcuts() {
         const { activeWorkspaceId, workspaces, setActiveWorkspace } = useWorkbench.getState();
         const ws = workspaces.find((w) => w.id === activeWorkspaceId);
         if (!ws) return;
+        // Mirror DiffView's gating: runAiReview writes to the live agent PTY, so
+        // it silently no-ops for headless/PTY-less workspaces. Skip rather than
+        // pretend it ran.
+        if (!canDispatchAgentAction({ workspaceId: ws.id, backend: ws.agentBackend, cwd: ws.worktreePath })) return;
         const reviewPref = useProjectSettingsStore.getState().data?.preferences?.review;
         void runAiReview({
           target: { workspaceId: ws.id, backend: ws.agentBackend, cwd: ws.worktreePath },

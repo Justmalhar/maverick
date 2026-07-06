@@ -257,11 +257,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const customColorSignature = useSettingsStore((s) =>
     CUSTOM_COLOR_OVERRIDES.map(([key]) => s.values[key] ?? "").join("|"),
   );
+  // ThemeProvider is the single owner of inline :root properties, so the UI
+  // base font size (consumed by `body { font-size: var(--ui-font-size) }`) is
+  // applied here alongside the theme, not from a scattered effect.
+  const uiFontSize = useSettingsStore((s) => s.values["appearance.uiFontSize"]);
 
   useLayoutEffect(() => {
     applyToRoot(theme);
     applyCustomColorOverrides(document.documentElement);
-  }, [theme, customColorSignature]);
+    const size = typeof uiFontSize === "number" ? uiFontSize : 13;
+    document.documentElement.style.setProperty("--ui-font-size", `${size}px`);
+  }, [theme, customColorSignature, uiFontSize]);
 
   const setTheme = useCallback((def: ThemeDefinition) => {
     setThemeState(def);

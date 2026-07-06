@@ -4,7 +4,16 @@ import { dispatchOsNotification } from "@/lib/os-notify";
 import { routeNotification } from "@/lib/notification-route";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import { useWorkbench } from "@/state/store";
-import type { Notification } from "@/lib/ipc";
+import { getSettingBool } from "@/lib/stores/settings";
+import type { Notification, SettingsKey } from "@/lib/ipc";
+
+// Maps the notification `type` string (set by the sidecar) to the settings
+// toggle that governs it. Types with no entry (e.g. "info") are always shown.
+const AGENT_NOTIFICATION_SETTING: Partial<Record<string, SettingsKey>> = {
+  "agent.attention": "notifications.agent.waiting",
+  "agent.done": "notifications.agent.complete",
+  "agent.error": "notifications.agent.error",
+};
 import {
   Toast,
   ToastClose,
@@ -42,6 +51,8 @@ export function Toaster() {
 
   useEffect(() => {
     const unlisten = onNotificationSend((n: Notification) => {
+      const settingKey = AGENT_NOTIFICATION_SETTING[n.type];
+      if (settingKey && !getSettingBool(settingKey)) return;
       const { focused: f, visible: v, activeWorkspaceId: a } = routeStateRef.current;
       const action = routeNotification({
         notification: n,

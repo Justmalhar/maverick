@@ -17,6 +17,7 @@ import { QuickOpen } from "@/components/quickopen/QuickOpen";
 import { CommandPalette } from "@/components/quickopen/CommandPalette";
 import { KeybindingHelp } from "@/components/quickopen/KeybindingHelp";
 import { Toaster } from "@/components/notifications/Toaster";
+import { StatusBar } from "@/components/statusbar/StatusBar";
 
 const PresetPicker = lazy(() => import("@/panels/presets/PresetPicker"));
 const SettingsPanel = lazy(() => import("@/panels/settings/SettingsPanel"));
@@ -86,18 +87,18 @@ export function Workbench() {
           autoSaveId="mv-workbench-layout"
           className="h-full flex-1"
         >
-          {layout.primarySideBarVisible && !collapsed && (
+          {layout.primarySideBarVisible && (
             <>
               <ResizablePanel
                 id="primary-sidebar"
                 order={1}
-                defaultSize={15}
-                minSize={11}
-                maxSize={40}
+                defaultSize={collapsed ? 3 : 15}
+                minSize={collapsed ? 3 : 11}
+                maxSize={collapsed ? 3 : 40}
                 data-testid="primarysidebar-panel"
-                className="bg-sidebar"
+                className="bg-transparent"
               >
-                <PrimarySideBar />
+                <PrimarySideBar collapsed={collapsed} />
               </ResizablePanel>
               <ResizableHandle withHandle />
             </>
@@ -126,6 +127,8 @@ export function Workbench() {
           )}
         </ResizablePanelGroup>
       </div>
+
+      <StatusBar />
 
       <QuickOpen />
       <CommandPalette />

@@ -449,6 +449,75 @@ describe("RpcHandlers", () => {
     ).rejects.toThrow();
   });
 
+  test("autopilot.list/upsert/delete round-trip", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/ap" })) as { id: string };
+    const a = (await h.dispatch("autopilot.upsert", {
+      autopilot: { projectId: proj.id, name: "nightly", backend: "claude", intervalMinutes: 60 },
+    })) as { id: string };
+    expect(a.id.startsWith("autopilot_")).toBe(true);
+    const list = (await h.dispatch("autopilot.list", { projectId: proj.id })) as unknown[];
+    expect(list).toHaveLength(1);
+    await h.dispatch("autopilot.delete", { id: a.id });
+    expect(await h.dispatch("autopilot.list", { projectId: proj.id })).toHaveLength(0);
+  });
+
+  test("autopilot.upsert accepts flat params too", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/ap2" })) as { id: string };
+    const a = await h.dispatch("autopilot.upsert", { projectId: proj.id, name: "flat" });
+    expect(a).toBeDefined();
+  });
+
+  test("autopilot.upsert throws on missing fields", async () => {
+    await expect(h.dispatch("autopilot.upsert", { autopilot: {} })).rejects.toThrow();
+  });
+
+  test("autopilot.runNow emits autopilot.triggered and records last run", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/ap3" })) as { id: string };
+    const a = (await h.dispatch("autopilot.upsert", {
+      autopilot: { projectId: proj.id, name: "manual", backend: "claude", branch: "main", prompt: "go" },
+    })) as { id: string };
+    const result = await h.dispatch("autopilot.runNow", { id: a.id });
+    expect(result).toEqual({ ok: true });
+    const list = (await h.dispatch("autopilot.list", { projectId: proj.id })) as Array<{
+      lastStatus: string;
+      lastRunAt: number | null;
+    }>;
+    expect(list[0].lastStatus).toBe("ok");
+    expect(list[0].lastRunAt).not.toBeNull();
+  });
+
+  test("autopilot.runNow reports an error for an unknown id", async () => {
+    const result = (await h.dispatch("autopilot.runNow", { id: "nope" })) as { ok: boolean; error?: string };
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("not found");
+  });
+
+  test("autopilot.runNow reports an error for a disabled autopilot", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/ap4" })) as { id: string };
+    const a = (await h.dispatch("autopilot.upsert", {
+      autopilot: { projectId: proj.id, name: "off", enabled: false },
+    })) as { id: string };
+    const result = (await h.dispatch("autopilot.runNow", { id: a.id })) as { ok: boolean; error?: string };
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("disabled");
+  });
+
+  test("squad.list/upsert/delete round-trip", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/sq" })) as { id: string };
+    const s = (await h.dispatch("squad.upsert", {
+      squad: { projectId: proj.id, name: "auth-refactor", memberWorkspaceIds: ["ws-1", "ws-2"] },
+    })) as { id: string };
+    expect(s.id.startsWith("squad_")).toBe(true);
+    const list = (await h.dispatch("squad.list", { projectId: proj.id })) as unknown[];
+    expect(list).toHaveLength(1);
+    await h.dispatch("squad.delete", { id: s.id });
+    expect(await h.dispatch("squad.list", { projectId: proj.id })).toHaveLength(0);
+  });
+
+  test("squad.upsert throws on missing fields", async () => {
+    await expect(h.dispatch("squad.upsert", { squad: {} })).rejects.toThrow();
+  });
+
   test("preset.list/launch/save_current", async () => {
     const list = (await h.dispatch("preset.list", { projectPath: "/r" })) as unknown[];
     expect(list).toHaveLength(1);
@@ -1506,6 +1575,33 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     expect(parsed.env.MAVERICK_WS).toBe("ws_hooktest");
     expect(parsed.hooks.Notification[0].hooks[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/agent-hook$/);
     rmSync(path, { force: true });
+    handlers.stopHookServer();
+  });
+
+  it("autopilot.webhookInfo starts the hook server and returns its trigger URL + token", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, notifier: { write: () => {} } });
+    const info = (await handlers.dispatch("autopilot.webhookInfo", {})) as { url: string; token: string };
+    expect(info.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/autopilot-trigger$/);
+    expect(info.token.length).toBeGreaterThanOrEqual(16);
+    handlers.stopHookServer();
+  });
+
+  it("a webhook POST via autopilot.webhookInfo's URL triggers the autopilot", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, notifier: { write: () => {} } });
+    const proj = (await handlers.dispatch("project.add", { path: "/wh" })) as { id: string };
+    const a = (await handlers.dispatch("autopilot.upsert", {
+      autopilot: { projectId: proj.id, name: "webhooked" },
+    })) as { id: string };
+    const info = (await handlers.dispatch("autopilot.webhookInfo", {})) as { url: string; token: string };
+    const res = await fetch(info.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Maverick-Token": info.token },
+      body: JSON.stringify({ id: a.id }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
     handlers.stopHookServer();
   });
 

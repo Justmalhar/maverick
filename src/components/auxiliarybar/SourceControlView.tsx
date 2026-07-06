@@ -6,6 +6,7 @@ import { useWorkbench, selectContextWorkspace } from "@/state/store";
 import { joinPath } from "@/lib/paths";
 import { renameWorkspaceBranchWithAI } from "@/lib/ai-rename";
 import { useProjectSettingsStore } from "@/lib/stores/project-settings";
+import { getGitTemplate, getSettingBool } from "@/lib/stores/settings";
 import { useSourceControl } from "@/hooks/useSourceControl";
 import { buildCreatePrPrompt, canDispatchAgentAction, sendAgentPrompt } from "@/lib/ai-actions";
 import {
@@ -73,7 +74,7 @@ export function SourceControlView() {
     setRemote(info);
   }, [active?.worktreePath]);
 
-  useEffect(() => { setFeedback(null); setMessage(""); void refreshFiles(); }, [refreshFiles]);
+  useEffect(() => { setFeedback(null); setMessage(getGitTemplate()); void refreshFiles(); }, [refreshFiles]);
   useEffect(() => { void refreshAuth(credProvider); }, [credProvider, refreshAuth]);
 
   if (!active) {
@@ -115,8 +116,8 @@ export function SourceControlView() {
   async function doCommit(): Promise<string | null> {
     if (!message.trim()) { setFeedback({ tone: "error", text: "Enter a commit message first." }); return null; }
     if (selected.size === 0) { setFeedback({ tone: "error", text: "Select at least one file." }); return null; }
-    const { sha } = await gitCommit(ws.worktreePath, message.trim(), [...selected]);
-    setMessage("");
+    const { sha } = await gitCommit(ws.worktreePath, message.trim(), [...selected], getSettingBool("git.gpgSign"));
+    setMessage(getGitTemplate());
     await refreshFiles();
     await scm.refresh();
     const wb = useWorkbench.getState();

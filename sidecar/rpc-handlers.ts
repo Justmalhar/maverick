@@ -16,6 +16,8 @@ import { GitCredentials } from "./git-credentials";
 import { ChecksModule } from "./checks-module";
 import { PresetLauncher } from "./preset-launcher";
 import { KanbanStore } from "./kanban-store";
+import { AutopilotStore } from "./autopilot-store";
+import { SquadStore } from "./squad-store";
 import { MCPManager } from "./mcp-manager";
 import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
@@ -33,7 +35,7 @@ import { PrTextGenerator } from "./pr-text-generator";
 import { oneShotSpecFor } from "./agent-oneshot";
 import { HookServer } from "./hook-server";
 import { writeClaudeHooksFile } from "./claude-hooks";
-import { stdoutNotifier, shellCommandArgs } from "./deps";
+import { stdoutNotifier, shellCommandArgs, emit } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
 
 const RoleSchema = z.enum(["user", "assistant", "tool"]);
@@ -104,6 +106,7 @@ const Schemas = {
     worktreePath: z.string(),
     message: z.string(),
     files: nullishOptional(z.array(z.string())),
+    gpgSign: nullishOptional(z.boolean()),
   }),
   gitBranches: z.object({ projectPath: z.string() }),
   gitDiffStat: z.object({ worktreePath: z.string() }),
@@ -172,6 +175,28 @@ const Schemas = {
     ),
   }),
   kanbanDelete: z.object({ id: z.string().min(1) }),
+  autopilotList: z.object({ projectId: z.string() }),
+  autopilotUpsert: z.object({
+    id: nullishOptional(z.string()),
+    projectId: z.string().min(1),
+    name: z.string().min(1),
+    backend: nullishOptional(z.string()),
+    branch: nullishOptional(z.string()),
+    prompt: nullishOptional(z.string()),
+    intervalMinutes: nullishOptional(z.number()),
+    enabled: nullishOptional(z.boolean()),
+  }),
+  autopilotDelete: z.object({ id: z.string().min(1) }),
+  autopilotRunNow: z.object({ id: z.string().min(1) }),
+  squadList: z.object({ projectId: z.string() }),
+  squadUpsert: z.object({
+    id: nullishOptional(z.string()),
+    projectId: z.string().min(1),
+    name: z.string().min(1),
+    leaderWorkspaceId: nullishOptional(z.string()),
+    memberWorkspaceIds: nullishOptional(z.array(z.string())),
+  }),
+  squadDelete: z.object({ id: z.string().min(1) }),
   presetList: z.object({ projectPath: nullishOptional(z.string()) }),
   presetLaunch: z.object({
     preset: z.record(z.string(), z.unknown()),
@@ -280,6 +305,8 @@ export interface RpcHandlersOptions {
   checks?: ChecksModule;
   presets?: PresetLauncher;
   kanban?: KanbanStore;
+  autopilots?: AutopilotStore;
+  squads?: SquadStore;
   mcp?: MCPManager;
   notifications?: NotificationService;
   context?: ContextTracker;
@@ -312,6 +339,8 @@ export class RpcHandlers {
   readonly checks: ChecksModule;
   readonly presets: PresetLauncher;
   readonly kanban: KanbanStore;
+  readonly autopilots: AutopilotStore;
+  readonly squads: SquadStore;
   readonly mcp: MCPManager;
   readonly notifications: NotificationService;
   readonly context: ContextTracker;
@@ -341,6 +370,7 @@ export class RpcHandlers {
         notifications: {
           send: (p) => notifications.send({ ...p, workspaceId: p.workspaceId ?? undefined }),
         },
+        onAutopilotTrigger: (id) => this.triggerAutopilot(id),
       });
       await this.hookServer.start();
     }
@@ -372,6 +402,8 @@ export class RpcHandlers {
         store: this.store,
       });
     this.kanban = opts.kanban ?? new KanbanStore(this.store);
+    this.autopilots = opts.autopilots ?? new AutopilotStore(this.store);
+    this.squads = opts.squads ?? new SquadStore(this.store);
     this.mcp = opts.mcp ?? new MCPManager({ loader: this.config });
     this.notifications =
       opts.notifications ?? new NotificationService({ store: this.store, notifier: opts.notifier });
@@ -497,6 +529,44 @@ export class RpcHandlers {
     this.mcp.tick();
   }
 
+  // Drives Autopilot recurring schedules. The server loop calls this on a fixed
+  // interval; each tick fires every enabled interval-based autopilot whose
+  // interval has elapsed since its last run.
+  async checkDueAutopilots(): Promise<void> {
+    const nowSec = Math.floor(Date.now() / 1000);
+    for (const a of this.autopilots.dueForCheck(nowSec)) {
+      await this.triggerAutopilot(a.id);
+    }
+  }
+
+  // Shared by the recurring scheduler, the manual "Run now" RPC, and the
+  // loopback webhook route. The sidecar cannot itself spawn a PTY (that's
+  // React-owned via the Setup tab), so triggering only means: record the run
+  // and push an `autopilot.triggered` event carrying everything the frontend
+  // needs to start the workspace + stage the launch prompt, exactly like a
+  // manual Kanban "Start" does.
+  async triggerAutopilot(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const row = this.autopilots.get(id);
+    if (!row) return { ok: false, error: `autopilot ${id} not found` };
+    if (!row.enabled) return { ok: false, error: "autopilot is disabled" };
+    try {
+      emit(this.notifier, "autopilot.triggered", {
+        autopilotId: row.id,
+        projectId: row.projectId,
+        name: row.name,
+        backend: row.backend,
+        branch: row.branch,
+        prompt: row.prompt,
+      });
+      this.autopilots.markRun(id, { status: "ok" });
+      return { ok: true };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      this.autopilots.markRun(id, { status: "error", error });
+      return { ok: false, error };
+    }
+  }
+
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
     switch (method) {
       case "project.add": {
@@ -604,6 +674,14 @@ export class RpcHandlers {
         const { port, token } = server.endpoint();
         const path = writeClaudeHooksFile({ workspaceId: p.workspaceId, port, token });
         return { path };
+      }
+      case "autopilot.webhookInfo": {
+        // Starts the loopback receiver on first use so a project that only
+        // uses Autopilots (never a Claude-hooked workspace) can still trigger
+        // one via webhook.
+        const server = await this.ensureHookServer();
+        const { port, token } = server.endpoint();
+        return { url: `http://127.0.0.1:${port}/autopilot-trigger`, token };
       }
       case "config.load": {
         const p = Schemas.configLoad.parse(params);
@@ -854,6 +932,34 @@ export class RpcHandlers {
       case "kanban.delete": {
         const p = Schemas.kanbanDelete.parse(params);
         return this.kanban.delete(p.id);
+      }
+      case "autopilot.list": {
+        const p = Schemas.autopilotList.parse(params);
+        return this.autopilots.list(p.projectId);
+      }
+      case "autopilot.upsert": {
+        const a = Schemas.autopilotUpsert.parse(params.autopilot ?? params);
+        return this.autopilots.upsert(a);
+      }
+      case "autopilot.delete": {
+        const p = Schemas.autopilotDelete.parse(params);
+        return this.autopilots.delete(p.id);
+      }
+      case "autopilot.runNow": {
+        const p = Schemas.autopilotRunNow.parse(params);
+        return this.triggerAutopilot(p.id);
+      }
+      case "squad.list": {
+        const p = Schemas.squadList.parse(params);
+        return this.squads.list(p.projectId);
+      }
+      case "squad.upsert": {
+        const s = Schemas.squadUpsert.parse(params.squad ?? params);
+        return this.squads.upsert(s);
+      }
+      case "squad.delete": {
+        const p = Schemas.squadDelete.parse(params);
+        return this.squads.delete(p.id);
       }
       case "preset.list": {
         const p = Schemas.presetList.parse(params);

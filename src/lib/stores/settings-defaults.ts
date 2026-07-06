@@ -22,7 +22,7 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
 
   // Appearance
   "appearance.theme": "",
-  "appearance.uiFontSize": 12,
+  "appearance.uiFontSize": 13,
   "appearance.terminalFontSize": 13,
   "appearance.ligatures": true,
   "appearance.animations": true,

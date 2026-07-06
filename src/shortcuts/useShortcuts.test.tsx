@@ -304,6 +304,17 @@ describe("useShortcuts", () => {
     expect(useWorkbench.getState().activeWorkspaceId).toBeNull();
   });
 
+  it("ai.review is a no-op when the active workspace has no live agent PTY", () => {
+    terminalLeafTesting.leafPtyCache.delete("w1-1");
+    useWorkbench.getState().setWorkspaces([makeWorkspace({ id: "w1", worktreePath: "/wt" })]);
+    useWorkbench.getState().setActiveWorkspace("w1");
+    vi.mocked(invoke).mockClear();
+    renderHook(() => useShortcuts());
+    act(() => fire("$mod+Shift+r"));
+    // Workspace exists but no agent PTY → gated out; nothing written to a terminal.
+    expect(invoke).not.toHaveBeenCalledWith("pty_write", expect.anything());
+  });
+
   it("ai.review uses the project review preference and brings the workspace to the front", async () => {
     vi.mocked(invoke).mockReset().mockImplementation(((cmd: string) => {
       if (cmd === "diff_get") return Promise.resolve(makeDiff({ files: [makeDiffFile()] }));

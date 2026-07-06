@@ -41,6 +41,8 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   // Vim-style bracket sequences; suppressed while typing in a text field.
   { id: "diff.nextHunk", label: "Diff: next change", category: "Editor", keys: "] c", display: "]c" },
   { id: "diff.prevHunk", label: "Diff: previous change", category: "Editor", keys: "[ c", display: "[c" },
+  { id: "diff.stageHunk", label: "Stage current hunk", category: "Git", keys: "$mod+Shift+a", display: "⌘⇧A" },
+  { id: "diff.unstageHunk", label: "Unstage current hunk", category: "Git", keys: "$mod+Shift+u", display: "⌘⇧U" },
 
   // Browser
   { id: "browser.toggleInspect", label: "Toggle element inspector", category: "Global", keys: "$mod+Shift+i", display: "⌘⇧I" },
@@ -55,11 +57,22 @@ export const KEYBINDINGS: readonly KeybindingDef[] = [
   { id: "terminal.focusUp", label: "Focus pane up", category: "Terminal", keys: "$mod+Alt+ArrowUp", display: "⌘⌥↑" },
   { id: "terminal.focusDown", label: "Focus pane down", category: "Terminal", keys: "$mod+Alt+ArrowDown", display: "⌘⌥↓" },
   { id: "terminal.openBottomTerminal", label: "New terminal in Panel", category: "Terminal", keys: "$mod+Shift+t", display: "⌘⇧T" },
+  { id: "terminal.nextPane", label: "Cycle next terminal pane", category: "Terminal", keys: "$mod+Shift+BracketRight", display: "⌘⇧]" },
+  { id: "terminal.prevPane", label: "Cycle previous terminal pane", category: "Terminal", keys: "$mod+Shift+BracketLeft", display: "⌘⇧[" },
+  { id: "terminal.fontSizeUp", label: "Increase terminal font size", category: "Terminal", keys: "$mod+Shift+Equal", display: "⌘⇧=" },
+  { id: "terminal.fontSizeDown", label: "Decrease terminal font size", category: "Terminal", keys: "$mod+Minus", display: "⌘-" },
+
+  // Agent mode
+  { id: "agent.scrollToTop", label: "Scroll to top of conversation", category: "Editor", keys: "$mod+ArrowUp", display: "⌘↑" },
+  { id: "agent.scrollToBottom", label: "Scroll to bottom of conversation", category: "Editor", keys: "$mod+ArrowDown", display: "⌘↓" },
+  { id: "agent.search", label: "Search in conversation", category: "Editor", keys: "$mod+f", display: "⌘F" },
+  { id: "agent.copyLastResponse", label: "Copy last agent response", category: "Editor", keys: "$mod+Shift+c", display: "⌘⇧C" },
 
   // Panel toggles
   { id: "layout.toggleSidebar", label: "Toggle primary sidebar", category: "Panel", keys: "$mod+b", display: "⌘B" },
   { id: "layout.toggleAuxBar", label: "Toggle auxiliary panel", category: "Panel", keys: "$mod+Shift+Period", display: "⌘⇧." },
   { id: "layout.togglePanel", label: "Toggle bottom panel", category: "Panel", keys: "$mod+j", display: "⌘J" },
+  { id: "layout.focusFileTree", label: "Focus file tree", category: "Panel", keys: "$mod+Shift+e", display: "⌘⇧E" },
 
   // Activity views
   { id: "view.git", label: "Show Git", category: "Panel", keys: "$mod+Shift+g", display: "⌘⇧G" },

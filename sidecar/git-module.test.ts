@@ -134,6 +134,18 @@ describe("GitModule methods", () => {
     expect(calls[0]).toEqual(["git", "-C", "/w", "commit", "-m", "m"]);
   });
 
+  test("commit adds --gpg-sign when gpgSign is true", async () => {
+    const { shell, calls } = transcript([{}, { stdout: "sha\n" }]);
+    await new GitModule({ shell }).commit({ worktreePath: "/w", message: "m", gpgSign: true });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "commit", "-m", "m", "--gpg-sign"]);
+  });
+
+  test("commit omits --gpg-sign when gpgSign is false", async () => {
+    const { shell, calls } = transcript([{}, { stdout: "sha\n" }]);
+    await new GitModule({ shell }).commit({ worktreePath: "/w", message: "m", gpgSign: false });
+    expect(calls[0]).toEqual(["git", "-C", "/w", "commit", "-m", "m"]);
+  });
+
   test("commit throws on commit failure", async () => {
     const { shell } = transcript([{ exitCode: 1, stderr: "nothing to commit" }]);
     await expect(

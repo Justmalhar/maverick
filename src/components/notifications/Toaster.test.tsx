@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { renderWithProviders, screen, waitFor, act } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { dispatchOsNotification } from "@/lib/os-notify";
+import { useSettingsStore } from "@/lib/stores/settings";
 import type { Notification } from "@/lib/ipc";
 
 vi.mock("@/lib/os-notify", () => ({
@@ -44,6 +45,7 @@ beforeEach(() => {
     return () => {};
   }) as unknown as typeof listen);
   useWorkbench.setState({ ...initial, activeWorkspaceId: null });
+  useSettingsStore.setState({ values: {} });
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
   vi.spyOn(document, "hasFocus").mockReturnValue(true);
 });
@@ -81,6 +83,29 @@ describe("Toaster", () => {
 
     expect(screen.queryByTestId("toast-n1")).not.toBeInTheDocument();
     expect(dispatchOsNotification).not.toHaveBeenCalled();
+  });
+
+  it("suppresses agent.attention when notifications.agent.waiting is disabled", async () => {
+    useSettingsStore.setState({ values: { "notifications.agent.waiting": false } });
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    renderWithProviders(<Toaster />);
+    await waitFor(() => expect(sendHandlers.length).toBeGreaterThan(0));
+
+    act(() => sendHandlers[0](makeNotification({ id: "n1", type: "agent.attention" })));
+
+    expect(dispatchOsNotification).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("toast-n1")).not.toBeInTheDocument();
+  });
+
+  it("still fires agent.error even when notifications.agent.waiting is disabled (different setting)", async () => {
+    useSettingsStore.setState({ values: { "notifications.agent.waiting": false } });
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    renderWithProviders(<Toaster />);
+    await waitFor(() => expect(sendHandlers.length).toBeGreaterThan(0));
+
+    act(() => sendHandlers[0](makeNotification({ id: "n1", type: "agent.error", title: "Failed", body: "oops" })));
+
+    expect(dispatchOsNotification).toHaveBeenCalledWith("Failed", "oops");
   });
 
   it("dismisses a toast when its close button is clicked", async () => {

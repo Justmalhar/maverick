@@ -8,6 +8,8 @@ export interface ServerOptions {
   input?: AsyncIterable<string>;
   /** MCP health-poll cadence in ms. <=0 disables the timer (used in tests). */
   healthIntervalMs?: number;
+  /** Autopilot due-schedule check cadence in ms. <=0 disables the timer (used in tests). */
+  autopilotIntervalMs?: number;
 }
 
 export async function processLine(line: string, handlers: RpcHandlers, notifier: Notifier): Promise<void> {
@@ -55,6 +57,13 @@ export async function runServer(opts: ServerOptions = {}): Promise<void> {
   const input = opts.input ?? (console as unknown as AsyncIterable<string>);
   const intervalMs = opts.healthIntervalMs ?? 2_000;
   const timer = intervalMs > 0 ? setInterval(() => handlers.pollMcpHealth(), intervalMs) : null;
+  // 30s granularity is plenty for minute-level Autopilot schedules and keeps
+  // the due-check (a cheap SQLite query) far cheaper than the 2s MCP poll.
+  const autopilotIntervalMs = opts.autopilotIntervalMs ?? 30_000;
+  const autopilotTimer =
+    autopilotIntervalMs > 0
+      ? setInterval(() => void handlers.checkDueAutopilots(), autopilotIntervalMs)
+      : null;
   try {
     for await (const line of input) {
       if (typeof line === "string") {
@@ -63,6 +72,7 @@ export async function runServer(opts: ServerOptions = {}): Promise<void> {
     }
   } finally {
     if (timer) clearInterval(timer);
+    if (autopilotTimer) clearInterval(autopilotTimer);
   }
 }
 

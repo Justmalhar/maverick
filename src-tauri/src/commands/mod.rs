@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod autopilot;
 pub mod bootstrap;
 pub mod browser;
 pub mod caffeinate;
@@ -22,10 +23,14 @@ pub mod project_settings;
 pub mod pty;
 pub mod shell;
 pub mod skills;
+pub mod squad;
 pub mod usage;
 pub mod workspace;
 
 pub use attachment::attachment_create;
+pub use autopilot::{
+    autopilot_delete, autopilot_list, autopilot_run_now, autopilot_upsert, autopilot_webhook_info,
+};
 pub use bootstrap::{
     bootstrap_complete, bootstrap_status, bootstrap_update_settings, detect_backends,
     read_maverick_md, request_notification_permission, reset_first_run, write_maverick_md,
@@ -72,5 +77,6 @@ pub use project_settings::{
 pub use pty::{pty_close_all, pty_kill, pty_resize, pty_spawn, pty_write};
 pub use shell::wsl_available;
 pub use skills::{skills_create_global, skills_list, skills_list_global, skills_run};
+pub use squad::{squad_delete, squad_list, squad_upsert};
 pub use usage::usage_summary;
 pub use workspace::{workspace_create, workspace_destroy, workspace_list};

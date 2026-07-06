@@ -25,7 +25,7 @@ interface PanelLayout {
   auxiliaryView: AuxiliaryView;
 }
 
-export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "mcps" | "skills" | "skill-editor" | "git";
+export type SystemTabId = "dashboard" | "usage" | "browser" | "kanban" | "mcps" | "skills" | "skill-editor" | "git" | "automations" | "squads";
 
 export interface TerminalGroup {
   id: string;

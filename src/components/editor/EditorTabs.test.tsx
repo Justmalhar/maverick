@@ -154,7 +154,8 @@ describe("EditorTabs", () => {
     expect(screen.getByTestId("editor-tabs-open-terminal")).toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-dashboard")).toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-kanban")).toBeInTheDocument();
-    expect(screen.queryByTestId("editor-tabs-open-automations")).not.toBeInTheDocument();
+    expect(screen.getByTestId("editor-tabs-open-automations")).toBeInTheDocument();
+    expect(screen.getByTestId("editor-tabs-open-squads")).toBeInTheDocument();
     expect(screen.getByTestId("editor-tabs-open-mcps")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-tabs-open-browser")).not.toBeInTheDocument();
   });

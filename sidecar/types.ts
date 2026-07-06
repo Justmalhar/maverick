@@ -255,6 +255,31 @@ export interface KanbanTask {
   attachments: Attachment[];
 }
 
+export interface Autopilot {
+  id: string;
+  projectId: string;
+  name: string;
+  backend: string;
+  branch: string;
+  prompt: string;
+  /** null = manual/webhook only, no recurring schedule. */
+  intervalMinutes: number | null;
+  enabled: boolean;
+  lastRunAt: number | null;
+  lastStatus: "never" | "ok" | "error";
+  lastError?: string;
+  createdAt: number;
+}
+
+export interface Squad {
+  id: string;
+  projectId: string;
+  name: string;
+  leaderWorkspaceId?: string;
+  memberWorkspaceIds: string[];
+  createdAt: number;
+}
+
 export interface ContextUsage {
   workspaceId: string;
   tokensUsed: number;

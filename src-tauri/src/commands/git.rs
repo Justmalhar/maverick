@@ -37,6 +37,7 @@ pub async fn git_commit(
     worktree_path: String,
     message: String,
     files: Option<Vec<String>>,
+    gpg_sign: Option<bool>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -46,6 +47,7 @@ pub async fn git_commit(
                 "worktreePath": worktree_path,
                 "message": message,
                 "files": files,
+                "gpgSign": gpg_sign,
             }),
         )
         .await

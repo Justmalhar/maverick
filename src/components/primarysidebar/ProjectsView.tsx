@@ -9,7 +9,7 @@ import { NewWorkspaceDialog, type NewWorkspacePayload } from "./NewWorkspaceDial
 import { pickProjectFolder } from "@/lib/dialog";
 import { resolveStartupLaunch } from "@/lib/launch";
 
-export function ProjectsView() {
+export function ProjectsView({ collapsed = false }: { collapsed?: boolean }) {
   const projects = useWorkbench((s) => s.projects);
   const openProjectSettings = useWorkbench((s) => s.openProjectSettings);
   const { addProjectFromPath, create } = useWorkspace();
@@ -38,6 +38,36 @@ export function ProjectsView() {
   }
 
   const newWorkspaceProject = projects.find((p) => p.id === newWorkspaceProjectId) ?? null;
+
+  if (collapsed) {
+    return (
+      <div data-testid="projects-view" className="flex flex-col items-center gap-1 px-1 py-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onAddProject}
+              aria-label="Add project"
+              data-testid="projects-add"
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Add project</TooltipContent>
+        </Tooltip>
+        {projects.map((p) => (
+          <ProjectItem
+            key={p.id}
+            project={p}
+            collapsed
+            onAddWorkspace={(projectId) => setNewWorkspaceProjectId(projectId)}
+            onSettings={(projectId) => openProjectSettings({ projectId })}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div data-testid="projects-view" className="flex h-full flex-col">
