@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { fireEvent, renderWithProviders, screen, waitFor } from "@/test/utils";
 import KanbanCard from "./KanbanCard";
 import { useWorkbench } from "@/state/store";
+import { useAgentStatusStore } from "@/hooks/useAgentStatus";
 import { makeBackend, makeKanbanTask, makeProject, makeWorkspace } from "@/test/fixtures";
 import type { DiffStat } from "@/lib/ipc";
 
@@ -12,6 +13,7 @@ const initial = useWorkbench.getState();
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
   useWorkbench.setState({ ...initial, backends: [], workspaces: [], activeWorkspaceId: null });
+  useAgentStatusStore.setState({ statuses: {} });
 });
 
 describe("KanbanCard", () => {
@@ -110,6 +112,19 @@ describe("KanbanCard", () => {
       />
     );
     expect(screen.getByTestId("agent-dot")).toHaveClass("bg-warning");
+  });
+
+  it("shows the live agent status pill (not the static dot) for an in_progress task with a linked workspace", () => {
+    useAgentStatusStore.setState({ statuses: { "ws-1": "attention" } });
+    renderWithProviders(
+      <KanbanCard
+        task={makeKanbanTask({ status: "in_progress", branch: "main", workspaceId: "ws-1" })}
+        index={0}
+        onEdit={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("agent-status-pill")).toHaveAttribute("data-status", "attention");
+    expect(screen.queryByTestId("agent-dot")).not.toBeInTheDocument();
   });
 
   it("renders success dot for review", () => {

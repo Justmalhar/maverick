@@ -11,6 +11,8 @@ import {
   SquarePen,
   TerminalSquare,
   GitBranch,
+  Bot,
+  Users,
   X,
 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
@@ -54,9 +56,11 @@ const SYSTEM_TAB_META: Record<
   skills: { label: "Skills", icon: Sparkles },
   "skill-editor": { label: "New Skill", icon: SquarePen },
   git: { label: "Git", icon: GitBranch },
+  automations: { label: "Autopilots", icon: Bot },
+  squads: { label: "Squads", icon: Users },
 };
 
-const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "mcps", "skills", "git"];
+const DROPDOWN_TAB_IDS: SystemTabId[] = ["dashboard", "usage", "kanban", "mcps", "skills", "git", "automations", "squads"];
 
 export function EditorTabs() {
   const platform = useOSPlatform();
@@ -136,8 +140,8 @@ export function EditorTabs() {
   return (
     <div
       data-testid="editor-tabs"
-      className="mv-editor-tabs flex w-full shrink-0 items-stretch bg-tab-inactive"
-      style={{ height: "var(--editor-tabs-height)", borderBottom: "1px solid hsl(var(--border))" }}
+      className="mv-editor-tabs glass-light flex w-full shrink-0 items-stretch"
+      style={{ height: "var(--editor-tabs-height)", borderBottom: "1px solid hsl(var(--border-glass))" }}
     >
       <div className="flex h-full flex-1 items-stretch overflow-x-auto">
         {systemTabs.map((id) => {

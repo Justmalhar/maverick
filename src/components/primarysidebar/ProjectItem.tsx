@@ -9,6 +9,7 @@ import { WorkspaceItem } from "./WorkspaceItem";
 
 interface Props {
   project: Project;
+  collapsed?: boolean;
   onAddWorkspace?: (projectId: string) => void;
   onSettings?: (projectId: string) => void;
 }
@@ -52,11 +53,31 @@ function ActionButton({
   );
 }
 
-export function ProjectItem({ project, onAddWorkspace, onSettings }: Props) {
+export function ProjectItem({ project, collapsed = false, onAddWorkspace, onSettings }: Props) {
   const [expanded, setExpanded] = useState(true);
   const workspaces = useWorkbench(
     useShallow((s) => s.workspaces.filter((w) => w.projectId === project.id))
   );
+
+  if (collapsed) {
+    return (
+      <div className="mv-project-item" data-testid={`project-item-${project.id}`}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => onAddWorkspace?.(project.id)}
+              className="flex h-8 w-8 items-center justify-center rounded-sm text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-hover hover:text-foreground"
+              data-testid={`project-${project.id}-addworkspace`}
+            >
+              <span className="text-xs font-bold">{project.name.charAt(0).toUpperCase()}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{project.name}</TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  }
 
   return (
     <div className="mv-project-item" data-testid={`project-item-${project.id}`}>

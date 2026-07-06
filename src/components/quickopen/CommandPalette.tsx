@@ -12,6 +12,8 @@ import {
   PanelBottom,
   Sparkles,
   FileSearch,
+  Bot,
+  Users,
 } from "lucide-react";
 import { useWorkbench } from "@/state/store";
 import { KEYBINDINGS } from "@/shortcuts/registry";
@@ -118,6 +120,24 @@ export function CommandPalette() {
         icon: Plug,
         run: () => {
           openSystemTab("mcps");
+          setOpen(false);
+        },
+      },
+      {
+        id: "view.automations",
+        label: "View: Show Autopilots",
+        icon: Bot,
+        run: () => {
+          openSystemTab("automations");
+          setOpen(false);
+        },
+      },
+      {
+        id: "view.squads",
+        label: "View: Show Squads",
+        icon: Users,
+        run: () => {
+          openSystemTab("squads");
           setOpen(false);
         },
       },

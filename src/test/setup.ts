@@ -1,9 +1,17 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import * as React from "react";
 
 afterEach(() => cleanup());
+
+// Lazy-loaded system-tab panels (UsagePanel, GitPanel, MCPsPanel, …) resolve
+// their dynamic import + Suspense render asynchronously; under the full parallel
+// suite (CPU contention, coverage instrumentation) that can exceed waitFor's
+// 1000ms default and flake. Raise the async-util timeout globally so these
+// tests wait long enough. Only affects how long a *failing* wait persists —
+// tests that resolve quickly are unchanged.
+configure({ asyncUtilTimeout: 5000 });
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -149,6 +157,7 @@ vi.mock("framer-motion", () => {
     useReducedMotion: () => false,
     LazyMotion: ({ children }: { children: React.ReactNode }) => children,
     domAnimation: {},
+    MotionConfig: ({ children }: { children: React.ReactNode; reducedMotion?: string }) => children,
   };
 });
 

@@ -22,6 +22,7 @@ interface CommitParams {
   worktreePath: string;
   message: string;
   files?: string[];
+  gpgSign?: boolean;
 }
 
 interface StashParams {
@@ -141,6 +142,7 @@ export class GitModule {
 
   async commit(params: CommitParams): Promise<{ sha: string }> {
     const commitCmd = ["git", "-C", params.worktreePath, "commit", "-m", params.message];
+    if (params.gpgSign) commitCmd.push("--gpg-sign");
     if (params.files && params.files.length > 0) {
       await this.shell.run(["git", "-C", params.worktreePath, "add", "--", ...params.files], undefined);
       // Scope the commit to exactly these paths (`commit -- <paths>` acts like

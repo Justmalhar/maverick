@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor } from "@/test/utils";
 import { useWorkbench, fileTabId } from "@/state/store";
 import { __resetAutoFetchForTests } from "@/hooks/useSourceControl";
+import { useSettingsStore } from "@/lib/stores/settings";
 import { SourceControlView } from "./SourceControlView";
 
 const initial = useWorkbench.getState();
@@ -67,6 +68,7 @@ beforeEach(() => {
     workspaces: [WS],
     activeWorkspaceId: "w1",
   });
+  useSettingsStore.setState({ values: {} });
 });
 
 describe("SourceControlView", () => {
@@ -204,6 +206,7 @@ describe("SourceControlView", () => {
       worktreePath: "/wt",
       message: "feat: x",
       files: ["src/a.ts", "src/b.ts"],
+      gpgSign: false,
     });
   });
 
@@ -225,7 +228,7 @@ describe("SourceControlView", () => {
     await waitFor(() =>
       expect(screen.getByTestId("scm-feedback")).toHaveTextContent("Committed abcdef1")
     );
-    expect(calls[0]).toEqual({ worktreePath: "/wt", message: "fix: a", files: ["src/a.ts"] });
+    expect(calls[0]).toEqual({ worktreePath: "/wt", message: "fix: a", files: ["src/a.ts"], gpgSign: false });
   });
 
   it("Commit & Push primary action commits then pushes", async () => {
@@ -413,10 +416,13 @@ describe("SourceControlView", () => {
   it("reflects an already-connected host in the header", async () => {
     mockInvoke({ git_credential_status: () => ({ provider: "bitbucket", connected: true, username: "alice" }) });
     renderWithProviders(<SourceControlView />);
+    // Wait on the definitive connected signal (absence of "Connect ") rather than
+    // the "Bitbucket" substring, which is also present in the transient
+    // "Connect Bitbucket" label before refreshAuth resolves — a race under load.
     await waitFor(() =>
-      expect(screen.getByTestId("scm-connect")).toHaveTextContent("Bitbucket")
+      expect(screen.getByTestId("scm-connect")).not.toHaveTextContent("Connect Bitbucket")
     );
-    expect(screen.getByTestId("scm-connect")).not.toHaveTextContent("Connect Bitbucket");
+    expect(screen.getByTestId("scm-connect")).toHaveTextContent("Bitbucket");
   });
 
   it("shows disconnected state when gitCredentialStatus throws (refreshAuth catch branch)", async () => {
@@ -477,6 +483,30 @@ describe("SourceControlView", () => {
     await waitFor(() => expect(renames).toHaveLength(1));
     // pendingAiRename cleared after commit
     expect(useWorkbench.getState().pendingAiRename).not.toContain("w1");
+  });
+
+  it("prefills the commit message from the git.template setting", async () => {
+    useSettingsStore.setState({ values: { "git.template": "type(scope): " } });
+    mockInvoke();
+    renderWithProviders(<SourceControlView />);
+    await waitFor(() => expect(screen.getByTestId("scm-message")).toHaveValue("type(scope): "));
+  });
+
+  it("passes gpgSign through to git_commit when git.gpgSign is enabled", async () => {
+    useSettingsStore.setState({ values: { "git.gpgSign": true } });
+    const calls: unknown[] = [];
+    mockInvoke({
+      git_commit: (args) => {
+        calls.push(args);
+        return { sha: "abc1234def5678" };
+      },
+    });
+    renderWithProviders(<SourceControlView />);
+    await screen.findByTestId("scm-file-src/a.ts");
+    await userEvent.type(screen.getByTestId("scm-message"), "feat: signed");
+    await userEvent.click(screen.getByTestId("scm-primary"));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toMatchObject({ gpgSign: true });
   });
 
   it("creates a branch via the Git actions menu", async () => {

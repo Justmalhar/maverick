@@ -22,6 +22,25 @@ export interface ProcessManagerOptions {
   spawn?: Spawner;
 }
 
+// Read a child's stdout/stderr pipe to completion, discarding the bytes. A
+// piped stream that is never read fills its OS buffer (~64KB) and then blocks
+// the child on its next write — a permanent deadlock for a chatty child. We
+// don't need the output here (these are fire-and-forget children), we just have
+// to keep the pipe empty. Errors (stream aborted on kill) are swallowed.
+function drain(stream?: ReadableStream<Uint8Array>): void {
+  if (!stream || typeof stream.getReader !== "function") return;
+  const reader = stream.getReader();
+  void (async () => {
+    try {
+      while (!(await reader.read()).done) { /* discard */ }
+    } catch {
+      /* stream closed/aborted (e.g. on kill) — nothing left to drain */
+    } finally {
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
+  })();
+}
+
 /**
  * Spawns short-lived, fire-and-forget child processes (the workspace.destroy
  * archive script). Interactive PTYs are NOT owned here — every terminal/agent/
@@ -50,6 +69,10 @@ export class ProcessManager {
     exited: Promise<number>;
   } {
     const proc = this.spawner([opts.command, ...opts.args], { cwd: opts.cwd, env: opts.env });
+    // Drain both pipes so a child that logs heavily to stderr (or stdout) can't
+    // deadlock on a full buffer before it exits.
+    drain(proc.stdout);
+    drain(proc.stderr);
     return { proc, exited: proc.exited };
   }
 }

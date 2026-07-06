@@ -151,6 +151,46 @@ describe("runServer entrypoint", () => {
     expect(ticks).toBe(0);
   });
 
+  test("runServer ticks Autopilot due-checks on its interval then clears the timer", async () => {
+    const handlers = makeHandlers();
+    let ticks = 0;
+    handlers.checkDueAutopilots = async () => {
+      ticks++;
+    };
+    async function* gen() {
+      await new Promise((r) => setTimeout(r, 25));
+      yield JSON.stringify({ jsonrpc: "2.0", id: 1, method: "project.list", params: {} });
+    }
+    await runServer({
+      handlers,
+      notifier: { write: () => {} },
+      input: gen() as AsyncIterable<string>,
+      healthIntervalMs: 0,
+      autopilotIntervalMs: 5,
+    });
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  test("runServer with autopilotIntervalMs<=0 disables the timer", async () => {
+    const handlers = makeHandlers();
+    let ticks = 0;
+    handlers.checkDueAutopilots = async () => {
+      ticks++;
+    };
+    async function* gen() {
+      await new Promise((r) => setTimeout(r, 15));
+      yield JSON.stringify({ jsonrpc: "2.0", id: 1, method: "project.list", params: {} });
+    }
+    await runServer({
+      handlers,
+      notifier: { write: () => {} },
+      input: gen() as AsyncIterable<string>,
+      healthIntervalMs: 0,
+      autopilotIntervalMs: 0,
+    });
+    expect(ticks).toBe(0);
+  });
+
   test("runServer consumes injected async input", async () => {
     const lines: string[] = [];
     async function* gen() {

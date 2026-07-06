@@ -192,6 +192,12 @@ export function getGitRemote(): string {
   return typeof v === "string" && v.trim() ? v.trim() : "origin";
 }
 
+/** Commit message template (`git.template`) prefilled into a fresh commit box. */
+export function getGitTemplate(): string {
+  const v = useSettingsStore.getState().values["git.template"] ?? SETTINGS_DEFAULTS["git.template"];
+  return typeof v === "string" ? v : "";
+}
+
 /** Test-only — clears the store and any pending debounced timers. */
 export function _resetSettingsStoreForTests(): void {
   pendingTimers.forEach((t) => clearTimeout(t));

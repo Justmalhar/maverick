@@ -58,7 +58,7 @@ export function TitleBar() {
       data-platform={platform}
       data-tauri-drag-region
       onMouseDown={handleMouseDown}
-      className="mv-titlebar drag select-none relative z-titlebar grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-titlebar"
+      className="mv-titlebar drag glass-light select-none relative z-titlebar grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-center"
       style={{ height: "38px" }}
     >
       {/* Left gutter — macOS traffic-light hint + PrimarySideBar toggle + breadcrumb */}

@@ -2,6 +2,7 @@ import { LayoutDashboard, Gauge, CheckSquare2 } from "lucide-react";
 import { useWorkbench, type SystemTabId } from "@/state/store";
 import { cn } from "@/lib/utils";
 import { ProjectsView } from "./ProjectsView";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Tabs open as documents in the EditorArea.
 const NAV_ITEMS: Array<{
@@ -20,32 +21,48 @@ function NavItem({
   active,
   onClick,
   testId,
+  collapsed,
 }: {
   icon: typeof LayoutDashboard;
   label: string;
   active: boolean;
   onClick: () => void;
   testId: string;
+  collapsed?: boolean;
 }) {
-  return (
+  const button = (
     <button
       type="button"
       onClick={onClick}
       data-testid={testId}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-100",
+        "flex items-center rounded-md transition-colors duration-100",
+        collapsed
+          ? "h-8 w-8 justify-center"
+          : "w-full gap-2.5 px-2.5 py-1.5 text-[13px]",
         active
           ? "bg-sidebar-selected text-sidebar-selected-fg"
           : "text-sidebar-fg hover:bg-sidebar-hover hover:text-foreground"
       )}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />
-      {label}
+      {!collapsed && <span>{label}</span>}
     </button>
   );
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return button;
 }
 
-export function PrimarySideBar() {
+export function PrimarySideBar({ collapsed = false }: { collapsed?: boolean }) {
   const activeSystemTab = useWorkbench((s) => s.activeSystemTab);
   const systemTabs = useWorkbench((s) => s.systemTabs);
   const openSystemTab = useWorkbench((s) => s.openSystemTab);
@@ -62,11 +79,17 @@ export function PrimarySideBar() {
   return (
     <section
       data-testid="primary-sidebar"
-      className="mv-primarysidebar flex h-full w-full flex-col overflow-hidden bg-sidebar text-sidebar-fg"
+      className={cn(
+        "mv-primarysidebar glass flex h-full flex-col overflow-hidden text-sidebar-fg",
+        collapsed ? "w-12 items-center" : "w-full"
+      )}
     >
       <nav
         aria-label="Sidebar navigation"
-        className="flex shrink-0 flex-col gap-px px-2 py-2"
+        className={cn(
+          "flex shrink-0 flex-col",
+          collapsed ? "gap-1 px-1 py-2" : "gap-px px-2 py-2"
+        )}
       >
         {NAV_ITEMS.map((item) => (
           <NavItem
@@ -76,14 +99,15 @@ export function PrimarySideBar() {
             active={activeSystemTab === item.tab}
             testId={`sidebar-nav-${item.tab}`}
             onClick={() => onNav(item.tab)}
+            collapsed={collapsed}
           />
         ))}
       </nav>
 
-      <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+      <div style={{ borderTop: "1px solid hsl(var(--border-glass))" }} />
 
       <div className="min-h-0 flex-1">
-        <ProjectsView />
+        <ProjectsView collapsed={collapsed} />
       </div>
     </section>
   );

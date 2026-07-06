@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/context-menu";
 import { useWorkbench } from "@/state/store";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { AgentStatusPill } from "@/components/editor/AgentStatusPill";
 import { prCreate } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { DiffStat, KanbanTask } from "@/lib/ipc";
@@ -45,6 +47,7 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
   const backends = useWorkbench((s) => s.backends);
   const workspaces = useWorkbench((s) => s.workspaces);
   const { create } = useWorkspace();
+  const liveStatus = useAgentStatus(task.workspaceId ?? "");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [creatingPr, setCreatingPr] = useState(false);
@@ -240,10 +243,14 @@ export default function KanbanCard({ task, index, diffStat, onEdit, onStart, onD
                   </span>
                 </>
               )}
-              <span
-                className={cn("ml-auto h-2 w-2 shrink-0 rounded-full", AGENT_DOT[task.status])}
-                data-testid="agent-dot"
-              />
+              {task.status === "in_progress" && task.workspaceId ? (
+                <AgentStatusPill status={liveStatus} compact className="ml-auto" />
+              ) : (
+                <span
+                  className={cn("ml-auto h-2 w-2 shrink-0 rounded-full", AGENT_DOT[task.status])}
+                  data-testid="agent-dot"
+                />
+              )}
             </div>
           )}
 

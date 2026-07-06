@@ -8,6 +8,8 @@ interface NotificationSink {
 export interface HookServerOptions {
   notifications: NotificationSink;
   token?: string;
+  /** Local-loopback webhook trigger for a scheduled Autopilot. */
+  onAutopilotTrigger?: (id: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const OK = JSON.stringify({ continue: true });
@@ -20,11 +22,13 @@ const OK = JSON.stringify({ continue: true });
  */
 export class HookServer {
   private readonly notifications: NotificationSink;
+  private readonly onAutopilotTrigger?: (id: string) => Promise<{ ok: boolean; error?: string }>;
   private readonly token: string;
   private server: ReturnType<typeof Bun.serve> | null = null;
 
   constructor(opts: HookServerOptions) {
     this.notifications = opts.notifications;
+    this.onAutopilotTrigger = opts.onAutopilotTrigger;
     this.token = opts.token ?? randomBytes(24).toString("hex");
   }
 
@@ -51,12 +55,18 @@ export class HookServer {
 
   private async handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method !== "POST" || url.pathname !== "/agent-hook") {
+    if (req.method !== "POST") {
       return new Response("not found", { status: 404 });
     }
     if (req.headers.get("X-Maverick-Token") !== this.token) {
       return new Response("unauthorized", { status: 401 });
     }
+    if (url.pathname === "/agent-hook") return this.handleAgentHook(req);
+    if (url.pathname === "/autopilot-trigger") return this.handleAutopilotTrigger(req);
+    return new Response("not found", { status: 404 });
+  }
+
+  private async handleAgentHook(req: Request): Promise<Response> {
     let body: unknown;
     try {
       body = await req.json();
@@ -69,5 +79,24 @@ export class HookServer {
       this.notifications.send({ workspaceId, ...mapped });
     }
     return new Response(OK, { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  private async handleAutopilotTrigger(req: Request): Promise<Response> {
+    if (!this.onAutopilotTrigger) return new Response("not found", { status: 404 });
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+    const id = (body as { id?: unknown })?.id;
+    if (typeof id !== "string" || !id) {
+      return new Response("bad request", { status: 400 });
+    }
+    const result = await this.onAutopilotTrigger(id);
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }
