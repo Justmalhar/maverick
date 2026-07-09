@@ -33,6 +33,7 @@ import { InstructionsResolver } from "./instructions-resolver";
 import { PrTextGenerator } from "./pr-text-generator";
 import { oneShotSpecFor } from "./agent-oneshot";
 import { HookServer } from "./hook-server";
+import { OllamaModels } from "./ollama-models";
 import { writeClaudeHooksFile } from "./claude-hooks";
 import { stdoutNotifier, shellCommandArgs } from "./deps";
 import type { MaverickConfig, Notifier } from "./types";
@@ -314,6 +315,7 @@ export interface RpcHandlersOptions {
   credentials?: GitCredentials;
   notifier?: Notifier;
   agents?: AgentSessionManager;
+  ollamaModels?: OllamaModels;
 }
 
 export class RpcHandlers {
@@ -347,6 +349,7 @@ export class RpcHandlers {
   readonly credentials: GitCredentials;
   readonly notifier: Notifier;
   readonly agents: AgentSessionManager;
+  readonly ollamaModels: OllamaModels;
 
   private watchedProjects = new Set<string>();
   private hookServer: HookServer | null = null;
@@ -409,6 +412,7 @@ export class RpcHandlers {
     this.prText = opts.prText ?? new PrTextGenerator();
     this.credentials = opts.credentials ?? new GitCredentials();
     this.agents = opts.agents ?? new AgentSessionManager({ store: this.store, notifier: this.notifier });
+    this.ollamaModels = opts.ollamaModels ?? new OllamaModels();
   }
 
   // Frontend panels address a workspace by id; skills/automation/mcp need the
@@ -767,6 +771,8 @@ export class RpcHandlers {
         const p = Schemas.checksGet.parse(params);
         return this.checks.get(p);
       }
+      case "providers.listOllamaModels":
+        return this.ollamaModels.list();
       case "git.remote_info": {
         const p = Schemas.gitRemoteInfo.parse(params);
         return this.git.remoteInfo(p);
