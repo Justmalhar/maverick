@@ -87,7 +87,7 @@ describe("TitleBar", () => {
     useWorkbench.setState({
       workspaces: [{
         id: "ws-x", projectId: "p", branch: "main", agentBackend: "claude",
-        worktreePath: "/wt", status: "active", sessionId: "s", title: "main",
+        worktreePath: "/wt", status: "active", sessionId: "s", title: "main", mode: "terminal",
       }],
     });
     renderWithProviders(<TitleBar />);

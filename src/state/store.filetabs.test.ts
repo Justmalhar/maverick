@@ -140,7 +140,7 @@ describe("FileTab store", () => {
 
   it("openFileTab stamps the owning workspaceId from worktreePath", () => {
     useWorkbench.setState({
-      workspaces: [{ id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s" }],
+      workspaces: [{ id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt/w1", status: "active", sessionId: "s", mode: "terminal" }],
       fileTabs: [], activeFileTabId: null, fileTabAccessOrder: [],
     });
     useWorkbench.getState().openFileTab({ kind: "file", path: "/wt/w1/a.ts", worktreePath: "/wt/w1", preview: true });

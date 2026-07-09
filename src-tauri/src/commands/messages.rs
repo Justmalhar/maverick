@@ -9,6 +9,7 @@ pub async fn messages_list(
     session_id: String,
     limit: u32,
     offset: u32,
+    tail: Option<bool>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -18,6 +19,7 @@ pub async fn messages_list(
                 "sessionId": session_id,
                 "limit": limit,
                 "offset": offset,
+                "tail": tail,
             }),
         )
         .await

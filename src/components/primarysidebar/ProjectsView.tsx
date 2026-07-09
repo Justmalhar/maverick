@@ -28,9 +28,11 @@ export function ProjectsView() {
   async function onAddWorkspace(projectId: string, opts: NewWorkspacePayload) {
     try {
       const backend = opts.backend;
-      const ws = await create(projectId, opts.branch, backend, opts.baseBranch);
-      const { command, args } = resolveStartupLaunch(backend);
-      useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
+      const ws = await create(projectId, opts.branch, backend, opts.baseBranch, opts.mode);
+      if (opts.mode !== "agent") {
+        const { command, args } = resolveStartupLaunch(backend);
+        useWorkbench.getState().setLaunchSpec(ws.id, { command, args });
+      }
       if (opts.aiLater) useWorkbench.getState().markPendingAiRename(ws.id);
     } catch (e) {
       console.error("addWorkspace failed", e);

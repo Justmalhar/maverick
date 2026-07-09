@@ -1,0 +1,199 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Composer } from "./Composer";
+import { useAgentStore, emptySession } from "@/state/agent-store";
+import type { Workspace } from "@/lib/ipc";
+import * as tauri from "@/lib/tauri";
+import { registerFileDropTarget } from "@/lib/file-drop";
+
+vi.mock("@/lib/tauri", () => ({
+  agentSend: vi.fn().mockResolvedValue({ queued: false }),
+  agentInterrupt: vi.fn().mockResolvedValue({ ok: true }),
+  agentQueueRemove: vi.fn().mockResolvedValue({ ok: true }),
+  agentSetOptions: vi.fn().mockResolvedValue({ ok: true }),
+  agentCapabilities: vi.fn().mockResolvedValue({
+    models: [{ id: "default", label: "Default" }, { id: "claude-opus-4-8", label: "Opus 4.8" }],
+    reasoningLevels: [{ id: "default", label: "Default" }, { id: "high", label: "High" }],
+    slashCommands: [{ name: "/compact", description: "Compact context" }],
+    supportsInterrupt: true,
+    supportsConversationRewind: true,
+  }),
+  agentAttachmentSave: vi.fn(),
+  fileSearch: vi.fn().mockResolvedValue({ hits: [{ rel: "scripts/db-repl.ts" }], truncated: false }),
+}));
+vi.mock("@/lib/file-drop", () => ({ registerFileDropTarget: vi.fn().mockReturnValue(() => {}) }));
+
+const ws: Workspace = { id: "w1", projectId: "p1", branch: "b", agentBackend: "claude", worktreePath: "/w", status: "idle", sessionId: "s1", mode: "agent" };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  useAgentStore.setState({ sessions: { s1: { ...emptySession(), hydrated: true } } });
+});
+
+describe("Composer", () => {
+  it("sends trimmed text on Enter and clears the draft", async () => {
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "  hello agent  {Enter}");
+    expect(tauri.agentSend).toHaveBeenCalledWith("s1", [{ type: "text", text: "hello agent" }]);
+    expect(box).toHaveValue("");
+  });
+
+  it("Shift+Enter inserts a newline instead of sending", async () => {
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "line1{Shift>}{Enter}{/Shift}line2");
+    expect(tauri.agentSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue("line1\nline2");
+  });
+
+  it("does not send an empty draft", async () => {
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "   {Enter}");
+    expect(tauri.agentSend).not.toHaveBeenCalled();
+  });
+
+  it("shows Stop while working; clicking it interrupts; Escape also interrupts", async () => {
+    useAgentStore.setState({ sessions: { s1: { ...emptySession(), status: "working", hydrated: true } } });
+    render(<Composer workspace={ws} />);
+    const stop = await screen.findByRole("button", { name: "Stop" });
+    await userEvent.click(stop);
+    expect(tauri.agentInterrupt).toHaveBeenCalledWith("s1");
+    await userEvent.keyboard("{Escape}");
+    expect(tauri.agentInterrupt).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders queued messages with a remove control", async () => {
+    useAgentStore.setState({
+      sessions: { s1: { ...emptySession(), hydrated: true, status: "working", queue: [{ id: "q1", parts: [{ type: "text", text: "queued msg" }], createdAt: 1 }] } },
+    });
+    render(<Composer workspace={ws} />);
+    expect(await screen.findByText("queued msg")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove queued message" }));
+    expect(tauri.agentQueueRemove).toHaveBeenCalledWith("s1", "q1");
+  });
+
+  it("selecting a model updates local state and persists via agentSetOptions", async () => {
+    render(<Composer workspace={ws} />);
+    await userEvent.click(await screen.findByRole("button", { name: /model: default/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Opus 4.8" }));
+    expect(tauri.agentSetOptions).toHaveBeenCalledWith("s1", { model: "claude-opus-4-8" });
+    expect(useAgentStore.getState().sessions.s1.model).toBe("claude-opus-4-8");
+  });
+
+  it("selecting a reasoning level updates local state and persists via agentSetOptions", async () => {
+    render(<Composer workspace={ws} />);
+    await userEvent.click(await screen.findByRole("button", { name: /reasoning level: default/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "High" }));
+    expect(tauri.agentSetOptions).toHaveBeenCalledWith("s1", { reasoningLevel: "high" });
+    expect(useAgentStore.getState().sessions.s1.reasoningLevel).toBe("high");
+  });
+
+  it("logs but does not throw when agentSend rejects, and the draft stays cleared", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(tauri.agentSend).mockRejectedValueOnce(new Error("network down"));
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "hello{Enter}");
+    await waitFor(() => expect(consoleError).toHaveBeenCalledWith("[agent] send failed", expect.any(Error)));
+    expect(box).toHaveValue("");
+    consoleError.mockRestore();
+  });
+
+  it("picking a mention replaces the token in the draft and restores caret focus", async () => {
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" }) as HTMLTextAreaElement;
+    await userEvent.type(box, "fix @db");
+    expect(await screen.findByText("scripts/db-repl.ts")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("scripts/db-repl.ts"));
+    expect(box).toHaveValue("fix @scripts/db-repl.ts ");
+    await waitFor(() => expect(box).toHaveFocus());
+    expect(box.selectionStart).toBe(24);
+  });
+
+  it("Escape dismisses an open trigger menu instead of interrupting", async () => {
+    useAgentStore.setState({ sessions: { s1: { ...emptySession(), status: "working", hydrated: true } } });
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    await userEvent.type(box, "fix @db");
+    expect(await screen.findByText("scripts/db-repl.ts")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("scripts/db-repl.ts")).not.toBeInTheDocument();
+    expect(tauri.agentInterrupt).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(tauri.agentInterrupt).toHaveBeenCalledWith("s1");
+  });
+
+  it("registers the composer as a file-drop target and adds chips for dropped paths", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    expect(call).toBeDefined();
+    act(() => call[1].onPaths(["/tmp/Screenshot 2026-07-02.png"]));
+    expect(await screen.findByText("Screenshot 2026-07-02.png")).toBeInTheDocument();
+    // dropped attachments ride along on send
+    await userEvent.type(screen.getByRole("textbox", { name: "Message agent" }), "look{Enter}");
+    expect(tauri.agentSend).toHaveBeenCalledWith("s1", [
+      { type: "text", text: "look" },
+      { type: "attachment", name: "Screenshot 2026-07-02.png", path: "/tmp/Screenshot 2026-07-02.png", mime: "image/png" },
+    ]);
+  });
+
+  it("highlights the input card border while a file is dragged over the composer", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    const card = screen.getByRole("textbox", { name: "Message agent" }).closest("div.rounded-lg") as HTMLElement;
+    expect(card).toHaveClass("border-border");
+    act(() => call[1].onDragState?.(true));
+    expect(card).toHaveClass("border-accent");
+    act(() => call[1].onDragState?.(false));
+    expect(card).toHaveClass("border-border");
+  });
+
+  it("dropping the same path twice does not duplicate the chip", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    expect(await screen.findAllByText("a.png")).toHaveLength(1);
+  });
+
+  it("removing a dropped attachment chip excludes it from send", async () => {
+    render(<Composer workspace={ws} />);
+    await screen.findByRole("textbox", { name: "Message agent" });
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    act(() => call[1].onPaths(["/tmp/a.png"]));
+    await screen.findByText("a.png");
+    await userEvent.click(screen.getByRole("button", { name: "Remove attachment a.png" }));
+    expect(screen.queryByText("a.png")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Message agent" }), "hi{Enter}");
+    expect(tauri.agentSend).toHaveBeenCalledWith("s1", [{ type: "text", text: "hi" }]);
+  });
+
+  it("large pasted text becomes a saved attachment instead of draft text", async () => {
+    vi.mocked(tauri.agentAttachmentSave).mockResolvedValue({ path: "/att/pasted_text_1.txt" });
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    box.focus();
+    await userEvent.paste("x".repeat(3000));
+    await waitFor(() => expect(tauri.agentAttachmentSave).toHaveBeenCalled());
+    expect(await screen.findByText(/pasted_text/)).toBeInTheDocument();
+    expect(box).toHaveValue("");
+  });
+
+  it("falls back to appending pasted text to the draft when saving the attachment fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(tauri.agentAttachmentSave).mockRejectedValueOnce(new Error("disk full"));
+    render(<Composer workspace={ws} />);
+    const box = await screen.findByRole("textbox", { name: "Message agent" });
+    box.focus();
+    await userEvent.paste("y".repeat(3000));
+    await waitFor(() => expect(tauri.agentAttachmentSave).toHaveBeenCalled());
+    await waitFor(() => expect(box).toHaveValue("y".repeat(3000)));
+    consoleError.mockRestore();
+  });
+});

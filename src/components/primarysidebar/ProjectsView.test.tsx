@@ -76,6 +76,7 @@ describe("ProjectsView", () => {
       branch: undefined,
       backend: "claude-code",
       baseBranch: undefined,
+      mode: "terminal",
     }));
     // Creation queues the setup script to stream in the Panel's Setup tab.
     expect(useWorkbench.getState().pendingSetupIds).toContain("w-new");
@@ -106,6 +107,7 @@ describe("ProjectsView", () => {
       branch: "feature/login-page",
       backend: "claude-code",
       baseBranch: undefined,
+      mode: "terminal",
     }));
   });
 
@@ -136,6 +138,7 @@ describe("ProjectsView", () => {
       branch: undefined,
       backend: "codex",
       baseBranch: undefined,
+      mode: "terminal",
     }));
   });
 

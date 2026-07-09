@@ -36,6 +36,7 @@ export function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     status: "active",
     sessionId: "sess-1",
     title: "main",
+    mode: "terminal",
     ...overrides,
   };
 }

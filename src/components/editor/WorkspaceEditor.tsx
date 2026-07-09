@@ -2,6 +2,7 @@ import type { Workspace } from "@/lib/ipc";
 import { useWorkbench } from "@/state/store";
 import { useShallow } from "zustand/react/shallow";
 import { TerminalView } from "./terminal/TerminalView";
+import { AgentChatView } from "@/components/agent/AgentChatView";
 import { cn } from "@/lib/utils";
 
 interface Props { workspace: Workspace; active: boolean; }
@@ -27,6 +28,7 @@ export function WorkspaceEditor({ workspace, active }: Props) {
     >
       {groups.map((g) => {
         const groupActive = active && g.id === activeGroupId;
+        const isPrimaryAgent = workspace.mode === "agent" && g.id === workspaceId;
         return (
           <div
             key={g.id}
@@ -34,7 +36,11 @@ export function WorkspaceEditor({ workspace, active }: Props) {
             aria-hidden={!groupActive}
             className={cn("absolute inset-0", !groupActive && "keep-alive-hidden content-visibility-auto")}
           >
-            <TerminalView workspace={workspace} groupId={g.id} visible={groupActive} />
+            {isPrimaryAgent ? (
+              <AgentChatView workspace={workspace} visible={groupActive} />
+            ) : (
+              <TerminalView workspace={workspace} groupId={g.id} visible={groupActive} />
+            )}
           </div>
         );
       })}

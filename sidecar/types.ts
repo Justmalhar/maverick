@@ -25,6 +25,8 @@ export interface Project {
   createdAt: number;
 }
 
+export type WorkspaceMode = "terminal" | "agent";
+
 export interface Workspace {
   id: string;
   projectId: string;
@@ -34,6 +36,7 @@ export interface Workspace {
   status: "active" | "idle" | "error";
   sessionId: string;
   title?: string;
+  mode: WorkspaceMode;
 }
 
 export interface Message {
@@ -43,6 +46,107 @@ export interface Message {
   content: string;
   toolCallsJson?: string;
   createdAt: number;
+  partsJson?: string;
+  turnId?: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  sessionId: string;
+  messageId: string;
+  gitSha: string;
+  providerSessionId: string | null;
+  providerLineCount: number;
+  createdAt: number;
+}
+
+// ---------- Agent Mode unified protocol ----------
+
+export interface AgentFileChange {
+  path: string;
+  additions: number;
+  deletions: number;
+  kind: "edit" | "create" | "delete";
+}
+
+export type AgentPart =
+  | { type: "text"; text: string }
+  | { type: "thinking"; summary: string; text?: string }
+  | {
+      type: "tool-call";
+      toolUseId: string;
+      toolName: string;
+      title: string;
+      detail?: string;
+      status: "running" | "ok" | "error";
+      output?: string;
+      fileChanges?: AgentFileChange[];
+      durationMs?: number;
+    }
+  | { type: "attachment"; name: string; path: string; mime: string };
+
+export interface AgentChatMessage {
+  id: string;
+  sessionId: string;
+  turnId: string;
+  role: "user" | "assistant" | "system";
+  parts: AgentPart[];
+  createdAt: number;
+}
+
+export interface QueuedMessage {
+  id: string;
+  parts: AgentPart[];
+  createdAt: number;
+}
+
+export type AgentRunStatus = "idle" | "working" | "error";
+
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd?: number;
+  durationMs: number;
+}
+
+export type AgentEvent =
+  | { type: "session-meta"; providerSessionId: string; model: string }
+  | { type: "message-start"; message: AgentChatMessage }
+  | { type: "part-start"; messageId: string; partIndex: number; part: AgentPart }
+  | { type: "part-delta"; messageId: string; partIndex: number; delta: string }
+  | { type: "part-end"; messageId: string; partIndex: number; part: AgentPart }
+  | { type: "message-end"; message: AgentChatMessage }
+  | { type: "turn-end"; turnId: string; usage: AgentUsage; unknownLines?: number }
+  | { type: "status"; status: AgentRunStatus }
+  | { type: "queue-updated"; queue: QueuedMessage[] }
+  | { type: "permission-request"; requestId: string }
+  | { type: "error"; message: string; recoverable: boolean };
+
+export interface AgentEventPayload {
+  workspaceId: string;
+  sessionId: string;
+  event: AgentEvent;
+}
+
+export interface AgentModelOption { id: string; label: string }
+export interface AgentSlashCommand { name: string; description: string }
+
+export interface AgentCapabilities {
+  models: AgentModelOption[];
+  reasoningLevels: AgentModelOption[];
+  slashCommands: AgentSlashCommand[];
+  supportsInterrupt: boolean;
+  supportsConversationRewind: boolean;
+}
+
+export interface AgentSessionSnapshot {
+  sessionId: string;
+  workspaceId: string;
+  status: AgentRunStatus;
+  queue: QueuedMessage[];
+  model: string | null;
+  reasoningLevel: string | null;
+  providerSessionId: string | null;
 }
 
 export interface Skill {

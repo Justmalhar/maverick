@@ -363,3 +363,115 @@ describe("SQLiteStore", () => {
     expect(store.presetList(proj.id).map((p) => p.name)).toEqual(["second", "first"]);
   });
 });
+
+describe("agent mode storage", () => {
+  let store: SQLiteStore;
+
+  beforeEach(() => {
+    let counter = 0;
+    store = new SQLiteStore({
+      path: ":memory:",
+      migrationsDir: defaultMigrationsDir(),
+      ids: {
+        uuid: (prefix) => `${prefix}_${++counter}`,
+        now: () => 1_700_000_000_000 + counter * 1000,
+      },
+    });
+  });
+
+  test("workspaceCreate persists mode and defaults to terminal", () => {
+    const proj = store.projectAdd({ path: "/tmp/mode-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "b", agentBackend: "claude", worktreePath: "/tmp/w" });
+    expect(ws.mode).toBe("terminal");
+    const agentWs = store.workspaceCreate({ projectId: proj.id, branch: "b2", agentBackend: "claude", worktreePath: "/tmp/w2", mode: "agent" });
+    expect(agentWs.mode).toBe("agent");
+    expect(store.workspaceGet(agentWs.id)?.mode).toBe("agent");
+    expect(store.workspaceList(proj.id).find((w) => w.id === agentWs.id)?.mode).toBe("agent");
+  });
+
+  test("session meta round-trips", () => {
+    const proj = store.projectAdd({ path: "/tmp/meta-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "m", agentBackend: "claude", worktreePath: "/tmp/m", mode: "agent" });
+    expect(store.sessionMetaGet(ws.sessionId)).toEqual({
+      workspaceId: ws.id, providerSessionId: null, model: null, reasoningLevel: null,
+    });
+    store.sessionMetaSet(ws.sessionId, { providerSessionId: "prov1", model: "claude-sonnet-4-6" });
+    expect(store.sessionMetaGet(ws.sessionId)).toEqual({
+      workspaceId: ws.id, providerSessionId: "prov1", model: "claude-sonnet-4-6", reasoningLevel: null,
+    });
+  });
+
+  test("agentMessageAppend + messagesList round-trip parts", () => {
+    const proj = store.projectAdd({ path: "/tmp/parts-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "pm", agentBackend: "claude", worktreePath: "/tmp/pm", mode: "agent" });
+    store.agentMessageAppend({
+      id: "m1", sessionId: ws.sessionId, role: "user", content: "hi",
+      partsJson: JSON.stringify([{ type: "text", text: "hi" }]), turnId: "t1", createdAt: 100,
+    });
+    const [m] = store.messagesList({ sessionId: ws.sessionId });
+    expect(m.id).toBe("m1");
+    expect(m.turnId).toBe("t1");
+    expect(JSON.parse(m.partsJson!)).toEqual([{ type: "text", text: "hi" }]);
+  });
+
+  test("messagePartsUpdate patches an already-persisted message's parts_json", () => {
+    const proj = store.projectAdd({ path: "/tmp/parts-update-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "pu", agentBackend: "claude", worktreePath: "/tmp/pu", mode: "agent" });
+    store.agentMessageAppend({
+      id: "m1", sessionId: ws.sessionId, role: "assistant", content: "",
+      partsJson: JSON.stringify([{ type: "tool-call", toolUseId: "t1", toolName: "Bash", title: "Bash", status: "running" }]),
+      turnId: "t1", createdAt: 100,
+    });
+    const result = store.messagePartsUpdate("m1", JSON.stringify([{ type: "tool-call", toolUseId: "t1", toolName: "Bash", title: "Bash", status: "ok", output: "done" }]));
+    expect(result).toEqual({ ok: true });
+    const [m] = store.messagesList({ sessionId: ws.sessionId });
+    expect(JSON.parse(m.partsJson!)).toEqual([{ type: "tool-call", toolUseId: "t1", toolName: "Bash", title: "Bash", status: "ok", output: "done" }]);
+  });
+
+  test("sessionsForWorkspace lists every session ever created for a workspace", () => {
+    const proj = store.projectAdd({ path: "/tmp/sfw-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "sfw", agentBackend: "claude", worktreePath: "/tmp/sfw", mode: "agent" });
+    const secondSessionId = store.sessionCreate(ws.id);
+    const ids = store.sessionsForWorkspace(ws.id);
+    expect(ids).toContain(ws.sessionId);
+    expect(ids).toContain(secondSessionId);
+    expect(ids).toHaveLength(2);
+    expect(store.sessionsForWorkspace("nonexistent-ws")).toEqual([]);
+  });
+
+  test("messagesList tail:true returns the newest N rows in oldest-first order, ignoring offset", () => {
+    const proj = store.projectAdd({ path: "/tmp/tail-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "tail", agentBackend: "claude", worktreePath: "/tmp/tail", mode: "agent" });
+    for (let i = 0; i < 5; i++) {
+      store.agentMessageAppend({ id: `m${i}`, sessionId: ws.sessionId, role: "user", content: `m${i}`, partsJson: "[]", turnId: `t${i}`, createdAt: 10 + i });
+    }
+    const tailed = store.messagesList({ sessionId: ws.sessionId, limit: 3, tail: true });
+    expect(tailed.map((m) => m.id)).toEqual(["m2", "m3", "m4"]);
+    // offset is meaningless in tail mode — must be ignored, not applied.
+    const tailedWithOffset = store.messagesList({ sessionId: ws.sessionId, limit: 3, offset: 1, tail: true });
+    expect(tailedWithOffset.map((m) => m.id)).toEqual(["m2", "m3", "m4"]);
+  });
+
+  test("messagesTruncateFrom deletes the message and everything after", () => {
+    const proj = store.projectAdd({ path: "/tmp/trunc-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "tr", agentBackend: "claude", worktreePath: "/tmp/tr", mode: "agent" });
+    for (const [id, at] of [["m1", 10], ["m2", 20], ["m3", 30]] as const) {
+      store.agentMessageAppend({ id, sessionId: ws.sessionId, role: "user", content: id, partsJson: "[]", turnId: id, createdAt: at });
+    }
+    store.messagesTruncateFrom(ws.sessionId, "m2");
+    expect(store.messagesList({ sessionId: ws.sessionId }).map((m) => m.id)).toEqual(["m1"]);
+  });
+
+  test("checkpoints create/lookup/truncate and workspaceDestroy cascade", () => {
+    const proj = store.projectAdd({ path: "/tmp/cp-test" });
+    const ws = store.workspaceCreate({ projectId: proj.id, branch: "cp", agentBackend: "claude", worktreePath: "/tmp/cp", mode: "agent" });
+    store.checkpointCreate({ id: "c1", sessionId: ws.sessionId, messageId: "m1", gitSha: "sha1", providerSessionId: null, providerLineCount: 0, createdAt: 10 });
+    store.checkpointCreate({ id: "c2", sessionId: ws.sessionId, messageId: "m2", gitSha: "sha2", providerSessionId: "p", providerLineCount: 4, createdAt: 20 });
+    expect(store.checkpointByMessage(ws.sessionId, "m2")?.gitSha).toBe("sha2");
+    store.checkpointsTruncateFrom(ws.sessionId, 20);
+    expect(store.checkpointByMessage(ws.sessionId, "m2")).toBeNull();
+    expect(store.checkpointByMessage(ws.sessionId, "m1")).not.toBeNull();
+    store.workspaceDestroy(ws.id);
+    expect(store.checkpointByMessage(ws.sessionId, "m1")).toBeNull();
+  });
+});

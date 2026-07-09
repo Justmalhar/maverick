@@ -66,6 +66,29 @@ describe("NewWorkspaceDialog — branch naming", () => {
   });
 });
 
+describe("NewWorkspaceDialog — mode toggle", () => {
+  beforeEach(() => {
+    useWorkbench.setState(initial);
+  });
+
+  it("submits mode: agent when the Agent toggle is selected", async () => {
+    setBackends();
+    const { onSubmit } = setup();
+    await userEvent.click(screen.getByRole("button", { name: /agent/i }));
+    await userEvent.type(screen.getByTestId("branch-name-input"), "chat-ui");
+    await userEvent.click(screen.getByTestId("branch-create"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ mode: "agent" }));
+  });
+
+  it("defaults to terminal mode", async () => {
+    setBackends();
+    const { onSubmit } = setup();
+    await userEvent.type(screen.getByTestId("branch-name-input"), "shell-work");
+    await userEvent.click(screen.getByTestId("branch-create"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ mode: "terminal" }));
+  });
+});
+
 describe("NewWorkspaceDialog — agent select", () => {
   beforeEach(() => {
     useWorkbench.setState(initial);

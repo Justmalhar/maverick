@@ -130,6 +130,7 @@ describe("IdentitySection", () => {
           agentBackend: "claude",
           worktreePath: "/p/demo/.maverick/w1",
           status: "idle",
+          mode: "terminal",
           sessionId: "s1",
         },
       ],

@@ -11,6 +11,7 @@ pub async fn workspace_create(
     branch: Option<String>,
     backend: String,
     base_branch: Option<String>,
+    mode: Option<String>,
 ) -> Result<Value, String> {
     state
         .sidecar
@@ -22,6 +23,7 @@ pub async fn workspace_create(
                 "branch": branch,
                 "backend": backend,
                 "baseBranch": base_branch,
+                "mode": mode,
             }),
         )
         .await

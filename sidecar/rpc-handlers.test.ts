@@ -26,7 +26,7 @@ import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
 import type { ChecksModule } from "./checks-module";
-import type { ChecksReport, KanbanTask, Shell } from "./types";
+import type { ChecksReport, KanbanTask, Shell, Workspace } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
 function fakeShell(steps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []): {
@@ -60,7 +60,10 @@ function fakeProc(): ManagedProc {
   };
 }
 
-function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = []) {
+function buildHandlers(
+  shellSteps: Array<{ stdout?: string; exitCode?: number; stderr?: string }> = [],
+  overrides: Partial<ConstructorParameters<typeof RpcHandlers>[0]> = {}
+) {
   const ids = (() => {
     let n = 0;
     return { uuid: (p: string) => `${p}_${++n}`, now: () => 1_700_000_000_000 };
@@ -107,6 +110,7 @@ function buildHandlers(shellSteps: Array<{ stdout?: string; exitCode?: number; s
   return new RpcHandlers({
     store, process: proc, worktree, config, skills, diff, git,
     presets, kanban, mcp, notifications, context, usage, attachments, fileTree,
+    ...overrides,
   });
 }
 
@@ -197,6 +201,29 @@ describe("RpcHandlers", () => {
     // workspace.list with a null projectId must not throw either.
     const all = (await h.dispatch("workspace.list", { projectId: null })) as unknown[];
     expect(Array.isArray(all)).toBe(true);
+  });
+
+  test("workspace.create persists agent mode", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/ws-agent" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/ws-agent",
+      branch: "feature/agent-x",
+      backend: "claude",
+      mode: "agent",
+    })) as Workspace;
+    expect(ws.mode).toBe("agent");
+  });
+
+  test("workspace.create defaults to terminal mode when omitted", async () => {
+    const proj = (await h.dispatch("project.add", { path: "/tmp/ws-terminal" })) as { id: string };
+    const ws = (await h.dispatch("workspace.create", {
+      projectId: proj.id,
+      projectPath: "/tmp/ws-terminal",
+      branch: "feat",
+      backend: "claude",
+    })) as Workspace;
+    expect(ws.mode).toBe("terminal");
   });
 
   test("message.append tolerates toolCallsJson: null", async () => {
@@ -1508,5 +1535,114 @@ describe("file.write / file.readAtRef / git.discard_file", () => {
     rmSync(path, { force: true });
     handlers.stopHookServer();
   });
+});
 
+describe("agent.* RPC surface", () => {
+  test("agent.* methods dispatch to the session manager", async () => {
+    const calls: string[] = [];
+    const fakeAgents = {
+      capabilities: (id: string) => {
+        calls.push(`cap:${id}`);
+        return { models: [], reasoningLevels: [], slashCommands: [], supportsInterrupt: true, supportsConversationRewind: true };
+      },
+      send: async (id: string) => {
+        calls.push(`send:${id}`);
+        return { queued: false, turnId: "t" };
+      },
+      interrupt: async (id: string) => {
+        calls.push(`int:${id}`);
+        return { ok: true };
+      },
+      queueRemove: (id: string, q: string) => {
+        calls.push(`qr:${id}:${q}`);
+        return { ok: true };
+      },
+      setOptions: (id: string) => {
+        calls.push(`opt:${id}`);
+        return { ok: true };
+      },
+      state: (id: string) => {
+        calls.push(`state:${id}`);
+        return { sessionId: "s", workspaceId: id, status: "idle", queue: [], model: null, reasoningLevel: null, providerSessionId: null };
+      },
+      rewind: async (id: string, m: string) => {
+        calls.push(`rw:${id}:${m}`);
+        return { ok: true };
+      },
+      attachmentSave: (id: string, n: string) => {
+        calls.push(`att:${id}:${n}`);
+        return { path: "/x" };
+      },
+      disposeForWorkspace: () => {},
+    };
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, agents: fakeAgents as never, notifier: { write: () => {} } });
+    await handlers.dispatch("agent.capabilities", { workspaceId: "w1" });
+    await handlers.dispatch("agent.send", { sessionId: "s1", parts: [{ type: "text", text: "hi" }] });
+    await handlers.dispatch("agent.interrupt", { sessionId: "s1" });
+    await handlers.dispatch("agent.queueRemove", { sessionId: "s1", queuedId: "q1" });
+    await handlers.dispatch("agent.setOptions", { sessionId: "s1", model: "m" });
+    await handlers.dispatch("agent.state", { workspaceId: "w1" });
+    await handlers.dispatch("agent.rewind", { sessionId: "s1", messageId: "m1" });
+    await handlers.dispatch("agent.attachmentSave", { sessionId: "s1", name: "a.txt", contentBase64: "aGk=" });
+    expect(calls).toEqual([
+      "cap:w1", "send:s1", "int:s1", "qr:s1:q1", "opt:s1", "state:w1", "rw:s1:m1", "att:s1:a.txt",
+    ]);
+  });
+
+  test("workspace.destroy disposes the agent session manager for that workspace", async () => {
+    const disposed: string[] = [];
+    const fakeAgents = { disposeForWorkspace: (id: string) => disposed.push(id) };
+    const handlers = buildHandlers([{}, {}, {}], { agents: fakeAgents as never });
+    const project = (await handlers.dispatch("project.add", { path: "/tmp/agent-dispose" })) as { id: string };
+    const ws = (await handlers.dispatch("workspace.create", {
+      projectId: project.id,
+      projectPath: "/tmp/agent-dispose",
+      branch: "feat",
+      backend: "claude",
+    })) as { id: string };
+    await handlers.dispatch("workspace.destroy", { workspaceId: ws.id });
+    expect(disposed).toEqual([ws.id]);
+  });
+
+  test("workspace.destroy awaits agent session disposal before the worktree is torn down", async () => {
+    const order: string[] = [];
+    let releaseDispose: () => void = () => {};
+    const disposeGate = new Promise<void>((resolve) => (releaseDispose = resolve));
+    const fakeAgents = {
+      disposeForWorkspace: async (id: string) => {
+        order.push(`dispose:${id}`);
+        await disposeGate;
+      },
+    };
+    const fakeWorktree = {
+      async resolveBaseBranch(_pp: string, c: Array<string | undefined>) {
+        return c.find((x) => !!x && x.trim() !== "") ?? "HEAD";
+      },
+      async create() { return { workspaceId: "ws_dispose_order", worktreePath: "/tmp/ws_dispose_order" }; },
+      async destroy() {
+        order.push("worktree-destroy");
+        return { ok: true as const };
+      },
+      async list() { return []; },
+      async prune() { return { ok: true as const }; },
+    };
+    const handlers = buildHandlers([{}, {}, {}], { agents: fakeAgents as never, worktree: fakeWorktree as never });
+    const project = (await handlers.dispatch("project.add", { path: "/tmp/agent-dispose-order" })) as { id: string };
+    const ws = (await handlers.dispatch("workspace.create", {
+      projectId: project.id,
+      projectPath: "/tmp/agent-dispose-order",
+      branch: "feat",
+      backend: "claude",
+    })) as { id: string };
+    const destroyPromise = handlers.dispatch("workspace.destroy", { workspaceId: ws.id });
+    // Give the microtask queue a turn: if disposeForWorkspace weren't awaited,
+    // worktree.destroy would already have run by now.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual([`dispose:${ws.id}`]);
+    releaseDispose();
+    await destroyPromise;
+    expect(order).toEqual([`dispose:${ws.id}`, "worktree-destroy"]);
+  });
 });

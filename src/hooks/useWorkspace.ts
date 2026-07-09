@@ -12,7 +12,7 @@ import {
 } from "@/lib/tauri";
 import { brandFor } from "@/lib/backend-brand";
 import { killTerminalGroupLeaves } from "@/components/editor/terminal/leaf-registry";
-import type { Backend } from "@/lib/ipc";
+import type { Backend, WorkspaceMode } from "@/lib/ipc";
 
 export function useWorkspace() {
   const addWorkspace = useWorkbench((s) => s.addWorkspace);
@@ -26,12 +26,18 @@ export function useWorkspace() {
 
   const create = useCallback(
     // branch === undefined lets the sidecar generate a unique callsign branch.
-    async (projectId: string, branch: string | undefined, backend: string, baseBranch?: string) => {
+    async (
+      projectId: string,
+      branch: string | undefined,
+      backend: string,
+      baseBranch?: string,
+      mode?: WorkspaceMode
+    ) => {
       const project = useWorkbench.getState().projects.find((p) => p.id === projectId);
       if (!project) {
         throw new Error(`Cannot create workspace: project ${projectId} not found`);
       }
-      const ws = await workspaceCreate(projectId, project.path, branch, backend, baseBranch);
+      const ws = await workspaceCreate(projectId, project.path, branch, backend, baseBranch, mode);
       addWorkspace(ws);
       setActiveWorkspace(ws.id);
       // The setup script streams through the Panel's Setup tab — never the

@@ -253,7 +253,7 @@ describe("TerminalView", () => {
   });
 
   it("seeds and reads the split tree under groupId, not workspace.id", async () => {
-    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s" };
+    const ws = { id: "w1", projectId: "p", branch: "b", agentBackend: "claude", worktreePath: "/wt", status: "active" as const, sessionId: "s", mode: "terminal" as const };
     renderWithProviders(<TerminalView workspace={ws} groupId="term-x" visible />);
     await waitFor(() => expect(useWorkbench.getState().splitTrees["term-x"]).toBeDefined());
     const node = useWorkbench.getState().splitTrees["term-x"];

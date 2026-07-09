@@ -546,6 +546,7 @@ function freshWorkspace(id: string) {
   return {
     id, projectId: "p1", branch: "b", agentBackend: "claude",
     worktreePath: `/wt/${id}`, status: "active" as const, sessionId: "s",
+    mode: "terminal" as const,
   };
 }
 
