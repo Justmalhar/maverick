@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { fireEvent, act, createEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
+import { renderWithProviders, screen, waitFor, within } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
 import { makeBackend, makeProject } from "@/test/fixtures";
 import TaskComposer from "./TaskComposer";
@@ -13,7 +13,7 @@ function setup() {
   useWorkbench.setState({
     ...initial,
     projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
-    backends: [makeBackend({ id: "claude", name: "Claude", active: true })],
+    backends: [makeBackend({ id: "claude-code", name: "Claude", active: true })],
   });
   const onSend = vi.fn().mockResolvedValue(undefined);
   renderWithProviders(<TaskComposer onSend={onSend} />);
@@ -184,7 +184,7 @@ describe("TaskComposer", () => {
         prompt: "fix the bug",
         projectId: "p1",
         baseBranch: "main",
-        agentBackend: "claude",
+        agentBackend: "claude-code",
       })
     ));
     expect((screen.getByTestId("composer-prompt") as HTMLTextAreaElement).value).toBe("");
@@ -334,6 +334,16 @@ describe("TaskComposer", () => {
     setup();
     expect(screen.getByTestId("composer-attach-button")).toBeInTheDocument();
     expect(screen.getByTestId("composer-file-input")).toBeInTheDocument();
+  });
+
+  it("shows the backend's brand icon in the agent picker", async () => {
+    setup();
+    await userEvent.click(screen.getByTestId("composer-agent"));
+    // Radix's SelectValue mirrors the selected item's rendered content into the
+    // closed trigger too, so scope to the open option (role="option") rather
+    // than a bare data-testid lookup, which would match twice.
+    const option = await screen.findByRole("option", { name: /Claude/ });
+    expect(within(option).getByTestId("icon-ClaudeCode.Color")).toBeInTheDocument();
   });
 
   it("file selection via input creates utf8 attachment for text file", async () => {

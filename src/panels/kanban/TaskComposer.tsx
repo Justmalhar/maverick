@@ -12,6 +12,7 @@ import {
 import { useWorkbench } from "@/state/store";
 import { gitBranches, projectSettingsGet } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import { brandFor } from "@/lib/backend-brand";
 import type { Attachment } from "@/lib/ipc";
 
 export interface ComposerPayload {
@@ -309,11 +310,18 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
             <SelectValue placeholder="Agent" />
           </SelectTrigger>
           <SelectContent>
-            {backends.map((b) => (
-              <SelectItem key={b.id} value={b.id} className="text-[11px]">
-                {b.name}
-              </SelectItem>
-            ))}
+            {backends.map((b) => {
+              const brand = brandFor(b.id);
+              const BrandIcon = brand?.Icon;
+              return (
+                <SelectItem key={b.id} value={b.id} className="text-[11px]">
+                  <span className="flex items-center gap-2">
+                    {BrandIcon ? <BrandIcon size={14} /> : null}
+                    {brand?.label ?? b.name}
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
 
