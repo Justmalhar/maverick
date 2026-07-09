@@ -12,7 +12,9 @@ function settingsKeyFor(providerId: string): SettingsKey {
 }
 
 function StaticProviderRow({ provider }: { provider: CatalogProvider }) {
-  const [model, setModel] = useSettings(settingsKeyFor(provider.id), provider.defaultModel ?? "");
+  // Only rendered for providers with models.length > 0 (see ModelsSettings below),
+  // and every such provider in providers.json carries a non-null defaultModel.
+  const [model, setModel] = useSettings(settingsKeyFor(provider.id), provider.defaultModel!);
   return (
     <SettingsRow
       title={provider.label}
@@ -60,7 +62,7 @@ function OllamaProviderRow({ provider }: { provider: CatalogProvider }) {
       <SettingsRow
         title={provider.label}
         description="No local models detected. Install one with `ollama pull <model>`."
-        control={<span data-testid="model-ollama-empty" className="text-[12px] text-muted-foreground">None found</span>}
+        control={<span data-testid="model-ollama-empty" className="text-xs text-muted-foreground">None found</span>}
       />
     );
   }
