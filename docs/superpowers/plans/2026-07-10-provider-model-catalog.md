@@ -1238,7 +1238,7 @@ Create `src/lib/backend-brand.test.tsx`:
 ```tsx
 import { describe, it, expect } from "vitest";
 import { BACKEND_BRAND, brandFor } from "./backend-brand";
-import { getProvider } from "./providers/catalog";
+import { getProvider } from "./models/catalog";
 import { KNOWN_BACKEND_NAMES } from "./ipc";
 
 describe("backend-brand", () => {
@@ -1282,7 +1282,7 @@ In `src/lib/backend-brand.tsx`:
 1. Add the import (after `import type { KnownBackendName } from "@/lib/ipc";`):
 
 ```ts
-import { getProvider } from "./providers/catalog";
+import { getProvider } from "./models/catalog";
 ```
 
 2. Replace each `label: "..."` literal in the `BACKEND_BRAND` object (lines 40-83) with a call to `getProvider`. The full replacement for lines 40-83:
@@ -1370,7 +1370,7 @@ import {
   estimateCostFromUsage,
   formatTokens,
 } from "./context-usage";
-import { getDefaultModel } from "./providers/catalog";
+import { getDefaultModel } from "./models/catalog";
 
 describe("context-usage helpers", () => {
   it("estimateTokens uses ~4 chars per token and handles empty input", () => {
