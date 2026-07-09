@@ -5,6 +5,7 @@ import * as framerMotion from "framer-motion";
 import UsagePanel from "./UsagePanel";
 import { useWorkbench } from "@/state/store";
 import { makeWorkspace } from "@/test/fixtures";
+import { getDefaultModel } from "@/lib/models/catalog";
 import type { BackendTokenUsage, UsageSummary } from "@/lib/ipc";
 
 const initial = useWorkbench.getState();
@@ -107,19 +108,26 @@ describe("UsagePanel", () => {
   it("aggregates totals, sessions, and estimated cost across backends", async () => {
     mockSummary(
       summaryOf([
-        // 2000 input tokens at claude pricing ($0.009/1k) = $0.018
+        // 2000 input tokens at claude-code's default model input rate
         usage("claude-code", { inputTokens: 2000, totalTokens: 2000, sessions: 2 }),
-        // 1000 input tokens at codex pricing ($0.006/1k) = $0.006
+        // 1000 input tokens at codex's default model input rate
         usage("codex", { inputTokens: 1000, totalTokens: 1000, sessions: 1 }),
         usage("antigravity"),
       ])
     );
+    const claudeModel = getDefaultModel("claude-code")!;
+    const codexModel = getDefaultModel("codex")!;
+    const expectedCost =
+      (2000 * claudeModel.pricing!.inputPerMillion + 1000 * codexModel.pricing!.inputPerMillion) /
+      1_000_000;
     renderWithProviders(<UsagePanel />);
     await waitFor(() =>
       expect(screen.getByTestId("usage-stat-tokens-today")).toHaveTextContent("3.0k")
     );
     expect(screen.getByTestId("usage-stat-sessions-today")).toHaveTextContent("3");
-    expect(screen.getByTestId("usage-stat-est-cost")).toHaveTextContent("$0.02");
+    expect(screen.getByTestId("usage-stat-est-cost")).toHaveTextContent(
+      `$${expectedCost.toFixed(2)}`
+    );
   });
 
   it("shows the per-backend token breakdown", async () => {

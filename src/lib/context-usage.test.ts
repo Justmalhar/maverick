@@ -2,11 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   estimateTokens,
   estimateTokensForMessages,
-  pricePer1k,
-  estimateCost,
   estimateCostFromUsage,
   formatTokens,
 } from "./context-usage";
+import { getDefaultModel } from "./models/catalog";
 
 describe("context-usage helpers", () => {
   it("estimateTokens uses ~4 chars per token and handles empty input", () => {
@@ -21,31 +20,22 @@ describe("context-usage helpers", () => {
     ).toBe(3); // 1 + 2
   });
 
-  it("pricePer1k matches backend id substrings and defaults to 0", () => {
-    expect(pricePer1k("claude-code")).toBeGreaterThan(0);
-    expect(pricePer1k("codex")).toBeGreaterThan(0);
-    expect(pricePer1k("gemini-2.0")).toBeGreaterThan(0);
-    expect(pricePer1k("ollama")).toBe(0);
-    expect(pricePer1k("unknown-backend")).toBe(0);
+  it("estimateCostFromUsage prices each tier at the backend's default model rate", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheCreationTokens: 0 };
+    const model = getDefaultModel("claude-code")!;
+    const expected = model.pricing!.inputPerMillion + model.pricing!.outputPerMillion + model.pricing!.cachedPerMillion;
+    expect(estimateCostFromUsage(usage, "claude-code")).toBeCloseTo(expected);
   });
 
-  it("estimateCost scales tokens by the backend price", () => {
-    const cost = estimateCost(2000, "claude");
-    expect(cost).toBeCloseTo(2 * pricePer1k("claude"));
-    expect(estimateCost(1000, "ollama")).toBe(0);
+  it("estimateCostFromUsage prices cache-creation tokens at the input rate", () => {
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 1_000_000 };
+    const model = getDefaultModel("claude-code")!;
+    expect(estimateCostFromUsage(usage, "claude-code")).toBeCloseTo(model.pricing!.inputPerMillion);
   });
 
-  it("estimateCostFromUsage discounts cache reads instead of full-rating totalTokens", () => {
-    const usage = {
-      inputTokens: 1000,
-      outputTokens: 0,
-      cacheReadTokens: 100_000,
-      cacheCreationTokens: 0,
-    };
-    // billable = 1000 + 100000*0.1 = 11000, NOT 101000
-    expect(estimateCostFromUsage(usage, "claude")).toBeCloseTo(11 * pricePer1k("claude"));
-    // and far below what blended totalTokens pricing would have charged
-    expect(estimateCostFromUsage(usage, "claude")).toBeLessThan(estimateCost(101_000, "claude"));
+  it("estimateCostFromUsage returns 0 for a backend with no priced default model", () => {
+    const usage = { inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    expect(estimateCostFromUsage(usage, "aider")).toBe(0);
   });
 
   it("formatTokens abbreviates thousands and millions", () => {
