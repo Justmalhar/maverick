@@ -91,7 +91,7 @@ upstream, so we must maintain them ourselves regardless.
 ```
 providers.json  (repo root — single source of truth)
      │
-     ├── src/lib/providers/catalog.ts   (frontend typed accessor)
+     ├── src/lib/models/catalog.ts   (frontend typed accessor)
      │      ├── ModelsSettings.tsx        (Settings > Models pickers)
      │      ├── GeneralSettings.tsx       (Settings > General backend picker)
      │      ├── backend-brand.tsx         (label field only; Icon/tagline/installUrl stay local)
@@ -145,7 +145,7 @@ here is the one used by `backend-brand.tsx` and Settings; icon/tagline/
 installUrl stay in `backend-brand.tsx` since JSON can't carry a React
 component.
 
-### 2. `src/lib/providers/catalog.ts` (new) + `sidecar/providers/catalog.ts` (new)
+### 2. `src/lib/models/catalog.ts` (new) + `sidecar/providers/catalog.ts` (new)
 
 Two thin, independently-tested wrapper modules (one per build root, per the
 project's existing `ipc.ts`/`types.ts` two-trees convention — unavoidable
