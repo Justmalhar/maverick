@@ -64,9 +64,9 @@
         }
       ]
     },
-    { "id": "ollama", "label": "Ollama", "dynamic": true, "defaultModel": null, "models": [] },
     { "id": "aider", "label": "Aider", "dynamic": false, "defaultModel": null, "models": [] },
     { "id": "opencode", "label": "OpenCode", "dynamic": false, "defaultModel": null, "models": [] },
-    { "id": "antigravity", "label": "Antigravity", "dynamic": false, "defaultModel": null, "models": [] }
+    { "id": "antigravity", "label": "Antigravity", "dynamic": false, "defaultModel": null, "models": [] },
+    { "id": "ollama", "label": "Ollama", "dynamic": true, "defaultModel": null, "models": [] }
   ]
 }
