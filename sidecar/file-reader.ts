@@ -42,6 +42,11 @@ function decodeWithBom(buf: Buffer, encoding: Exclude<TextEncoding, "utf8">): st
 // blow the IPC budget and the editor pane is not a pager.
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
+// Above this, refuse to base64-encode into memory/IPC — a defensive backstop
+// against a pathological drag-drop, not the app's real attachment size limit
+// (that's enforced by the caller against the `size` this returns).
+const MAX_BINARY_BYTES = 25 * 1024 * 1024;
+
 export interface FileReaderOptions {
   readFile?: (path: string) => Buffer;
   stat?: (path: string) => { size: number; mtimeMs: number };
@@ -90,5 +95,30 @@ export class FileReader {
       return { content: "", size, binary: true, unreadable: false, mtime, encoding: "utf8" };
     }
     return { content: buf.toString("utf8"), size, binary: false, unreadable: false, mtime, encoding: "utf8" };
+  }
+
+  /**
+   * Reads `filePath` as raw bytes, base64-encoded, regardless of content type.
+   * Unlike `read()` (which intentionally blanks binary content for the text
+   * editor preview), this doesn't care whether the file is text — it's used
+   * to turn a dropped OS file path into attachment content.
+   */
+  readBinary(params: { filePath: string }): { content: string; size: number; unreadable: boolean } {
+    let size: number;
+    try {
+      size = this.stat(params.filePath).size;
+    } catch {
+      return { content: "", size: 0, unreadable: true };
+    }
+    if (size > MAX_BINARY_BYTES) {
+      return { content: "", size, unreadable: false };
+    }
+    let buf: Buffer;
+    try {
+      buf = this.readFile(params.filePath);
+    } catch {
+      return { content: "", size, unreadable: true };
+    }
+    return { content: buf.toString("base64"), size, unreadable: false };
   }
 }

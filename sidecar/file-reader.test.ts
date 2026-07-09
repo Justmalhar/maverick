@@ -127,4 +127,49 @@ describe("FileReader", () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  test("readBinary base64-encodes arbitrary bytes", () => {
+    const fr = new FileReader({
+      stat: () => ({ size: 3, mtimeMs: 1 }),
+      readFile: () => Buffer.from([0x00, 0x01, 0x02]),
+    });
+    const res = fr.readBinary({ filePath: "/a.png" });
+    expect(res).toEqual({ content: Buffer.from([0x00, 0x01, 0x02]).toString("base64"), size: 3, unreadable: false });
+  });
+
+  test("readBinary reports unreadable when stat throws (missing file)", () => {
+    const fr = new FileReader({
+      stat: () => { throw new Error("ENOENT"); },
+      readFile: () => Buffer.from([]),
+    });
+    const res = fr.readBinary({ filePath: "/missing.png" });
+    expect(res).toEqual({ content: "", size: 0, unreadable: true });
+  });
+
+  test("readBinary reports unreadable when the read itself throws (permissions)", () => {
+    const fr = new FileReader({
+      stat: () => ({ size: 10, mtimeMs: 1 }),
+      readFile: () => { throw new Error("EACCES"); },
+    });
+    const res = fr.readBinary({ filePath: "/locked.png" });
+    expect(res).toEqual({ content: "", size: 10, unreadable: true });
+  });
+
+  test("readBinary refuses to slurp a file over the 25MB safety cap, but still reports size", () => {
+    const fr = new FileReader({
+      stat: () => ({ size: 26 * 1024 * 1024, mtimeMs: 1 }),
+      readFile: () => { throw new Error("should not be called"); },
+    });
+    const res = fr.readBinary({ filePath: "/huge.bin" });
+    expect(res).toEqual({ content: "", size: 26 * 1024 * 1024, unreadable: false });
+  });
+
+  test("readBinary round-trips a zero-byte file", () => {
+    const fr = new FileReader({
+      stat: () => ({ size: 0, mtimeMs: 1 }),
+      readFile: () => Buffer.from([]),
+    });
+    const res = fr.readBinary({ filePath: "/empty.bin" });
+    expect(res).toEqual({ content: "", size: 0, unreadable: false });
+  });
 });
