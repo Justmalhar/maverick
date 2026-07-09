@@ -80,8 +80,6 @@ export function PrimarySideBar() {
         ))}
       </nav>
 
-      <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-
       <div className="min-h-0 flex-1">
         <ProjectsView />
       </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Settings2, Plus } from "lucide-react";
+import { Folder, FolderOpen, Settings2, Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useWorkbench } from "@/state/store";
 import type { Project } from "@/lib/ipc";
@@ -70,12 +70,11 @@ export function ProjectItem({ project, onAddWorkspace, onSettings }: Props) {
           aria-expanded={expanded}
           className="flex h-full min-w-0 flex-1 items-center gap-1 pl-2 pr-1 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <ChevronRight
-            className={cn(
-              "h-3 w-3 shrink-0 text-sidebar-fg transition-transform duration-100",
-              expanded && "rotate-90"
-            )}
-          />
+          {expanded ? (
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-sidebar-fg" />
+          ) : (
+            <Folder className="h-3.5 w-3.5 shrink-0 text-sidebar-fg" />
+          )}
           <span className="truncate text-xs font-medium text-foreground">{project.name}</span>
         </button>
 
