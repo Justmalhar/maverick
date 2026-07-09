@@ -4,6 +4,7 @@ import {
   projectSettingsGet,
   projectSettingsUpdate,
   projectSettingsOpenFile,
+  listOllamaModels,
 } from "./tauri";
 import type {
   Project, Workspace, Backend, Skill, Message, KanbanTask, MCPServer,
@@ -107,6 +108,15 @@ describe("ipc types", () => {
     vi.mocked(invoke).mockResolvedValueOnce({ path: "/p/maverick.json" } as never);
     await projectSettingsOpenFile("p1");
     expect(invoke).toHaveBeenCalledWith("project_settings_open_file", { projectId: "p1" });
+  });
+
+  it("listOllamaModels invokes list_ollama_models and returns the result", async () => {
+    (invoke as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { id: "llama3:latest", label: "llama3:latest" },
+    ]);
+    const models = await listOllamaModels();
+    expect(invoke).toHaveBeenCalledWith("list_ollama_models");
+    expect(models).toEqual([{ id: "llama3:latest", label: "llama3:latest" }]);
   });
 
   it("KNOWN_BACKEND_NAMES is the runtime source for KnownBackendName", () => {
