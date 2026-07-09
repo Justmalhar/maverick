@@ -392,6 +392,22 @@ describe("RpcHandlers", () => {
     expect(res.content).toBe("body:/wt/a.md");
   });
 
+  test("file.readBinary delegates to FileReader", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const fileReader = {
+      readBinary: (p: { filePath: string }) => ({
+        content: `b64:${p.filePath}`,
+        size: 4,
+        unreadable: false,
+      }),
+    } as never;
+    const handlers = new RpcHandlers({ store, fileReader, notifier: { write: () => {} } });
+    const res = (await handlers.dispatch("file.readBinary", { filePath: "/wt/a.png" })) as {
+      content: string;
+    };
+    expect(res.content).toBe("b64:/wt/a.png");
+  });
+
   test("file.search delegates to FileSearch", async () => {
     const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
     let received: unknown;
@@ -474,6 +490,29 @@ describe("RpcHandlers", () => {
         task: { projectId: proj.id, title: "bad", status: "archived" },
       })
     ).rejects.toThrow();
+  });
+
+  test("kanban.materializeAttachments delegates to AttachmentMaterializer", async () => {
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    let received: unknown;
+    const attachmentMaterializer = {
+      materialize: (p: unknown) => {
+        received = p;
+        return { paths: ["/wt/.maverick/attachments/task-1/a.png"] };
+      },
+    } as never;
+    const handlers = new RpcHandlers({ store, attachmentMaterializer, notifier: { write: () => {} } });
+    const res = (await handlers.dispatch("kanban.materializeAttachments", {
+      worktreePath: "/wt",
+      taskId: "task-1",
+      attachments: [{ name: "a.png", content: "AA==", encoding: "base64" }],
+    })) as { paths: string[] };
+    expect(res.paths).toEqual(["/wt/.maverick/attachments/task-1/a.png"]);
+    expect(received).toEqual({
+      worktreePath: "/wt",
+      taskId: "task-1",
+      attachments: [{ name: "a.png", content: "AA==", encoding: "base64" }],
+    });
   });
 
   test("preset.list/launch/save_current", async () => {
