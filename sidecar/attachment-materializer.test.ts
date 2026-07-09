@@ -81,6 +81,22 @@ describe("AttachmentMaterializer", () => {
     expect(res.paths).toEqual(["/wt/.maverick/attachments/task-1/attachment"]);
   });
 
+  test("rejects a bare '..' or '.' name instead of resolving to the parent directory", () => {
+    const m = new AttachmentMaterializer({ mkdir: () => {}, writeFile: () => {} });
+    const res = m.materialize({
+      worktreePath: "/wt",
+      taskId: "task-1",
+      attachments: [
+        { name: "..", content: "x", encoding: "utf8" },
+        { name: ".", content: "x", encoding: "utf8" },
+      ],
+    });
+    expect(res.paths).toEqual([
+      "/wt/.maverick/attachments/task-1/attachment",
+      "/wt/.maverick/attachments/task-1/attachment",
+    ]);
+  });
+
   test("returns an empty paths array for a task with no attachments", () => {
     const m = new AttachmentMaterializer({ mkdir: () => {}, writeFile: () => {} });
     const res = m.materialize({ worktreePath: "/wt", taskId: "task-1", attachments: [] });
@@ -101,6 +117,31 @@ describe("AttachmentMaterializer", () => {
       const expectedPath = join(tmp, ".maverick", "attachments", "task-1", "note.txt");
       expect(res.paths).toEqual([expectedPath]);
       expect(readFileSync(expectedPath, "utf8")).toBe("real content");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("default constructor reuses an already-existing attachments directory", () => {
+    const { mkdtempSync, readFileSync, rmSync } = require("fs");
+    const { tmpdir } = require("os");
+    const { join } = require("path");
+    const tmp = mkdtempSync(join(tmpdir(), "mvk-materialize-"));
+    try {
+      const materializer = new AttachmentMaterializer();
+      materializer.materialize({
+        worktreePath: tmp,
+        taskId: "task-1",
+        attachments: [{ name: "first.txt", content: "one", encoding: "utf8" }],
+      });
+      const res = materializer.materialize({
+        worktreePath: tmp,
+        taskId: "task-1",
+        attachments: [{ name: "second.txt", content: "two", encoding: "utf8" }],
+      });
+      const expectedPath = join(tmp, ".maverick", "attachments", "task-1", "second.txt");
+      expect(res.paths).toEqual([expectedPath]);
+      expect(readFileSync(expectedPath, "utf8")).toBe("two");
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

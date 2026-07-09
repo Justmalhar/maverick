@@ -26,10 +26,14 @@ export interface AttachmentMaterializerOptions {
 // never trusted as path components — basename strips directory components,
 // then the character allowlist blocks anything left that could still act as
 // a separator, so "../../etc/passwd" can't escape the attachments directory.
+// A bare ".." or "." survives basename() unchanged (no separator to strip)
+// and passes the allowlist since "." is a permitted character, so both are
+// rejected explicitly to stop join() from resolving into a parent directory.
 function sanitizeName(name: string): string {
   const base = basename(name.replace(/\\/g, "/"));
   const cleaned = base.replace(/[^A-Za-z0-9_.-]/g, "_");
-  return cleaned || "attachment";
+  if (cleaned === "" || cleaned === "." || cleaned === "..") return "attachment";
+  return cleaned;
 }
 
 export class AttachmentMaterializer {
