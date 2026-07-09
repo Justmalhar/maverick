@@ -4,7 +4,7 @@ import { fireEvent, act, createEvent } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { renderWithProviders, screen, waitFor, within } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
-import { makeBackend, makeProject } from "@/test/fixtures";
+import { makeBackend, makeProject, makeWorkspace } from "@/test/fixtures";
 import TaskComposer from "./TaskComposer";
 
 const initial = useWorkbench.getState();
@@ -301,6 +301,22 @@ describe("TaskComposer", () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(<TaskComposer onSend={onSend} defaultProjectId={null} />);
     expect(invoke).not.toHaveBeenCalledWith("git_branches", expect.anything());
+  });
+
+  it("fetches branches on mount from the active workspace's project when no defaultProjectId prop is given", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(["main", "dev"] as never);
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
+      backends: [makeBackend({ id: "claude-code", name: "Claude", active: true })],
+      workspaces: [makeWorkspace({ id: "ws1", projectId: "p1" })],
+      activeWorkspaceId: "ws1",
+    });
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(<TaskComposer onSend={onSend} />);
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
   });
 
   it("re-populates when defaultProjectId changes to a different project", async () => {

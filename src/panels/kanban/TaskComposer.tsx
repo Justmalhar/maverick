@@ -102,6 +102,17 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     fetchBranches(defaultProjectId);
   }, [defaultProjectId, fetchBranches]);
 
+  // Mount-only: when there's no `defaultProjectId` prop but `selectedProjectId`
+  // already has a value from `activeWorkspace` (see the useState initializer
+  // above), the effect above never runs for it and the base-branch select
+  // would silently stay empty forever, blocking `canSend`.
+  useEffect(() => {
+    if (defaultProjectId) return;
+    if (!selectedProjectId) return;
+    fetchBranches(selectedProjectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleProjectChange = (id: string) => {
     setSelectedProjectId(id);
     fetchBranches(id);
