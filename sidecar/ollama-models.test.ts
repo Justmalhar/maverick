@@ -2,14 +2,14 @@ import { describe, test, expect } from "bun:test";
 import { OllamaModels } from "./ollama-models";
 import type { Shell } from "./types";
 
-function fakeShell(opts: { stdout?: string; throws?: Error }): Shell {
+function fakeShell(opts: { stdout?: string; exitCode?: number; throws?: Error }): Shell {
   return {
-    async text(cmd) {
-      if (opts.throws) throw opts.throws;
-      return opts.stdout ?? "";
+    async text() {
+      return "";
     },
     async run() {
-      return { stdout: "", stderr: "", exitCode: 0 };
+      if (opts.throws) throw opts.throws;
+      return { stdout: opts.stdout ?? "", stderr: "", exitCode: opts.exitCode ?? 0 };
     },
   };
 }
@@ -43,6 +43,13 @@ describe("OllamaModels", () => {
 
   test("returns an empty list for completely blank output", async () => {
     const models = new OllamaModels({ shell: fakeShell({ stdout: "" }) });
+    expect(await models.list()).toEqual([]);
+  });
+
+  test("returns an empty list when the command resolves with a non-zero exit code", async () => {
+    const models = new OllamaModels({
+      shell: fakeShell({ stdout: LIST_OUTPUT, exitCode: 1 }),
+    });
     expect(await models.list()).toEqual([]);
   });
 });
