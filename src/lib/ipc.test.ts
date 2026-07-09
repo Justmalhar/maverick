@@ -111,9 +111,9 @@ describe("ipc types", () => {
   });
 
   it("listOllamaModels invokes list_ollama_models and returns the result", async () => {
-    (invoke as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+    vi.mocked(invoke).mockResolvedValueOnce([
       { id: "llama3:latest", label: "llama3:latest" },
-    ]);
+    ] as never);
     const models = await listOllamaModels();
     expect(invoke).toHaveBeenCalledWith("list_ollama_models");
     expect(models).toEqual([{ id: "llama3:latest", label: "llama3:latest" }]);
