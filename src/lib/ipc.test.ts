@@ -12,7 +12,9 @@ import type {
   AuxiliaryView, ThemeDefinition, TerminalTheme, EditorMode, KeybindingMap,
   PresetNode, DiffFile, DiffHunk,
   Branch, BlameLine, ConflictHunk, ConflictResolution,
+  KnownBackendName,
 } from "./ipc";
+import { KNOWN_BACKEND_NAMES } from "./ipc";
 
 describe("ipc types", () => {
   it("Project has the expected shape", () => {
@@ -105,5 +107,13 @@ describe("ipc types", () => {
     vi.mocked(invoke).mockResolvedValueOnce({ path: "/p/maverick.json" } as never);
     await projectSettingsOpenFile("p1");
     expect(invoke).toHaveBeenCalledWith("project_settings_open_file", { projectId: "p1" });
+  });
+
+  it("KNOWN_BACKEND_NAMES is the runtime source for KnownBackendName", () => {
+    expect(KNOWN_BACKEND_NAMES).toEqual([
+      "claude-code", "codex", "gemini", "aider", "opencode", "antigravity", "ollama",
+    ]);
+    const check: KnownBackendName = KNOWN_BACKEND_NAMES[0];
+    expect(check).toBe("claude-code");
   });
 });

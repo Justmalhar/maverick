@@ -657,14 +657,17 @@ export interface BootstrapStatus {
   notificationPermission: NotificationPermission;
 }
 
-export type KnownBackendName =
-  | "claude-code"
-  | "codex"
-  | "gemini"
-  | "aider"
-  | "opencode"
-  | "antigravity"
-  | "ollama";
+export const KNOWN_BACKEND_NAMES = [
+  "claude-code",
+  "codex",
+  "gemini",
+  "aider",
+  "opencode",
+  "antigravity",
+  "ollama",
+] as const;
+
+export type KnownBackendName = (typeof KNOWN_BACKEND_NAMES)[number];
 
 export interface DetectedBackend {
   name: KnownBackendName;
