@@ -25,6 +25,15 @@ pub async fn file_read(state: State<'_, AppState>, file_path: String) -> Result<
 }
 
 #[tauri::command]
+pub async fn file_read_binary(state: State<'_, AppState>, file_path: String) -> Result<Value, String> {
+    state
+        .sidecar
+        .request("file.readBinary", json!({ "filePath": file_path }))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn file_write(
     state: State<'_, AppState>,
     file_path: String,

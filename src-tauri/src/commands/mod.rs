@@ -45,8 +45,8 @@ pub use config::{config_load, config_save};
 pub use context::{context_record, context_usage};
 pub use diff::{diff_get, diff_stage_hunk, diff_unstage_hunk};
 pub use file_tree::{
-    file_read, file_search, file_tree, file_write, fs_watch_add, fs_watch_remove, fs_watch_start,
-    fs_watch_stop,
+    file_read, file_read_binary, file_search, file_tree, file_write, fs_watch_add,
+    fs_watch_remove, fs_watch_start, fs_watch_stop,
 };
 pub use git::{
     ai_branch_name, ai_branch_name_from_diff, ai_commit_message, file_read_at_ref, git_blame, git_branch_create, git_branch_list, git_branches, git_checkout,
@@ -58,7 +58,7 @@ pub use git::{
 };
 pub use hooks::hooks_claude_settings_path;
 pub use instructions::instructions_resolve;
-pub use kanban::{kanban_delete, kanban_list, kanban_upsert};
+pub use kanban::{kanban_delete, kanban_list, kanban_materialize_attachments, kanban_upsert};
 pub use mcp::{mcp_add, mcp_list, mcp_logs, mcp_start, mcp_stop};
 pub use messages::{message_append, messages_list};
 pub use notify::{
