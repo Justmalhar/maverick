@@ -4,7 +4,7 @@
 
 **Goal:** Replace 7 drifted, hardcoded provider/model/pricing lists (Settings UI, Agent Mode, backend branding, cost estimator) with one `providers.json` catalog read directly by both the frontend and sidecar builds, plus live model listing for Ollama.
 
-**Architecture:** `providers.json` at the repo root is the single data source. Two thin typed accessor modules (`src/lib/providers/catalog.ts`, `sidecar/providers/catalog.ts`) each `import` it directly — no IPC round trip for the static catalog. Ollama is the one provider with a real "list models" CLI (`ollama list`), so it gets a dedicated sidecar module + RPC case + Rust passthrough command + frontend wrapper, following the existing `project.destroy` passthrough pattern exactly.
+**Architecture:** `providers.json` at the repo root is the single data source. Two thin typed accessor modules (`src/lib/models/catalog.ts`, `sidecar/providers/catalog.ts`) each `import` it directly — no IPC round trip for the static catalog. Ollama is the one provider with a real "list models" CLI (`ollama list`), so it gets a dedicated sidecar module + RPC case + Rust passthrough command + frontend wrapper, following the existing `project.destroy` passthrough pattern exactly.
 
 **Tech Stack:** TypeScript (Vite frontend, Bun sidecar), Rust (Tauri v2), Vitest, bun:test, cargo test.
 
@@ -92,12 +92,12 @@ git commit -m "refactor: derive KnownBackendName from a runtime array"
 
 **Files:**
 - Create: `providers.json` (repo root)
-- Create: `src/lib/providers/catalog.ts`
-- Test: `src/lib/providers/catalog.test.ts`
+- Create: `src/lib/models/catalog.ts`
+- Test: `src/lib/models/catalog.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/lib/providers/catalog.test.ts`:
+Create `src/lib/models/catalog.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -172,7 +172,7 @@ describe("providers catalog", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun run vitest run src/lib/providers/catalog.test.ts`
+Run: `bun run vitest run src/lib/models/catalog.test.ts`
 Expected: FAIL — cannot find module `./catalog` (neither the file nor `providers.json` exist yet).
 
 - [ ] **Step 3: Implement**
@@ -254,7 +254,7 @@ Create `providers.json` at the repo root:
 }
 ```
 
-Create `src/lib/providers/catalog.ts`:
+Create `src/lib/models/catalog.ts`:
 
 ```ts
 import providersJson from "../../../providers.json";
@@ -322,13 +322,13 @@ export function estimateCost3Tier(providerId: string, usage: CatalogUsage): numb
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun run vitest run src/lib/providers/catalog.test.ts`
+Run: `bun run vitest run src/lib/models/catalog.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add providers.json src/lib/providers/catalog.ts src/lib/providers/catalog.test.ts
+git add providers.json src/lib/models/catalog.ts src/lib/models/catalog.test.ts
 git commit -m "feat: add providers.json catalog and frontend accessor"
 ```
 
@@ -416,7 +416,7 @@ Add `"resolveJsonModule": true` to `sidecar/tsconfig.json`'s `compilerOptions` (
 }
 ```
 
-Create `sidecar/providers/catalog.ts` (identical logic to `src/lib/providers/catalog.ts`, own copy per the project's two-trees convention since `sidecar/` and `src/` are separate build roots — both import the same root `providers.json`):
+Create `sidecar/providers/catalog.ts` (identical logic to `src/lib/models/catalog.ts`, own copy per the project's two-trees convention since `sidecar/` and `src/` are separate build roots — both import the same root `providers.json`):
 
 ```ts
 import providersJson from "../../providers.json";
@@ -853,7 +853,7 @@ If it exists, add the following `it` block to it; if not, create `src/lib/stores
 ```ts
 import { describe, it, expect } from "vitest";
 import { SETTINGS_DEFAULTS } from "./settings-defaults";
-import { getDefaultModel } from "@/lib/providers/catalog";
+import { getDefaultModel } from "@/lib/models/catalog";
 
 describe("SETTINGS_DEFAULTS models.*.id keys", () => {
   it("has exactly the four selectable-model provider keys, no 'pi'", () => {
@@ -905,7 +905,7 @@ In `src/lib/stores/settings-defaults.ts`:
 1. Add the import at the top of the file (after the existing `import type { SettingsKey, SettingsValue } from "@/lib/ipc";`):
 
 ```ts
-import { getDefaultModel } from "@/lib/providers/catalog";
+import { getDefaultModel } from "@/lib/models/catalog";
 ```
 
 2. Replace lines 51-54:
@@ -1036,7 +1036,7 @@ import { SettingsRow } from "../primitives/SettingsRow";
 import { SettingsSelect } from "../primitives/SettingsSelect";
 import { useSettings } from "@/lib/stores/settings";
 import { listOllamaModels } from "@/lib/tauri";
-import { listProviders, type CatalogProvider } from "@/lib/providers/catalog";
+import { listProviders, type CatalogProvider } from "@/lib/models/catalog";
 import type { SettingsKey } from "@/lib/ipc";
 
 function settingsKeyFor(providerId: string): SettingsKey {
@@ -1175,7 +1175,7 @@ In `src/panels/settings/sections/GeneralSettings.tsx`:
 1. Replace the import block's addition — add after the existing imports:
 
 ```ts
-import { listProviders } from "@/lib/providers/catalog";
+import { listProviders } from "@/lib/models/catalog";
 ```
 
 2. Replace lines 12-18:
@@ -1428,7 +1428,7 @@ Replace the entire contents of `src/lib/context-usage.ts`:
 
 ```ts
 import type { Message } from "@/lib/ipc";
-import { estimateCost3Tier, type CatalogUsage } from "@/lib/providers/catalog";
+import { estimateCost3Tier, type CatalogUsage } from "@/lib/models/catalog";
 
 // A rough heuristic — ~4 characters per token. Used for client-side estimates
 // only; the figure is always surfaced to the user as an estimate, never billed.
