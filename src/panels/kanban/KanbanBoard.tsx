@@ -6,14 +6,15 @@ import {
   gitDiffStat,
   kanbanDelete,
   kanbanList,
+  kanbanMaterializeAttachments,
   kanbanUpsert,
   projectSettingsGet,
 } from "@/lib/tauri";
-import { buildLaunchPrompt } from "@/lib/agent-prompt";
+import { appendAttachments, buildLaunchPrompt } from "@/lib/agent-prompt";
 import { resolveStartupLaunch } from "@/lib/launch";
 import { resolveTaskBranch } from "@/lib/feature-name";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import type { DiffStat, KanbanTask } from "@/lib/ipc";
+import type { Attachment, DiffStat, KanbanTask } from "@/lib/ipc";
 import KanbanColumn from "./KanbanColumn";
 import KanbanTaskDialog from "./KanbanTaskDialog";
 import TaskComposer, { type ComposerPayload } from "./TaskComposer";
@@ -31,6 +32,24 @@ const DEFAULT_COLUMNS: KanbanTask["status"][] = [
 function stageLaunch(workspaceId: string, backend: string, launchPrompt: string): void {
   const { command, args } = resolveStartupLaunch(backend);
   useWorkbench.getState().setLaunchSpec(workspaceId, { command, args, prompt: launchPrompt });
+}
+
+// Best-effort: a materialization failure (e.g. disk full) must not block the
+// launch — the task still starts, just without attachment paths in the prompt.
+async function materializeAndAppend(
+  worktreePath: string,
+  taskId: string,
+  attachments: Attachment[],
+  prompt: string
+): Promise<string> {
+  if (attachments.length === 0) return prompt;
+  try {
+    const { paths } = await kanbanMaterializeAttachments(worktreePath, taskId, attachments);
+    return appendAttachments(prompt, paths);
+  } catch (e) {
+    console.warn("materializeAttachments failed; launching without attachments", e);
+    return prompt;
+  }
 }
 
 
@@ -182,7 +201,12 @@ export default function KanbanBoard() {
         instructions: settings?.preferences?.branchRename,
       });
       const ws = await create(task.projectId, branch, backend, baseBranch);
-      const launchPrompt = settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt;
+      const launchPrompt = await materializeAndAppend(
+        ws.worktreePath,
+        task.id,
+        task.attachments,
+        settings ? buildLaunchPrompt(settings.preferences, prompt) : prompt
+      );
       stageLaunch(ws.id, backend, launchPrompt);
       // Link the task to the workspace it just spawned — without this the card's
       // View button (and the diff-stat lookup) can't find the workspace.
@@ -236,7 +260,12 @@ export default function KanbanBoard() {
         instructions: settings?.preferences?.branchRename,
       });
       const ws = await create(payload.projectId, branch, payload.agentBackend, payload.baseBranch);
-      const prompt = settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt;
+      const prompt = await materializeAndAppend(
+        ws.worktreePath,
+        task.id,
+        payload.attachments,
+        settings ? buildLaunchPrompt(settings.preferences, payload.prompt) : payload.prompt
+      );
       stageLaunch(ws.id, payload.agentBackend, prompt);
 
       // Spread the persisted task so the description (and every other field) is

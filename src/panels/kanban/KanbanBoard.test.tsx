@@ -158,6 +158,139 @@ describe("KanbanBoard", () => {
     );
   });
 
+  it("onSend materializes attachments into the new workspace's worktree and appends paths to the launch prompt", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "A", path: "/p1" })],
+      backends: [makeBackend({ id: "claude", active: true })],
+    });
+    // "hello" as bytes, so the composer's own base64 encoder (fixed in Task 9)
+    // produces exactly this — the mock below must match what the component
+    // will actually send, not an arbitrary string.
+    const attachments = [{ name: "screenshot.png", content: "aGVsbG8=", encoding: "base64" as const, size: 5 }];
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [];
+      if (cmd === "git_branches") return ["main"];
+      if (cmd === "kanban_upsert") return makeKanbanTask({ id: "t-new", status: "todo", attachments });
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "main", worktreePath: "/wt/ws-new" });
+      if (cmd === "kanban_materialize_attachments")
+        return { paths: ["/wt/ws-new/.maverick/attachments/t-new/screenshot.png"] };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByRole("option", { name: "A" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
+
+    // The mocked kanban_upsert response above is what the assertions below
+    // check against, but `onSend` builds its RPC call from `payload.attachments`
+    // — the attachments actually present in the composer's own state — so a
+    // real file must be attached through the UI, or `payload.attachments`
+    // stays empty and the implementation correctly never calls
+    // kanban_materialize_attachments (which would make this test fail for
+    // the wrong reason: not "feature broken", but "test forgot to attach").
+    const fileInput = screen.getByTestId("composer-file-input");
+    const mockFile = new File([new TextEncoder().encode("hello")], "screenshot.png", { type: "image/png" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
+    await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
+    await userEvent.click(screen.getByTestId("composer-send"));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("kanban_materialize_attachments", {
+        worktreePath: "/wt/ws-new",
+        taskId: "t-new",
+        attachments,
+      })
+    );
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws-new"]?.prompt).toBe(
+        "Fix the thing\n\n[Attached files]\n- /wt/ws-new/.maverick/attachments/t-new/screenshot.png"
+      )
+    );
+  });
+
+  it("onSend skips materialization and launches normally when there are no attachments", async () => {
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "A", path: "/p1" })],
+      backends: [makeBackend({ id: "claude", active: true })],
+    });
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [];
+      if (cmd === "git_branches") return ["main"];
+      if (cmd === "kanban_upsert") return makeKanbanTask({ id: "t-new", status: "todo", attachments: [] });
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "main", worktreePath: "/wt/ws-new" });
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByRole("option", { name: "A" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
+    await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
+    await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
+    await userEvent.click(screen.getByTestId("composer-send"));
+
+    await waitFor(() => expect(useWorkbench.getState().launchSpecs["ws-new"]?.prompt).toBe("Fix the thing"));
+    expect(invoke).not.toHaveBeenCalledWith("kanban_materialize_attachments", expect.anything());
+  });
+
+  it("onSend logs a warning and launches without attachment paths when materialization fails", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "A", path: "/p1" })],
+      backends: [makeBackend({ id: "claude", active: true })],
+    });
+    const attachments = [{ name: "a.png", content: "AA==", encoding: "base64" as const, size: 1 }];
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [];
+      if (cmd === "git_branches") return ["main"];
+      if (cmd === "kanban_upsert") return makeKanbanTask({ id: "t-new", status: "todo", attachments });
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "main", worktreePath: "/wt/ws-new" });
+      if (cmd === "kanban_materialize_attachments") throw new Error("disk full");
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => expect(screen.getByTestId("kanban-board")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("composer-project"));
+    await userEvent.click(await screen.findByRole("option", { name: "A" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", expect.any(Object)));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
+
+    // Same reason as the previous test: attach through the real UI so
+    // `payload.attachments` is non-empty and kanban_materialize_attachments
+    // actually gets called (and, here, throws).
+    const fileInput = screen.getByTestId("composer-file-input");
+    const mockFile = new File([new Uint8Array([0])], "a.png", { type: "image/png" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByTestId("composer-prompt"), "Fix the thing");
+    await waitFor(() => expect(screen.getByTestId("composer-send")).not.toBeDisabled());
+    await userEvent.click(screen.getByTestId("composer-send"));
+
+    await waitFor(() => expect(useWorkbench.getState().launchSpecs["ws-new"]?.prompt).toBe("Fix the thing"));
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "materializeAttachments failed; launching without attachments",
+      expect.any(Error)
+    );
+    consoleWarn.mockRestore();
+  });
+
   it("kanbanList error shows error bar", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("listfail"));
     renderWithProviders(<KanbanBoard />);
@@ -471,6 +604,53 @@ describe("KanbanBoard", () => {
         expect.objectContaining({
           task: expect.objectContaining({ status: "in_progress", workspaceId: "ws-new" }),
         })
+      )
+    );
+  });
+
+  it("handleStart materializes an existing task's attachments and appends paths to the launch prompt", async () => {
+    const project = makeProject({ id: "p1", path: "/p1" });
+    useWorkbench.setState({
+      ...initial,
+      projects: [project],
+      backends: [makeBackend({ id: "claude-code", command: "claude", active: true })],
+    });
+    const attachments = [{ name: "notes.txt", content: "hello", encoding: "utf8" as const, size: 5 }];
+    const task = makeKanbanTask({
+      id: "t1",
+      projectId: "p1",
+      title: "Implement auth",
+      description: "",
+      branch: "feat/auth",
+      agentBackend: "claude-code",
+      status: "todo",
+      attachments,
+    });
+
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "kanban_list") return [task];
+      if (cmd === "workspace_create")
+        return makeWorkspace({ id: "ws-new", projectId: "p1", branch: "feat/auth", worktreePath: "/wt/ws-new" });
+      if (cmd === "kanban_materialize_attachments")
+        return { paths: ["/wt/ws-new/.maverick/attachments/t1/notes.txt"] };
+      if (cmd === "kanban_upsert") return { ...task, status: "in_progress" };
+      return undefined;
+    }) as unknown as typeof invoke);
+
+    renderWithProviders(<KanbanBoard />);
+    await waitFor(() => screen.getByTestId("kanban-board"));
+    await userEvent.click(screen.getByTestId("kanban-start"));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("kanban_materialize_attachments", {
+        worktreePath: "/wt/ws-new",
+        taskId: "t1",
+        attachments,
+      })
+    );
+    await waitFor(() =>
+      expect(useWorkbench.getState().launchSpecs["ws-new"]?.prompt).toBe(
+        "Implement auth\n\n[Attached files]\n- /wt/ws-new/.maverick/attachments/t1/notes.txt"
       )
     );
   });
