@@ -380,6 +380,17 @@ describe("TaskComposer", () => {
     expect(screen.getByTestId("composer-attachment").textContent).toContain("image.png");
   });
 
+  it("file selection with a large binary file does not stack-overflow (regression)", async () => {
+    setup();
+    const fileInput = screen.getByTestId("composer-file-input");
+    const bytes = new Uint8Array(150_000).fill(7);
+    const mockFile = new File([bytes], "big-image.png", { type: "image/png" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("big-image.png");
+    expect(screen.queryByTestId("composer-error")).not.toBeInTheDocument();
+  });
+
   it("file selection with oversized file shows error and no attachment", async () => {
     setup();
     const fileInput = screen.getByTestId("composer-file-input");

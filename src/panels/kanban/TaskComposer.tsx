@@ -43,6 +43,19 @@ function pickDefaultBranch(branches: string[], configured?: string): string {
   );
 }
 
+// btoa(String.fromCharCode(...bytes)) spreads the whole array as call
+// arguments and stack-overflows past a few hundred KB. Chunking keeps every
+// spread call small regardless of file size.
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 interface Props {
   onSend: (payload: ComposerPayload) => Promise<void>;
   defaultProjectId?: string | null;
@@ -154,7 +167,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         ]);
       } else {
         const buffer = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const base64 = arrayBufferToBase64(buffer);
         setAttachments((prev) => [
           ...prev,
           { name: file.name, content: base64, encoding: "base64", size: file.size },
