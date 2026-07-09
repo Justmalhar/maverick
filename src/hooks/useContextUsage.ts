@@ -33,6 +33,8 @@ export async function recordUsageEstimate(
   backend: string
 ): Promise<ContextUsage> {
   const tokens = estimateTokensForMessages(messages);
+  // Message text alone carries no input/output/cache breakdown, so price the
+  // whole estimate at the input rate rather than guessing a split.
   const cost = estimateCostFromUsage(
     { inputTokens: tokens, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
     backend,
