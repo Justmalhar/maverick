@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { Paperclip, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkbench } from "@/state/store";
-import { gitBranches, projectSettingsGet } from "@/lib/tauri";
+import { fileReadBinary, gitBranches, projectSettingsGet } from "@/lib/tauri";
+import { registerFileDropTarget } from "@/lib/file-drop";
 import { cn } from "@/lib/utils";
 import { brandFor } from "@/lib/backend-brand";
 import type { Attachment } from "@/lib/ipc";
@@ -83,6 +84,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const fetchBranches = useCallback(
     async (projectId: string) => {
@@ -176,18 +178,37 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     }
   }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    if (e.dataTransfer.files) {
-      await processFiles(e.dataTransfer.files);
+  const processPaths = useCallback(async (paths: string[]) => {
+    setError(null);
+    for (const path of paths) {
+      const name = path.split(/[/\\]/).pop() ?? path;
+      let result: Awaited<ReturnType<typeof fileReadBinary>>;
+      try {
+        result = await fileReadBinary(path);
+      } catch {
+        setError(`Could not read file: ${name}`);
+        continue;
+      }
+      if (result.unreadable) {
+        setError(`Could not read file: ${name}`);
+        continue;
+      }
+      if (result.size > 2 * 1024 * 1024) {
+        setError(`File too large (max 2 MB): ${name}`);
+        continue;
+      }
+      setAttachments((prev) => [
+        ...prev,
+        { name, content: result.content, encoding: "base64", size: result.size },
+      ]);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    return registerFileDropTarget(el, { onPaths: processPaths, onDragState: setIsDraggingOver });
+  }, [processPaths]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -229,14 +250,12 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
 
   return (
     <div
+      ref={rootRef}
       data-testid="task-composer"
       className={cn(
         "border-b border-border/60 bg-card/30 px-4 py-3 relative",
         isDraggingOver && "ring-1 ring-inset ring-primary"
       )}
-      onDragOver={handleDragOver}
-      onDragLeave={() => setIsDraggingOver(false)}
-      onDrop={handleDrop}
     >
       {isDraggingOver && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/85 backdrop-blur-xs border border-dashed border-primary/60 rounded-md pointer-events-none transition-all duration-200">
