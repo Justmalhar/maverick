@@ -8,12 +8,10 @@ import { useSettings } from "@/lib/stores/settings";
 import { useWorkbench } from "@/state/store";
 import { resetFirstRun } from "@/lib/tauri";
 import { availableShells, DEFAULT_SHELL_KIND } from "@/lib/terminal-shell";
+import { listProviders } from "@/lib/models/catalog";
 
 const BACKENDS = [
-  { value: "claude", label: "Claude" },
-  { value: "gemini", label: "Gemini" },
-  { value: "codex", label: "Codex" },
-  { value: "pi", label: "Pi" },
+  ...listProviders().map((p) => ({ value: p.id, label: p.label })),
   { value: "other", label: "Other (custom binary)" },
 ];
 
@@ -24,7 +22,7 @@ const SHELL_LABELS: Record<string, string> = {
 };
 
 export default function GeneralSettings() {
-  const [defaultBackend, setDefaultBackend] = useSettings("general.defaultBackend", "claude");
+  const [defaultBackend, setDefaultBackend] = useSettings("general.defaultBackend", "claude-code");
   const [binPath, setBinPath] = useSettings("general.defaultBackendBinPath", "");
   const [defaultBranch, setDefaultBranch] = useSettings("general.defaultBranch", "origin/main");
   const [namingScheme, setNamingScheme] = useSettings("general.namingScheme", "maverick/{feature-name}");

@@ -7,7 +7,7 @@ import { getDefaultModel } from "@/lib/models/catalog";
 
 export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   // General
-  "general.defaultBackend": "claude",
+  "general.defaultBackend": "claude-code",
   "general.defaultBackendBinPath": "",
   "general.defaultBranch": "origin/main",
   "general.namingScheme": "maverick/{feature-name}",

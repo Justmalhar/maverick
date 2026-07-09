@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import GeneralSettings from "./GeneralSettings";
 import { _resetSettingsStoreForTests, useSettingsStore } from "@/lib/stores/settings";
 import { useWorkbench } from "@/state/store";
+import { listProviders } from "@/lib/models/catalog";
 
 const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>;
 
@@ -23,6 +24,21 @@ describe("GeneralSettings", () => {
     expect(toggle).toBeChecked();
     await userEvent.click(toggle);
     expect(toggle).not.toBeChecked();
+  });
+
+  // general-default-backend is a Radix Select (SettingsSelect), not a native
+  // <select> — it renders as a button[role=combobox] plus a portalled
+  // listbox, so options must be opened and read via role="option" rather
+  // than `select.options`. The DOM only exposes each option's label (no raw
+  // `value` attribute), so this asserts against the catalog's labels —
+  // which is also order-independent of any one hardcoded id list.
+  it("backend picker options match the providers catalog plus 'other'", async () => {
+    renderWithProviders(<GeneralSettings />);
+    const trigger = screen.getByTestId("general-default-backend");
+    await userEvent.click(trigger);
+    const options = await screen.findAllByRole("option");
+    const labels = options.map((o) => o.textContent);
+    expect(labels).toEqual([...listProviders().map((p) => p.label), "Other (custom binary)"]);
   });
 
   it("startup command onChange updates the store value (missing function coverage)", () => {
