@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { contextRecord, contextUsage } from "@/lib/tauri";
 import {
-  estimateCost,
+  estimateCostFromUsage,
   estimateTokensForMessages,
 } from "@/lib/context-usage";
 import type { ContextUsage, Message } from "@/lib/ipc";
@@ -33,7 +33,12 @@ export async function recordUsageEstimate(
   backend: string
 ): Promise<ContextUsage> {
   const tokens = estimateTokensForMessages(messages);
-  const cost = estimateCost(tokens, backend);
+  // Message text alone carries no input/output/cache breakdown, so price the
+  // whole estimate at the input rate rather than guessing a split.
+  const cost = estimateCostFromUsage(
+    { inputTokens: tokens, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    backend,
+  );
   const usage = await contextRecord(sessionId, tokens, cost);
   if (typeof window !== "undefined") {
     window.dispatchEvent(

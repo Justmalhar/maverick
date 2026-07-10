@@ -3,15 +3,15 @@ import { join } from "path";
 import { homedir } from "os";
 import type { AgentCapabilities, AgentEvent, AgentFileChange, AgentPart, AgentSlashCommand } from "../../types";
 import type { AgentProviderAdapter, SpawnOpts, TurnContext } from "../provider";
+import { getProvider } from "../../providers/catalog";
 
 const MAX_TOOL_OUTPUT = 4000;
 
-const MODELS = [
-  { id: "default", label: "Default" },
-  { id: "claude-opus-4-8", label: "Opus 4.8" },
-  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
-];
+const DEFAULT_MODEL_SENTINEL = { id: "default", label: "Default" };
+
+function catalogModels() {
+  return [DEFAULT_MODEL_SENTINEL, ...getProvider("claude-code")!.models.map((m) => ({ id: m.id, label: m.label }))];
+}
 
 const REASONING = [
   { id: "default", label: "Default" },
@@ -229,7 +229,7 @@ export const claudeAdapter: AgentProviderAdapter = {
 
   capabilities(worktreePath: string): AgentCapabilities {
     return {
-      models: MODELS,
+      models: catalogModels(),
       reasoningLevels: REASONING,
       slashCommands: [
         { name: "/compact", description: "Compact the conversation context" },

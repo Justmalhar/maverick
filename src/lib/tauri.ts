@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AgentCapabilities,
   AgentEventPayload,
+  AgentModelOption,
   AgentPart,
   AgentSessionSnapshot,
   BlameLine,
@@ -725,6 +726,10 @@ export async function resetFirstRun(): Promise<void> {
 
 export async function detectBackends(): Promise<DetectedBackend[]> {
   return invoke("detect_backends");
+}
+
+export async function listOllamaModels(): Promise<AgentModelOption[]> {
+  return invoke("list_ollama_models");
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {

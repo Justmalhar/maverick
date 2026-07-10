@@ -3,10 +3,11 @@
 // every known key — even the ones the user hasn't explicitly set.
 
 import type { SettingsKey, SettingsValue } from "@/lib/ipc";
+import { getDefaultModel } from "@/lib/models/catalog";
 
 export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   // General
-  "general.defaultBackend": "claude",
+  "general.defaultBackend": "claude-code",
   "general.defaultBackendBinPath": "",
   "general.defaultBranch": "origin/main",
   "general.namingScheme": "maverick/{feature-name}",
@@ -47,11 +48,13 @@ export const SETTINGS_DEFAULTS: Record<SettingsKey, SettingsValue> = {
   "git.autoFetchMinutes": 5,
   "git.gpgSign": false,
 
-  // Models
-  "models.claude.id": "claude-opus-4-7",
-  "models.codex.id": "gpt-5",
-  "models.gemini.id": "gemini-2.5-pro",
-  "models.pi.id": "pi-1",
+  // Models — defaults come from the providers catalog (providers.json), not
+  // literals, so this file can't drift from ModelsSettings.tsx again.
+  // Ollama has no static default; its models are fetched live via `ollama list`.
+  "models.claude-code.id": getDefaultModel("claude-code")!.id,
+  "models.codex.id": getDefaultModel("codex")!.id,
+  "models.gemini.id": getDefaultModel("gemini")!.id,
+  "models.ollama.id": "",
 
   // Terminal launch commands
   "terminal.claude.command": "claude --continue",

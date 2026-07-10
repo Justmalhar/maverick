@@ -561,10 +561,10 @@ export type SettingsKey =
   | "git.template"
   | "git.autoFetchMinutes"
   | "git.gpgSign"
-  | "models.claude.id"
+  | "models.claude-code.id"
   | "models.codex.id"
   | "models.gemini.id"
-  | "models.pi.id"
+  | "models.ollama.id"
   | "terminal.claude.command"
   | "terminal.codex.command"
   | "terminal.gemini.command"
@@ -657,14 +657,17 @@ export interface BootstrapStatus {
   notificationPermission: NotificationPermission;
 }
 
-export type KnownBackendName =
-  | "claude-code"
-  | "codex"
-  | "gemini"
-  | "aider"
-  | "opencode"
-  | "antigravity"
-  | "ollama";
+export const KNOWN_BACKEND_NAMES = [
+  "claude-code",
+  "codex",
+  "gemini",
+  "aider",
+  "opencode",
+  "antigravity",
+  "ollama",
+] as const;
+
+export type KnownBackendName = (typeof KNOWN_BACKEND_NAMES)[number];
 
 export interface DetectedBackend {
   name: KnownBackendName;

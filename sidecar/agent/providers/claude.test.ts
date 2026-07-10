@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { claudeAdapter } from "./claude";
 import { adapterFor } from "../provider";
+import { getProvider } from "../../providers/catalog";
 import type { AgentEvent } from "../../types";
 import type { TurnContext } from "../provider";
 
@@ -265,6 +266,14 @@ describe("claudeAdapter.capabilities", () => {
     } finally {
       rmSync(worktree, { recursive: true, force: true });
     }
+  });
+});
+
+describe("claudeAdapter.capabilities", () => {
+  test("models come from the providers catalog plus the 'default' sentinel", () => {
+    const caps = claudeAdapter.capabilities("/w");
+    const catalogModels = getProvider("claude-code")!.models.map((m) => ({ id: m.id, label: m.label }));
+    expect(caps.models).toEqual([{ id: "default", label: "Default" }, ...catalogModels]);
   });
 });
 

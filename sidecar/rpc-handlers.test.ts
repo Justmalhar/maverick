@@ -26,6 +26,7 @@ import { FileTree } from "./file-tree";
 import { Caffeinate } from "./caffeinate";
 import { InstructionsResolver } from "./instructions-resolver";
 import type { ChecksModule } from "./checks-module";
+import { OllamaModels } from "./ollama-models";
 import type { ChecksReport, KanbanTask, Shell, Workspace } from "./types";
 import type { ManagedProc, Spawner } from "./process-manager";
 
@@ -170,6 +171,21 @@ describe("RpcHandlers", () => {
     const got = (await handlers.dispatch("checks.get", { worktreePath: "/wt" })) as ChecksReport;
     expect(calls).toEqual([{ worktreePath: "/wt" }]);
     expect(got).toBe(report);
+  });
+
+  test("providers.listOllamaModels delegates to the injected OllamaModels", async () => {
+    const calls: string[] = [];
+    const ollamaModels = {
+      async list() {
+        calls.push("list");
+        return [{ id: "llama3:latest", label: "llama3:latest" }];
+      },
+    } as unknown as OllamaModels;
+    const store = new SQLiteStore({ path: ":memory:", migrationsDir: defaultMigrationsDir() });
+    const handlers = new RpcHandlers({ store, ollamaModels });
+    const got = await handlers.dispatch("providers.listOllamaModels", {});
+    expect(calls).toEqual(["list"]);
+    expect(got).toEqual([{ id: "llama3:latest", label: "llama3:latest" }]);
   });
 
   test("workspace.create + list + destroy", async () => {

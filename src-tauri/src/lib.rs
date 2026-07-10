@@ -242,6 +242,7 @@ pub fn run() {
             project_add,
             project_list,
             project_destroy,
+            list_ollama_models,
             project_settings_get,
             project_settings_update,
             project_settings_open_file,

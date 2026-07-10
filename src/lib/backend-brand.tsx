@@ -8,6 +8,7 @@ import {
   OpenCode,
 } from "@lobehub/icons";
 import type { KnownBackendName } from "@/lib/ipc";
+import { getProvider } from "./models/catalog";
 
 type IconProps = { size?: number };
 type IconComponent = React.ComponentType<IconProps>;
@@ -39,43 +40,43 @@ function AiderFallback({ size = 24 }: IconProps) {
 
 export const BACKEND_BRAND: Record<KnownBackendName, BackendBrand> = {
   "claude-code": {
-    label: "Claude Code",
+    label: getProvider("claude-code")!.label,
     Icon: color(ClaudeCode),
     tagline: "Anthropic's official agentic CLI.",
     installUrl: "https://docs.claude.com/en/docs/claude-code",
   },
   codex: {
-    label: "Codex",
+    label: getProvider("codex")!.label,
     Icon: color(Codex),
     tagline: "OpenAI's coding agent CLI.",
     installUrl: "https://developers.openai.com/codex/cli",
   },
   gemini: {
-    label: "Gemini CLI",
+    label: getProvider("gemini")!.label,
     Icon: color(GeminiCLI),
     tagline: "Google's open-source CLI for Gemini.",
     installUrl: "https://geminicli.com/docs/get-started/installation/",
   },
   aider: {
-    label: "Aider",
+    label: getProvider("aider")!.label,
     Icon: AiderFallback,
     tagline: "AI pair programming in your terminal.",
     installUrl: "https://aider.chat/docs/install.html",
   },
   opencode: {
-    label: "OpenCode",
+    label: getProvider("opencode")!.label,
     Icon: color(OpenCode),
     tagline: "Open-source terminal coding agent.",
     installUrl: "https://opencode.ai",
   },
   antigravity: {
-    label: "Antigravity",
+    label: getProvider("antigravity")!.label,
     Icon: color(Antigravity),
     tagline: "Google's agentic coding IDE.",
     installUrl: "https://antigravity.google",
   },
   ollama: {
-    label: "Ollama",
+    label: getProvider("ollama")!.label,
     Icon: color(Ollama),
     tagline: "Local models on your machine.",
     installUrl: "https://ollama.com",

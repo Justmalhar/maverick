@@ -1,0 +1,72 @@
+{
+  "providers": [
+    {
+      "id": "claude-code",
+      "label": "Claude Code",
+      "dynamic": false,
+      "defaultModel": "claude-opus-4-8",
+      "models": [
+        {
+          "id": "claude-opus-4-8",
+          "label": "Opus 4.8",
+          "pricing": { "inputPerMillion": 15, "outputPerMillion": 75, "cachedPerMillion": 1.5 }
+        },
+        {
+          "id": "claude-sonnet-5",
+          "label": "Sonnet 5",
+          "pricing": { "inputPerMillion": 3, "outputPerMillion": 15, "cachedPerMillion": 0.3 }
+        },
+        {
+          "id": "claude-haiku-4-5-20251001",
+          "label": "Haiku 4.5",
+          "pricing": { "inputPerMillion": 0.8, "outputPerMillion": 4, "cachedPerMillion": 0.08 }
+        }
+      ]
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "dynamic": false,
+      "defaultModel": "gpt-5",
+      "models": [
+        {
+          "id": "gpt-5",
+          "label": "GPT-5",
+          "pricing": { "inputPerMillion": 10, "outputPerMillion": 30, "cachedPerMillion": 1 }
+        },
+        {
+          "id": "gpt-5-mini",
+          "label": "GPT-5 Mini",
+          "pricing": { "inputPerMillion": 0.5, "outputPerMillion": 2, "cachedPerMillion": 0.05 }
+        },
+        {
+          "id": "o4",
+          "label": "o4",
+          "pricing": { "inputPerMillion": 2, "outputPerMillion": 8, "cachedPerMillion": 0.2 }
+        }
+      ]
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini CLI",
+      "dynamic": false,
+      "defaultModel": "gemini-2.5-pro",
+      "models": [
+        {
+          "id": "gemini-2.5-pro",
+          "label": "Gemini 2.5 Pro",
+          "pricing": { "inputPerMillion": 1.25, "outputPerMillion": 10, "cachedPerMillion": 0.125 }
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "label": "Gemini 2.5 Flash",
+          "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.6, "cachedPerMillion": 0.015 }
+        }
+      ]
+    },
+    { "id": "aider", "label": "Aider", "dynamic": false, "defaultModel": null, "models": [] },
+    { "id": "opencode", "label": "OpenCode", "dynamic": false, "defaultModel": null, "models": [] },
+    { "id": "antigravity", "label": "Antigravity", "dynamic": false, "defaultModel": null, "models": [] },
+    { "id": "ollama", "label": "Ollama", "dynamic": true, "defaultModel": null, "models": [] }
+  ]
+}

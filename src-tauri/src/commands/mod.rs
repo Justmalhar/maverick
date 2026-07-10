@@ -20,6 +20,7 @@ pub mod preset;
 pub mod project;
 pub mod remote;
 pub mod project_settings;
+pub mod providers;
 pub mod pty;
 pub mod shell;
 pub mod skills;
@@ -74,6 +75,7 @@ pub use remote::{
 pub use project_settings::{
     project_settings_get, project_settings_open_file, project_settings_update,
 };
+pub use providers::list_ollama_models;
 pub use pty::{pty_close_all, pty_kill, pty_resize, pty_spawn, pty_write};
 pub use shell::wsl_available;
 pub use skills::{skills_create_global, skills_list, skills_list_global, skills_run};
