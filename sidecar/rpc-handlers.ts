@@ -22,6 +22,7 @@ import { NotificationService } from "./notification-service";
 import { ContextTracker } from "./context-tracker";
 import { UsageTracker } from "./usage-tracker";
 import { AttachmentStore } from "./attachment-store";
+import { AttachmentMaterializer } from "./attachment-materializer";
 import { FileTree } from "./file-tree";
 import { FsWatcher } from "./fs-watcher";
 import { FileSearch } from "./file-search";
@@ -132,6 +133,7 @@ const Schemas = {
   }),
   fileTree: z.object({ worktreePath: z.string(), maxDepth: nullishOptional(z.number()) }),
   fileRead: z.object({ filePath: z.string() }),
+  fileReadBinary: z.object({ filePath: z.string() }),
   fileWrite: z.object({
     filePath: z.string(),
     content: z.string(),
@@ -173,6 +175,17 @@ const Schemas = {
           size: z.number(),
         })
       )
+    ),
+  }),
+  kanbanMaterializeAttachments: z.object({
+    worktreePath: z.string(),
+    taskId: z.string(),
+    attachments: z.array(
+      z.object({
+        name: z.string(),
+        content: z.string(),
+        encoding: z.enum(["utf8", "base64"]),
+      })
     ),
   }),
   kanbanDelete: z.object({ id: z.string().min(1) }),
@@ -301,6 +314,7 @@ export interface RpcHandlersOptions {
   context?: ContextTracker;
   usage?: UsageTracker;
   attachments?: AttachmentStore;
+  attachmentMaterializer?: AttachmentMaterializer;
   fileTree?: FileTree;
   fsWatcher?: FsWatcher;
   fileSearch?: FileSearch;
@@ -335,6 +349,7 @@ export class RpcHandlers {
   readonly context: ContextTracker;
   readonly usage: UsageTracker;
   readonly attachments: AttachmentStore;
+  readonly attachmentMaterializer: AttachmentMaterializer;
   readonly fileTree: FileTree;
   readonly fsWatcher: FsWatcher;
   readonly fileSearch: FileSearch;
@@ -398,6 +413,7 @@ export class RpcHandlers {
     this.context = opts.context ?? new ContextTracker(this.store);
     this.usage = opts.usage ?? new UsageTracker();
     this.attachments = opts.attachments ?? new AttachmentStore();
+    this.attachmentMaterializer = opts.attachmentMaterializer ?? new AttachmentMaterializer();
     this.fileTree = opts.fileTree ?? new FileTree();
     this.notifier = opts.notifier ?? stdoutNotifier;
     this.fsWatcher = opts.fsWatcher ?? new FsWatcher({ notifier: this.notifier });
@@ -829,6 +845,10 @@ export class RpcHandlers {
         const p = Schemas.fileRead.parse(params);
         return this.fileReader.read(p);
       }
+      case "file.readBinary": {
+        const p = Schemas.fileReadBinary.parse(params);
+        return this.fileReader.readBinary(p);
+      }
       case "file.write": {
         const p = Schemas.fileWrite.parse(params);
         return this.fileWriter.write({
@@ -876,6 +896,10 @@ export class RpcHandlers {
       case "kanban.upsert": {
         const task = Schemas.kanbanUpsert.parse(params.task ?? params);
         return this.kanban.upsert(task);
+      }
+      case "kanban.materializeAttachments": {
+        const p = Schemas.kanbanMaterializeAttachments.parse(params);
+        return this.attachmentMaterializer.materialize(p);
       }
       case "kanban.delete": {
         const p = Schemas.kanbanDelete.parse(params);

@@ -20,3 +20,9 @@ export function buildLaunchPrompt(prefs: Record<string, string>, taskPrompt: str
   const preamble = formatPreferences(prefs);
   return preamble ? `${preamble}\n\n${taskPrompt}` : taskPrompt;
 }
+
+/** Append a list of attached file paths as a labeled block; unchanged when empty. */
+export function appendAttachments(prompt: string, paths: string[]): string {
+  if (paths.length === 0) return prompt;
+  return `${prompt}\n\n[Attached files]\n${paths.map((p) => `- ${p}`).join("\n")}`;
+}

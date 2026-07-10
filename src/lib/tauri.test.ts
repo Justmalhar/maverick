@@ -165,6 +165,8 @@ describe("tauri command wrappers", () => {
   it("file read / search and fs watch wrappers", async () => {
     await api.fileRead("/wt/a.md");
     expect(invoke).toHaveBeenLastCalledWith("file_read", { filePath: "/wt/a.md" });
+    await api.fileReadBinary("/wt/img.png");
+    expect(invoke).toHaveBeenLastCalledWith("file_read_binary", { filePath: "/wt/img.png" });
     await api.fileSearch("/wt", "query");
     expect(invoke).toHaveBeenLastCalledWith("file_search", {
       worktreePath: "/wt", query: "query", limit: undefined,
@@ -183,6 +185,16 @@ describe("tauri command wrappers", () => {
     expect(invoke).toHaveBeenLastCalledWith("fs_watch_remove", { dirs: ["/wt/lib"] });
     await api.fsWatchStop();
     expect(invoke).toHaveBeenLastCalledWith("fs_watch_stop");
+  });
+
+  it("kanbanMaterializeAttachments wrapper", async () => {
+    const attachments = [{ name: "a.png", content: "AA==", encoding: "base64" as const, size: 1 }];
+    await api.kanbanMaterializeAttachments("/wt", "task-1", attachments);
+    expect(invoke).toHaveBeenLastCalledWith("kanban_materialize_attachments", {
+      worktreePath: "/wt",
+      taskId: "task-1",
+      attachments,
+    });
   });
 
   it("kanban / presets / mcp / misc", async () => {

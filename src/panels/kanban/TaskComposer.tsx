@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { Paperclip, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWorkbench } from "@/state/store";
-import { gitBranches, projectSettingsGet } from "@/lib/tauri";
+import { fileReadBinary, gitBranches, projectSettingsGet } from "@/lib/tauri";
+import { registerFileDropTarget } from "@/lib/file-drop";
 import { cn } from "@/lib/utils";
+import { brandFor } from "@/lib/backend-brand";
 import type { Attachment } from "@/lib/ipc";
 
 export interface ComposerPayload {
@@ -42,6 +44,19 @@ function pickDefaultBranch(branches: string[], configured?: string): string {
   );
 }
 
+// btoa(String.fromCharCode(...bytes)) spreads the whole array as call
+// arguments and stack-overflows past a few hundred KB. Chunking keeps every
+// spread call small regardless of file size.
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 interface Props {
   onSend: (payload: ComposerPayload) => Promise<void>;
   defaultProjectId?: string | null;
@@ -69,6 +84,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const fetchBranches = useCallback(
     async (projectId: string) => {
@@ -100,6 +116,17 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     setSelectedProjectId(defaultProjectId);
     fetchBranches(defaultProjectId);
   }, [defaultProjectId, fetchBranches]);
+
+  // Mount-only: when there's no `defaultProjectId` prop but `selectedProjectId`
+  // already has a value from `activeWorkspace` (see the useState initializer
+  // above), the effect above never runs for it and the base-branch select
+  // would silently stay empty forever, blocking `canSend`.
+  useEffect(() => {
+    if (defaultProjectId) return;
+    if (!selectedProjectId) return;
+    fetchBranches(selectedProjectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleProjectChange = (id: string) => {
     setSelectedProjectId(id);
@@ -142,7 +169,7 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
         ]);
       } else {
         const buffer = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const base64 = arrayBufferToBase64(buffer);
         setAttachments((prev) => [
           ...prev,
           { name: file.name, content: base64, encoding: "base64", size: file.size },
@@ -151,18 +178,37 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
     }
   }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    if (e.dataTransfer.files) {
-      await processFiles(e.dataTransfer.files);
+  const processPaths = useCallback(async (paths: string[]) => {
+    setError(null);
+    for (const path of paths) {
+      const name = path.split(/[/\\]/).pop() ?? path;
+      let result: Awaited<ReturnType<typeof fileReadBinary>>;
+      try {
+        result = await fileReadBinary(path);
+      } catch {
+        setError(`Could not read file: ${name}`);
+        continue;
+      }
+      if (result.unreadable) {
+        setError(`Could not read file: ${name}`);
+        continue;
+      }
+      if (result.size > 2 * 1024 * 1024) {
+        setError(`File too large (max 2 MB): ${name}`);
+        continue;
+      }
+      setAttachments((prev) => [
+        ...prev,
+        { name, content: result.content, encoding: "base64", size: result.size },
+      ]);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    return registerFileDropTarget(el, { onPaths: processPaths, onDragState: setIsDraggingOver });
+  }, [processPaths]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -204,14 +250,12 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
 
   return (
     <div
+      ref={rootRef}
       data-testid="task-composer"
       className={cn(
         "border-b border-border/60 bg-card/30 px-4 py-3 relative",
         isDraggingOver && "ring-1 ring-inset ring-primary"
       )}
-      onDragOver={handleDragOver}
-      onDragLeave={() => setIsDraggingOver(false)}
-      onDrop={handleDrop}
     >
       {isDraggingOver && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/85 backdrop-blur-xs border border-dashed border-primary/60 rounded-md pointer-events-none transition-all duration-200">
@@ -309,11 +353,18 @@ export default function TaskComposer({ onSend, defaultProjectId }: Props) {
             <SelectValue placeholder="Agent" />
           </SelectTrigger>
           <SelectContent>
-            {backends.map((b) => (
-              <SelectItem key={b.id} value={b.id} className="text-[11px]">
-                {b.name}
-              </SelectItem>
-            ))}
+            {backends.map((b) => {
+              const brand = brandFor(b.id);
+              const BrandIcon = brand?.Icon;
+              return (
+                <SelectItem key={b.id} value={b.id} className="text-[11px]">
+                  <span className="flex items-center gap-2">
+                    {BrandIcon ? <BrandIcon size={14} /> : null}
+                    {brand?.label ?? b.name}
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
 

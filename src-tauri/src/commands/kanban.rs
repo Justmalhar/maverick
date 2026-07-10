@@ -25,6 +25,23 @@ pub async fn kanban_upsert(state: State<'_, AppState>, task: Value) -> Result<Va
 }
 
 #[tauri::command]
+pub async fn kanban_materialize_attachments(
+    state: State<'_, AppState>,
+    worktree_path: String,
+    task_id: String,
+    attachments: Value,
+) -> Result<Value, String> {
+    state
+        .sidecar
+        .request(
+            "kanban.materializeAttachments",
+            json!({ "worktreePath": worktree_path, "taskId": task_id, "attachments": attachments }),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn kanban_delete(state: State<'_, AppState>, id: String) -> Result<Value, String> {
     state
         .sidecar

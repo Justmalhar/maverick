@@ -502,6 +502,12 @@ export interface FileReadResult {
   encoding: TextEncoding;
 }
 
+export interface FileReadBinaryResult {
+  content: string;
+  size: number;
+  unreadable: boolean;
+}
+
 export interface FileWriteResult {
   mtime: number;
 }

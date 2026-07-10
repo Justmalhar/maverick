@@ -7,6 +7,7 @@ import type {
   AgentModelOption,
   AgentPart,
   AgentSessionSnapshot,
+  Attachment,
   BlameLine,
   BootstrapStatus,
   Branch,
@@ -20,6 +21,7 @@ import type {
   DiffStat,
   FileAtRefResult,
   FileEntry,
+  FileReadBinaryResult,
   FileReadResult,
   FileWriteResult,
   FsChangedPayload,
@@ -241,6 +243,10 @@ export async function fileRead(filePath: string): Promise<FileReadResult> {
   return invoke("file_read", { filePath });
 }
 
+export async function fileReadBinary(filePath: string): Promise<FileReadBinaryResult> {
+  return invoke("file_read_binary", { filePath });
+}
+
 export async function fileWrite(
   filePath: string,
   content: string,
@@ -304,6 +310,14 @@ export async function kanbanList(projectId: string): Promise<KanbanTask[]> {
 
 export async function kanbanUpsert(task: Partial<KanbanTask>): Promise<KanbanTask> {
   return invoke("kanban_upsert", { task });
+}
+
+export async function kanbanMaterializeAttachments(
+  worktreePath: string,
+  taskId: string,
+  attachments: Attachment[]
+): Promise<{ paths: string[] }> {
+  return invoke("kanban_materialize_attachments", { worktreePath, taskId, attachments });
 }
 
 export async function kanbanDelete(id: string): Promise<{ ok: true }> {

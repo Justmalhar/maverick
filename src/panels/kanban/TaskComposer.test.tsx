@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { fireEvent, act, createEvent } from "@testing-library/react";
+import { fireEvent, act } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
-import { renderWithProviders, screen, waitFor } from "@/test/utils";
+import { renderWithProviders, screen, waitFor, within } from "@/test/utils";
 import { useWorkbench } from "@/state/store";
-import { makeBackend, makeProject } from "@/test/fixtures";
+import { makeBackend, makeProject, makeWorkspace } from "@/test/fixtures";
 import TaskComposer from "./TaskComposer";
+import { registerFileDropTarget } from "@/lib/file-drop";
+
+vi.mock("@/lib/file-drop", () => ({ registerFileDropTarget: vi.fn().mockReturnValue(() => {}) }));
 
 const initial = useWorkbench.getState();
 
@@ -13,7 +16,7 @@ function setup() {
   useWorkbench.setState({
     ...initial,
     projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
-    backends: [makeBackend({ id: "claude", name: "Claude", active: true })],
+    backends: [makeBackend({ id: "claude-code", name: "Claude", active: true })],
   });
   const onSend = vi.fn().mockResolvedValue(undefined);
   renderWithProviders(<TaskComposer onSend={onSend} />);
@@ -22,6 +25,7 @@ function setup() {
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
+  vi.mocked(registerFileDropTarget).mockClear();
   useWorkbench.setState(initial);
 });
 
@@ -184,7 +188,7 @@ describe("TaskComposer", () => {
         prompt: "fix the bug",
         projectId: "p1",
         baseBranch: "main",
-        agentBackend: "claude",
+        agentBackend: "claude-code",
       })
     ));
     expect((screen.getByTestId("composer-prompt") as HTMLTextAreaElement).value).toBe("");
@@ -224,55 +228,71 @@ describe("TaskComposer", () => {
     expect((screen.getByTestId("composer-prompt") as HTMLTextAreaElement).value).toBe("do work");
   });
 
-  it("dragOver adds ring style to composer", () => {
+  it("registers the composer as a file-drop target", () => {
     setup();
-    const composer = screen.getByTestId("task-composer");
-    fireEvent.dragOver(composer);
-    expect(composer.className).toContain("ring-1");
+    expect(registerFileDropTarget).toHaveBeenCalledWith(
+      screen.getByTestId("task-composer"),
+      expect.objectContaining({ onPaths: expect.any(Function), onDragState: expect.any(Function) })
+    );
   });
 
-  it("dragLeave removes ring style from composer", () => {
+  it("shows the drag-over overlay while a file is dragged over, via onDragState", () => {
     setup();
-    const composer = screen.getByTestId("task-composer");
-    fireEvent.dragOver(composer);
-    expect(composer.className).toContain("ring-1");
-    fireEvent.dragLeave(composer);
-    expect(composer.className).not.toContain("ring-1");
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    act(() => call[1].onDragState?.(true));
+    expect(screen.getByText("Drop files here to attach")).toBeInTheDocument();
+    act(() => call[1].onDragState?.(false));
+    expect(screen.queryByText("Drop files here to attach")).not.toBeInTheDocument();
   });
 
-  it("drop with text file creates a utf8 attachment", async () => {
+  it("dropping a readable path adds a base64 attachment", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "file_read_binary") return { content: "aGVsbG8=", size: 5, unreadable: false };
+      return undefined;
+    }) as unknown as typeof invoke);
     setup();
-    const composer = screen.getByTestId("task-composer");
-    const mockFile = { name: "notes.txt", type: "text/plain", size: 100, text: vi.fn().mockResolvedValue("hello content"), arrayBuffer: vi.fn() };
-    const dropEv = createEvent.drop(composer);
-    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
-    await act(async () => fireEvent(composer, dropEv));
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    await act(async () => call[1].onPaths(["/Users/me/Desktop/screenshot.png"]));
     await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
-    expect(screen.getByTestId("composer-attachment").textContent).toContain("notes.txt");
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("screenshot.png");
+    expect(invoke).toHaveBeenCalledWith("file_read_binary", { filePath: "/Users/me/Desktop/screenshot.png" });
   });
 
-  it("drop with binary file creates a base64 attachment", async () => {
+  it("dropping an oversized path shows an error and adds no attachment", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "file_read_binary")
+        return { content: "", size: 3 * 1024 * 1024, unreadable: false };
+      return undefined;
+    }) as unknown as typeof invoke);
     setup();
-    const composer = screen.getByTestId("task-composer");
-    const buf = new Uint8Array([0, 1, 2]).buffer;
-    const mockFile = { name: "image.png", type: "image/png", size: 3, text: vi.fn(), arrayBuffer: vi.fn().mockResolvedValue(buf) };
-    const dropEv = createEvent.drop(composer);
-    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
-    await act(async () => fireEvent(composer, dropEv));
-    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
-    expect(screen.getByTestId("composer-attachment").textContent).toContain("image.png");
-  });
-
-  it("drop with oversized file shows error and no attachment", async () => {
-    setup();
-    const composer = screen.getByTestId("task-composer");
-    const mockFile = { name: "huge.bin", type: "application/octet-stream", size: 3 * 1024 * 1024, text: vi.fn(), arrayBuffer: vi.fn() };
-    const dropEv = createEvent.drop(composer);
-    Object.defineProperty(dropEv, "dataTransfer", { value: { files: [mockFile] } });
-    await act(async () => fireEvent(composer, dropEv));
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    await act(async () => call[1].onPaths(["/tmp/huge.bin"]));
     await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
     expect(screen.getByTestId("composer-error").textContent).toContain("too large");
     expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
+  });
+
+  it("dropping an unreadable path shows an error and adds no attachment", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "file_read_binary") return { content: "", size: 0, unreadable: true };
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    await act(async () => call[1].onPaths(["/tmp/gone.png"]));
+    await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
+    expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
+  });
+
+  it("dropping multiple paths adds one attachment per readable file", async () => {
+    vi.mocked(invoke).mockImplementation((async (cmd: string) => {
+      if (cmd === "file_read_binary") return { content: "AA==", size: 1, unreadable: false };
+      return undefined;
+    }) as unknown as typeof invoke);
+    setup();
+    const call = vi.mocked(registerFileDropTarget).mock.calls[0];
+    await act(async () => call[1].onPaths(["/tmp/a.png", "/tmp/b.png"]));
+    await waitFor(() => expect(screen.getAllByTestId("composer-attachment")).toHaveLength(2));
   });
 
   it("defaultProjectId pre-populates project and fetches branches", async () => {
@@ -301,6 +321,22 @@ describe("TaskComposer", () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(<TaskComposer onSend={onSend} defaultProjectId={null} />);
     expect(invoke).not.toHaveBeenCalledWith("git_branches", expect.anything());
+  });
+
+  it("fetches branches on mount from the active workspace's project when no defaultProjectId prop is given", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(["main", "dev"] as never);
+    useWorkbench.setState({
+      ...initial,
+      projects: [makeProject({ id: "p1", name: "Alpha", path: "/alpha" })],
+      backends: [makeBackend({ id: "claude-code", name: "Claude", active: true })],
+      workspaces: [makeWorkspace({ id: "ws1", projectId: "p1" })],
+      activeWorkspaceId: "ws1",
+    });
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(<TaskComposer onSend={onSend} />);
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("git_branches", { projectPath: "/alpha" }));
+    await waitFor(() => expect(screen.getByTestId("composer-branch")).toHaveTextContent("main"));
   });
 
   it("re-populates when defaultProjectId changes to a different project", async () => {
@@ -336,6 +372,16 @@ describe("TaskComposer", () => {
     expect(screen.getByTestId("composer-file-input")).toBeInTheDocument();
   });
 
+  it("shows the backend's brand icon in the agent picker", async () => {
+    setup();
+    await userEvent.click(screen.getByTestId("composer-agent"));
+    // Radix's SelectValue mirrors the selected item's rendered content into the
+    // closed trigger too, so scope to the open option (role="option") rather
+    // than a bare data-testid lookup, which would match twice.
+    const option = await screen.findByRole("option", { name: /Claude/ });
+    expect(within(option).getByTestId("icon-ClaudeCode.Color")).toBeInTheDocument();
+  });
+
   it("file selection via input creates utf8 attachment for text file", async () => {
     setup();
     const fileInput = screen.getByTestId("composer-file-input");
@@ -354,6 +400,17 @@ describe("TaskComposer", () => {
     expect(screen.getByTestId("composer-attachment").textContent).toContain("image.png");
   });
 
+  it("file selection with a large binary file does not stack-overflow (regression)", async () => {
+    setup();
+    const fileInput = screen.getByTestId("composer-file-input");
+    const bytes = new Uint8Array(150_000).fill(7);
+    const mockFile = new File([bytes], "big-image.png", { type: "image/png" });
+    await userEvent.upload(fileInput, mockFile);
+    await waitFor(() => expect(screen.getByTestId("composer-attachment")).toBeInTheDocument());
+    expect(screen.getByTestId("composer-attachment").textContent).toContain("big-image.png");
+    expect(screen.queryByTestId("composer-error")).not.toBeInTheDocument();
+  });
+
   it("file selection with oversized file shows error and no attachment", async () => {
     setup();
     const fileInput = screen.getByTestId("composer-file-input");
@@ -363,12 +420,5 @@ describe("TaskComposer", () => {
     await waitFor(() => expect(screen.getByTestId("composer-error")).toBeInTheDocument());
     expect(screen.getByTestId("composer-error").textContent).toContain("too large");
     expect(screen.queryByTestId("composer-attachment")).not.toBeInTheDocument();
-  });
-
-  it("renders drag-over overlay when dragging files over the composer", () => {
-    setup();
-    const composer = screen.getByTestId("task-composer");
-    fireEvent.dragOver(composer);
-    expect(screen.getByText("Drop files here to attach")).toBeInTheDocument();
   });
 });
