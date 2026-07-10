@@ -120,30 +120,30 @@ Ollama (dynamic, not in the JSON):
       "defaultModel": "claude-opus-4-8",
       "models": [
         { "id": "claude-opus-4-8", "label": "Opus 4.8",
-          "pricing": { "inputPerMillion": 0, "outputPerMillion": 0, "cachedPerMillion": 0 } },
-        { "id": "claude-sonnet-4-6", "label": "Sonnet 4.6",
-          "pricing": { "inputPerMillion": 0, "outputPerMillion": 0, "cachedPerMillion": 0 } },
-        { "id": "claude-haiku-4-5", "label": "Haiku 4.5",
-          "pricing": { "inputPerMillion": 0, "outputPerMillion": 0, "cachedPerMillion": 0 } }
+          "pricing": { "inputPerMillion": 15, "outputPerMillion": 75, "cachedPerMillion": 1.5 } },
+        { "id": "claude-sonnet-5", "label": "Sonnet 5",
+          "pricing": { "inputPerMillion": 3, "outputPerMillion": 15, "cachedPerMillion": 0.3 } },
+        { "id": "claude-haiku-4-5-20251001", "label": "Haiku 4.5",
+          "pricing": { "inputPerMillion": 0.8, "outputPerMillion": 4, "cachedPerMillion": 0.08 } }
       ]
     },
     { "id": "codex", "label": "Codex", "dynamic": false, "defaultModel": "gpt-5",
       "models": [ /* gpt-5, gpt-5-mini, o4 — same shape */ ] },
     { "id": "gemini", "label": "Gemini CLI", "dynamic": false, "defaultModel": "gemini-2.5-pro",
       "models": [ /* gemini-2.5-pro, gemini-2.5-flash — same shape */ ] },
-    { "id": "ollama", "label": "Ollama", "dynamic": true, "defaultModel": null, "models": [] },
     { "id": "aider", "label": "Aider", "dynamic": false, "defaultModel": null, "models": [] },
     { "id": "opencode", "label": "OpenCode", "dynamic": false, "defaultModel": null, "models": [] },
-    { "id": "antigravity", "label": "Antigravity", "dynamic": false, "defaultModel": null, "models": [] }
+    { "id": "antigravity", "label": "Antigravity", "dynamic": false, "defaultModel": null, "models": [] },
+    { "id": "ollama", "label": "Ollama", "dynamic": true, "defaultModel": null, "models": [] }
   ]
 }
 ```
 
-Pricing values above are placeholders (`0`) in this spec — the implementation
-plan fills them from each provider's current public list pricing. `label`
-here is the one used by `backend-brand.tsx` and Settings; icon/tagline/
-installUrl stay in `backend-brand.tsx` since JSON can't carry a React
-component.
+Pricing values above match what actually shipped in `providers.json` — real
+current public list prices, not placeholders. `label` here is the one used
+by `backend-brand.tsx` and Settings; icon/tagline/installUrl stay in
+`backend-brand.tsx` since JSON can't carry a React component. Provider order
+matches `KNOWN_BACKEND_NAMES` exactly (ollama last).
 
 ### 2. `src/lib/models/catalog.ts` (new) + `sidecar/providers/catalog.ts` (new)
 
